@@ -17,7 +17,7 @@ use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::strategies::diff_log_heights;
 use crate::replication::traits::Strategy;
-use crate::replication::{LogHeights, Message, Mode, StrategyResult, TargetSet};
+use crate::replication::{LogHeights, Message, Mode, SchemaIdSet, StrategyResult};
 
 type SortedIndex = i32;
 
@@ -66,13 +66,13 @@ async fn retrieve_entries(
 
 #[derive(Clone, Debug)]
 pub struct LogHeightStrategy {
-    target_set: TargetSet,
+    target_set: SchemaIdSet,
     received_remote_have: bool,
     sent_have: bool,
 }
 
 impl LogHeightStrategy {
-    pub fn new(target_set: &TargetSet) -> Self {
+    pub fn new(target_set: &SchemaIdSet) -> Self {
         Self {
             target_set: target_set.clone(),
             received_remote_have: false,
@@ -80,7 +80,8 @@ impl LogHeightStrategy {
         }
     }
 
-    // Calculate the heights of all logs which contain contributions to documents in the current `TargetSet`.
+    // Calculate the heights of all logs which contain contributions to documents in the current
+    // `SchemaIdSet`.
     async fn local_log_heights(
         &self,
         store: &SqlStore,
@@ -149,7 +150,7 @@ impl Strategy for LogHeightStrategy {
         Mode::LogHeight
     }
 
-    fn target_set(&self) -> TargetSet {
+    fn target_set(&self) -> SchemaIdSet {
         self.target_set.clone()
     }
 
@@ -220,7 +221,7 @@ mod tests {
     use crate::materializer::TaskInput;
     use crate::replication::ingest::SyncIngest;
     use crate::replication::strategies::log_height::{retrieve_entries, SortedIndex};
-    use crate::replication::{LogHeightStrategy, LogHeights, Message, TargetSet};
+    use crate::replication::{LogHeightStrategy, LogHeights, Message, SchemaIdSet};
     use crate::test_utils::{
         populate_and_materialize, populate_store_config, test_runner_with_manager, TestNode,
         TestNodeManager,
@@ -404,7 +405,7 @@ mod tests {
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let schema = config.schema.clone();
-            let target_set = TargetSet::new(&vec![schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&vec![schema.id().to_owned()]);
 
             let strategy_a = LogHeightStrategy::new(&target_set);
             let mut node_a = manager.create().await;
@@ -449,7 +450,7 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
-            let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
 
             let strategy_a = LogHeightStrategy::new(&target_set);
             let mut node_a = manager.create().await;

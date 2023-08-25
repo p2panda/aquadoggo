@@ -12,7 +12,7 @@ use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
 use crate::replication::{
-    MessageType, Mode, SessionId, TargetSet, ENTRY_TYPE, HAVE_TYPE, SYNC_DONE_TYPE,
+    MessageType, Mode, SchemaIdSet, SessionId, ENTRY_TYPE, HAVE_TYPE, SYNC_DONE_TYPE,
     SYNC_REQUEST_TYPE,
 };
 
@@ -22,7 +22,7 @@ pub type LogHeights = (PublicKey, Vec<(LogId, SeqNum)>);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Message {
-    SyncRequest(Mode, TargetSet),
+    SyncRequest(Mode, SchemaIdSet),
     Entry(EncodedEntry, Option<EncodedOperation>),
     SyncDone(LiveMode),
     Have(Vec<LogHeights>),
@@ -151,7 +151,7 @@ impl<'de> Deserialize<'de> for SyncMessage {
                         serde::de::Error::custom("missing mode in sync request message")
                     })?;
 
-                    let target_set: TargetSet = seq.next_element()?.ok_or_else(|| {
+                    let target_set: SchemaIdSet = seq.next_element()?.ok_or_else(|| {
                         serde::de::Error::custom("missing target set in sync request message")
                     })?;
 
@@ -220,13 +220,13 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::public_key;
     use rstest::rstest;
 
-    use crate::replication::{Mode, TargetSet};
-    use crate::test_utils::helpers::random_target_set;
+    use crate::replication::{Mode, SchemaIdSet};
+    use crate::test_utils::helpers::random_schema_id_set;
 
     use super::{Message, SyncMessage};
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
+    fn serialize(#[from(random_schema_id_set)] target_set: SchemaIdSet, public_key: PublicKey) {
         assert_eq!(
             serialize_from(SyncMessage::new(
                 51,
@@ -257,7 +257,7 @@ mod tests {
     }
 
     #[rstest]
-    fn deserialize(#[from(random_target_set)] target_set: TargetSet, public_key: PublicKey) {
+    fn deserialize(#[from(random_schema_id_set)] target_set: SchemaIdSet, public_key: PublicKey) {
         assert_eq!(
             deserialize_into::<SyncMessage>(&serialize_value(cbor!([1, 12, 0, target_set])))
                 .unwrap(),

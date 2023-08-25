@@ -236,8 +236,8 @@ mod tests {
     use rstest::rstest;
 
     use crate::network::{Peer, PeerMessage};
-    use crate::replication::{Message, SyncMessage, TargetSet};
-    use crate::test_utils::helpers::random_target_set;
+    use crate::replication::{Message, SchemaIdSet, SyncMessage};
+    use crate::test_utils::helpers::random_schema_id_set;
 
     use super::{Behaviour as PeersBehaviour, Event};
 
@@ -307,7 +307,7 @@ mod tests {
             Peer::new(swarm_2_peer_id, ConnectionId::new_unchecked(1)),
             PeerMessage::SyncMessage(SyncMessage::new(
                 0,
-                Message::SyncRequest(0.into(), TargetSet::new(&vec![])),
+                Message::SyncRequest(0.into(), SchemaIdSet::new(&vec![])),
             )),
         );
 
@@ -323,15 +323,12 @@ mod tests {
 
     #[rstest]
     #[case(
-        TargetSet::new(&vec![SchemaId::SchemaFieldDefinition(0)]),
-        TargetSet::new(&vec![SchemaId::SchemaDefinition(0)]),
+        SchemaIdSet::new(&vec![SchemaId::SchemaFieldDefinition(0)]),
+        SchemaIdSet::new(&vec![SchemaId::SchemaDefinition(0)]),
     )]
-    #[case(random_target_set(), random_target_set())]
+    #[case(random_schema_id_set(), random_schema_id_set())]
     #[tokio::test]
-    async fn swarm_behaviour_events(
-        #[case] target_set_1: TargetSet,
-        #[case] target_set_2: TargetSet,
-    ) {
+    async fn swarm_behaviour_events(#[case] set_1: SchemaIdSet, #[case] set_2: SchemaIdSet) {
         let mut swarm_1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
         let mut swarm_2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
 
@@ -374,7 +371,7 @@ mod tests {
             peer_2,
             PeerMessage::SyncMessage(SyncMessage::new(
                 0,
-                Message::SyncRequest(0.into(), target_set_1.clone()),
+                Message::SyncRequest(0.into(), set_1.clone()),
             )),
         );
 
@@ -383,7 +380,7 @@ mod tests {
             peer_1,
             PeerMessage::SyncMessage(SyncMessage::new(
                 1,
-                Message::SyncRequest(0.into(), target_set_2.clone()),
+                Message::SyncRequest(0.into(), set_2.clone()),
             )),
         );
 
@@ -405,7 +402,7 @@ mod tests {
             message.unwrap(),
             PeerMessage::SyncMessage(SyncMessage::new(
                 1,
-                Message::SyncRequest(0.into(), target_set_2.clone())
+                Message::SyncRequest(0.into(), set_2.clone())
             ))
         );
 
@@ -414,10 +411,7 @@ mod tests {
         assert_eq!(peer.id(), swarm_1_peer_id);
         assert_eq!(
             message.unwrap(),
-            PeerMessage::SyncMessage(SyncMessage::new(
-                0,
-                Message::SyncRequest(0.into(), target_set_1)
-            ))
+            PeerMessage::SyncMessage(SyncMessage::new(0, Message::SyncRequest(0.into(), set_1)))
         );
     }
 }

@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
-use crate::replication::{Message, Mode, StrategyResult, TargetSet};
+use crate::replication::{Message, Mode, SchemaIdSet, StrategyResult};
 
 #[async_trait]
 pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
@@ -12,7 +12,7 @@ pub trait Strategy: std::fmt::Debug + StrategyClone + Sync + Send {
     fn mode(&self) -> Mode;
 
     /// Target set replication is occurring over.
-    fn target_set(&self) -> TargetSet;
+    fn target_set(&self) -> SchemaIdSet;
 
     /// Generate initial messages.
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult;

@@ -6,14 +6,14 @@ use p2panda_rs::schema::SchemaId;
 use p2panda_rs::Validate;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::replication::errors::TargetSetError;
+use crate::replication::errors::SchemaIdSetError;
 
 /// De-duplicated and sorted set of schema ids which define the target data for the replication
 /// session.
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize)]
-pub struct TargetSet(Vec<SchemaId>);
+pub struct SchemaIdSet(Vec<SchemaId>);
 
-impl TargetSet {
+impl SchemaIdSet {
     pub fn new(schema_ids: &[SchemaId]) -> Self {
         // Remove duplicates
         let mut deduplicated_set: Vec<SchemaId> = Vec::new();
@@ -23,7 +23,7 @@ impl TargetSet {
             }
         }
 
-        // Sort schema ids to compare target sets easily
+        // Sort schema ids to compare sets easily
         deduplicated_set.sort();
 
         // And now sort system schema to the front of the set.
@@ -37,29 +37,29 @@ impl TargetSet {
         Self(deduplicated_set)
     }
 
-    pub fn from_intersection(local_target_set: &TargetSet, remote_target_set: &TargetSet) -> Self {
-        let mut target_set = local_target_set.clone();
-        target_set.0.retain(|id| remote_target_set.contains(id));
-        target_set
+    pub fn from_intersection(local_set: &SchemaIdSet, remote_set: &SchemaIdSet) -> Self {
+        let mut set = local_set.clone();
+        set.0.retain(|id| remote_set.contains(id));
+        set
     }
 
-    fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, TargetSetError> {
-        // Create target set with potentially invalid data
-        let target_set = Self(schema_ids);
+    fn from_untrusted(schema_ids: Vec<SchemaId>) -> Result<Self, SchemaIdSetError> {
+        // Create set with potentially invalid data
+        let set = Self(schema_ids);
 
         // Make sure its sorted and does not contain any duplicates
-        target_set.validate()?;
+        set.validate()?;
 
-        Ok(target_set)
+        Ok(set)
     }
 
     pub fn contains(&self, schema_id: &SchemaId) -> bool {
         self.0.contains(schema_id)
     }
 
-    /// Returns true if there are no unknown elements in external target set.
-    pub fn is_valid_set(&self, target_set: &TargetSet) -> bool {
-        !target_set.iter().any(|schema_id| !self.contains(schema_id))
+    /// Returns true if there are no unknown elements in external set.
+    pub fn is_valid_set(&self, set: &SchemaIdSet) -> bool {
+        !set.iter().any(|schema_id| !self.contains(schema_id))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -71,8 +71,8 @@ impl TargetSet {
     }
 }
 
-impl Validate for TargetSet {
-    type Error = TargetSetError;
+impl Validate for SchemaIdSet {
+    type Error = SchemaIdSetError;
 
     fn validate(&self) -> Result<(), Self::Error> {
         let mut prev_schema_id: Option<&SchemaId> = None;
@@ -94,7 +94,7 @@ impl Validate for TargetSet {
                     // If current and previous are application schema compare them.
                     SchemaId::Application(_, _) if !initial_system_schema => {
                         if prev >= schema_id {
-                            return Err(TargetSetError::UnsortedSchemaIds);
+                            return Err(SchemaIdSetError::UnsortedSchemaIds);
                         }
                     }
                     // If the current is an application schema and the previous is a system schema
@@ -105,12 +105,12 @@ impl Validate for TargetSet {
                     // If the current is a system schema and the `initial_system_schema` flag is
                     // false then there is an out of order system schema.
                     _ if !initial_system_schema => {
-                        return Err(TargetSetError::UnsortedSchemaIds);
+                        return Err(SchemaIdSetError::UnsortedSchemaIds);
                     }
                     // If current and previous are both system schema then compare them.
                     _ if initial_system_schema => {
                         if prev >= schema_id {
-                            return Err(TargetSetError::UnsortedSchemaIds);
+                            return Err(SchemaIdSetError::UnsortedSchemaIds);
                         }
                     }
                     _ => panic!(),
@@ -124,7 +124,7 @@ impl Validate for TargetSet {
     }
 }
 
-impl<'de> Deserialize<'de> for TargetSet {
+impl<'de> Deserialize<'de> for SchemaIdSet {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -144,12 +144,12 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::random_document_view_id;
     use rstest::rstest;
 
-    use crate::test_utils::helpers::random_target_set;
+    use crate::test_utils::helpers::random_schema_id_set;
 
-    use super::TargetSet;
+    use super::SchemaIdSet;
 
     #[rstest]
-    fn compare_target_sets(
+    fn compare_sets(
         #[from(random_document_view_id)] document_view_id_1: DocumentViewId,
         #[from(random_document_view_id)] document_view_id_2: DocumentViewId,
     ) {
@@ -160,20 +160,20 @@ mod tests {
 
         // Sort schema ids
         assert_eq!(
-            TargetSet::new(&[schema_id_1.clone(), schema_id_2.clone()]),
-            TargetSet::new(&[schema_id_2.clone(), schema_id_1.clone()]),
+            SchemaIdSet::new(&[schema_id_1.clone(), schema_id_2.clone()]),
+            SchemaIdSet::new(&[schema_id_2.clone(), schema_id_1.clone()]),
         );
 
         // De-duplicate schema ids
         assert_eq!(
-            TargetSet::new(&[schema_id_1.clone(), schema_id_1.clone()]),
-            TargetSet::new(&[schema_id_1.clone()]),
+            SchemaIdSet::new(&[schema_id_1.clone(), schema_id_1.clone()]),
+            SchemaIdSet::new(&[schema_id_1.clone()]),
         );
 
         // Distinct different target sets from each other
         assert_ne!(
-            TargetSet::new(&[schema_id_1.clone()]),
-            TargetSet::new(&[schema_id_2.clone()]),
+            SchemaIdSet::new(&[schema_id_1.clone()]),
+            SchemaIdSet::new(&[schema_id_2.clone()]),
         );
     }
 
@@ -191,21 +191,27 @@ mod tests {
         let schema_id_3 =
             SchemaId::new_application(&SchemaName::new("events").unwrap(), &document_view_id_3);
 
-        let set_1 = TargetSet::new(&[schema_id_1.clone(), schema_id_2.clone()]);
-        let set_2 = TargetSet::new(&[schema_id_3.clone(), schema_id_2.clone()]);
+        let set_1 = SchemaIdSet::new(&[schema_id_1.clone(), schema_id_2.clone()]);
+        let set_2 = SchemaIdSet::new(&[schema_id_3.clone(), schema_id_2.clone()]);
 
         assert_eq!(
-            TargetSet::from_intersection(&set_1, &set_2),
-            TargetSet::new(&[schema_id_2.clone()])
+            SchemaIdSet::from_intersection(&set_1, &set_2),
+            SchemaIdSet::new(&[schema_id_2.clone()])
         );
 
         // Correctly verifies if both target sets know about all given elements
-        assert!(TargetSet::new(&[schema_id_2.clone()])
-            .is_valid_set(&TargetSet::new(&[schema_id_2.clone()])));
-        assert!(TargetSet::new(&[schema_id_3.clone(), schema_id_2.clone()])
-            .is_valid_set(&TargetSet::new(&[schema_id_2.clone()])));
-        assert!(!TargetSet::new(&[schema_id_1.clone()])
-            .is_valid_set(&TargetSet::new(&[schema_id_2.clone(), schema_id_1.clone()])));
+        assert!(SchemaIdSet::new(&[schema_id_2.clone()])
+            .is_valid_set(&SchemaIdSet::new(&[schema_id_2.clone()])));
+        assert!(
+            SchemaIdSet::new(&[schema_id_3.clone(), schema_id_2.clone()])
+                .is_valid_set(&SchemaIdSet::new(&[schema_id_2.clone()]))
+        );
+        assert!(
+            !SchemaIdSet::new(&[schema_id_1.clone()]).is_valid_set(&SchemaIdSet::new(&[
+                schema_id_2.clone(),
+                schema_id_1.clone()
+            ]))
+        );
     }
 
     #[rstest]
@@ -226,8 +232,8 @@ mod tests {
         "alpacas_00202dce4b32cd35d61cf54634b93a526df333c5ed3d93230c2f026f8d1ecabc0cd7".to_string(),
         "schema_field_definition_v1".to_string(),
     ])]
-    fn deserialize_unsorted_target_set(#[case] schema_ids: Vec<String>) {
-        let result = deserialize_into::<TargetSet>(&serialize_value(cbor!(schema_ids)));
+    fn deserialize_unsorted_set(#[case] schema_ids: Vec<String>) {
+        let result = deserialize_into::<SchemaIdSet>(&serialize_value(cbor!(schema_ids)));
 
         let expected_result = ciborium::de::Error::<std::io::Error>::Semantic(
             None,
@@ -237,10 +243,10 @@ mod tests {
     }
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] target_set: TargetSet) {
+    fn serialize(#[from(random_schema_id_set)] set: SchemaIdSet) {
         assert_eq!(
-            deserialize_into::<TargetSet>(&serialize_value(cbor!(target_set))).unwrap(),
-            target_set.clone()
+            deserialize_into::<SchemaIdSet>(&serialize_value(cbor!(set))).unwrap(),
+            set.clone()
         );
     }
 }

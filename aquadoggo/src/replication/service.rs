@@ -22,8 +22,8 @@ use crate::network::identity::to_libp2p_peer_id;
 use crate::network::{Peer, PeerMessage};
 use crate::replication::errors::ReplicationError;
 use crate::replication::{
-    now, Announcement, AnnouncementMessage, Message, Mode, Session, SessionId, SyncIngest,
-    SyncManager, SyncMessage, TargetSet,
+    now, Announcement, AnnouncementMessage, Message, Mode, SchemaIdSet, Session, SessionId,
+    SyncIngest, SyncManager, SyncMessage,
 };
 use crate::schema::SchemaProvider;
 
@@ -157,9 +157,9 @@ impl ConnectionManager {
     }
 
     /// Returns set of schema ids we are interested in and support on this node.
-    async fn supported_schema_ids(&self) -> TargetSet {
+    async fn supported_schema_ids(&self) -> SchemaIdSet {
         let supported_schema_ids = self.schema_provider.supported_schema_ids().await;
-        TargetSet::new(&supported_schema_ids)
+        SchemaIdSet::new(&supported_schema_ids)
     }
 
     /// Register a new peer connection on the manager.
@@ -348,14 +348,14 @@ impl ConnectionManager {
         }
 
         // Iterate through all currently connected peers
-        let mut attempt_peers: Vec<(Peer, TargetSet)> = dedup_peers
+        let mut attempt_peers: Vec<(Peer, SchemaIdSet)> = dedup_peers
             .values()
             .filter_map(|(peer, status)| {
                 let sessions = self.sync_manager.get_sessions(peer);
 
                 // 1. Did we already receive this peers announcement state? If not we can't do
                 //    anything yet and need to wait.
-                let remote_supported_schema_ids: TargetSet =
+                let remote_supported_schema_ids: SchemaIdSet =
                     if let Some(announcement) = status.clone().announcement {
                         announcement.supported_schema_ids
                     } else {
@@ -364,7 +364,7 @@ impl ConnectionManager {
 
                 // 2. Calculate intersection of local and remote schema id sets. Do we have any
                 //    supported schema id's in common?
-                let target_set = TargetSet::from_intersection(
+                let target_set = SchemaIdSet::from_intersection(
                     local_supported_schema_ids,
                     &remote_supported_schema_ids,
                 );
@@ -430,7 +430,7 @@ impl ConnectionManager {
     }
 
     /// Initiate a new replication session with remote peer.
-    async fn initiate_replication(&mut self, peer: &Peer, target_set: &TargetSet) {
+    async fn initiate_replication(&mut self, peer: &Peer, target_set: &SchemaIdSet) {
         match self
             .sync_manager
             .initiate_session(peer, target_set, &Mode::LogHeight)
@@ -531,7 +531,7 @@ mod tests {
     use crate::network::{Peer, PeerMessage};
     use crate::replication::service::PeerStatus;
     use crate::replication::{
-        Announcement, AnnouncementMessage, Message, Mode, SyncMessage, TargetSet,
+        Announcement, AnnouncementMessage, Message, Mode, SchemaIdSet, SyncMessage,
     };
     use crate::schema::SchemaProvider;
     use crate::test_utils::{test_runner, TestNode};
@@ -640,7 +640,7 @@ mod tests {
                 &SchemaName::new("bad_schema").unwrap(),
                 &document_view_id,
             );
-            let unsupported_target_set = TargetSet::new(&[unsupported_schema_id]);
+            let unsupported_target_set = SchemaIdSet::new(&[unsupported_schema_id]);
             manager
                 .handle_service_message(ServiceMessage::ReceivedMessage(
                     remote_peer,

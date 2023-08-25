@@ -38,7 +38,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Show configuration info to the user
-    println!("{}", print_config(key_pair_path, config_file_path, &node_config));
+    println!(
+        "{}",
+        print_config(key_pair_path, config_file_path, &node_config)
+    );
     show_warnings(&node_config);
 
     // Start p2panda node in async runtime

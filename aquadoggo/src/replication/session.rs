@@ -9,7 +9,7 @@ use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
 use crate::replication::{
-    LogHeightStrategy, Message, Mode, SetReconciliationStrategy, StrategyResult, TargetSet,
+    LogHeightStrategy, Message, Mode, SchemaIdSet, SetReconciliationStrategy, StrategyResult,
 };
 
 pub type SessionId = u64;
@@ -51,7 +51,7 @@ pub struct Session {
 impl Session {
     pub fn new(
         id: &SessionId,
-        target_set: &TargetSet,
+        target_set: &SchemaIdSet,
         mode: &Mode,
         local: bool,
         live_mode: bool,
@@ -97,7 +97,7 @@ impl Session {
         self.strategy.mode()
     }
 
-    pub fn target_set(&self) -> TargetSet {
+    pub fn target_set(&self) -> SchemaIdSet {
         self.strategy.target_set()
     }
 
@@ -181,7 +181,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::replication::manager::INITIAL_SESSION_ID;
-    use crate::replication::{Message, Mode, SessionState, TargetSet};
+    use crate::replication::{Message, Mode, SchemaIdSet, SessionState};
     use crate::test_utils::helpers::random_target_set;
     use crate::test_utils::{
         populate_and_materialize, populate_store_config, test_runner, test_runner_with_manager,
@@ -191,7 +191,7 @@ mod tests {
     use super::Session;
 
     #[rstest]
-    fn state_machine(#[from(random_target_set)] target_set: TargetSet) {
+    fn state_machine(#[from(random_target_set)] target_set: SchemaIdSet) {
         test_runner(move |node: TestNode| async move {
             let mut session = Session::new(
                 &INITIAL_SESSION_ID,
@@ -225,7 +225,7 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
-            let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
             let mut session = Session::new(
                 &INITIAL_SESSION_ID,
                 &target_set,
@@ -248,7 +248,7 @@ mod tests {
             // 1x Have + 10x Entry + 1x SyncDone = 12 messages
             assert_eq!(response_messages.len(), 12);
 
-            let target_set = TargetSet::new(&vec![config.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
             let mut session = Session::new(
                 &INITIAL_SESSION_ID,
                 &target_set,

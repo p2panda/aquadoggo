@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::traits::Strategy;
-use crate::replication::{Message, Mode, StrategyResult, TargetSet};
+use crate::replication::{Message, Mode, SchemaIdSet, StrategyResult};
 
 #[derive(Clone, Debug)]
 pub struct SetReconciliationStrategy;
@@ -23,7 +23,7 @@ impl Strategy for SetReconciliationStrategy {
         Mode::SetReconciliation
     }
 
-    fn target_set(&self) -> TargetSet {
+    fn target_set(&self) -> SchemaIdSet {
         todo!()
     }
 

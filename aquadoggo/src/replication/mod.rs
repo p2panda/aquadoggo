@@ -6,10 +6,10 @@ mod ingest;
 mod manager;
 mod message;
 mod mode;
+mod schema_id_set;
 mod service;
 mod session;
 mod strategies;
-mod target_set;
 pub mod traits;
 
 pub use announcement::{now, Announcement, AnnouncementMessage};
@@ -17,10 +17,10 @@ pub use ingest::SyncIngest;
 pub use manager::SyncManager;
 pub use message::{LiveMode, LogHeights, Message, SyncMessage};
 pub use mode::Mode;
+pub use schema_id_set::SchemaIdSet;
 pub use service::replication_service;
 pub use session::{Session, SessionId, SessionState};
 pub use strategies::{LogHeightStrategy, SetReconciliationStrategy, StrategyResult};
-pub use target_set::TargetSet;
 
 pub type MessageType = u64;
 

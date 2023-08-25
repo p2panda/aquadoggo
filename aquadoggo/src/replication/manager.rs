@@ -12,7 +12,7 @@ use p2panda_rs::Human;
 use crate::db::SqlStore;
 use crate::replication::errors::{DuplicateSessionRequestError, IngestError, ReplicationError};
 use crate::replication::{
-    Message, Mode, Session, SessionId, SessionState, SyncIngest, SyncMessage, TargetSet,
+    Message, Mode, SchemaIdSet, Session, SessionId, SessionState, SyncIngest, SyncMessage,
 };
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
@@ -86,7 +86,7 @@ where
         &mut self,
         remote_peer: &P,
         session_id: &SessionId,
-        target_set: &TargetSet,
+        target_set: &SchemaIdSet,
         mode: &Mode,
         local: bool,
     ) -> Vec<Message> {
@@ -107,7 +107,7 @@ where
         &mut self,
         remote_peer: &P,
         session_id: &SessionId,
-        target_set: &TargetSet,
+        target_set: &SchemaIdSet,
         mode: &Mode,
         local: bool,
     ) {
@@ -158,7 +158,7 @@ where
     pub async fn initiate_session(
         &mut self,
         remote_peer: &P,
-        target_set: &TargetSet,
+        target_set: &SchemaIdSet,
         mode: &Mode,
     ) -> Result<Vec<SyncMessage>, ReplicationError> {
         SyncManager::<P>::is_mode_supported(mode)?;
@@ -205,7 +205,7 @@ where
     async fn handle_duplicate_session(
         &mut self,
         remote_peer: &P,
-        target_set: &TargetSet,
+        target_set: &SchemaIdSet,
         existing_session: &Session,
     ) -> Result<SyncResult, ReplicationError> {
         match existing_session.local {
@@ -348,7 +348,7 @@ where
         remote_peer: &P,
         mode: &Mode,
         session_id: &SessionId,
-        target_set: &TargetSet,
+        target_set: &SchemaIdSet,
     ) -> Result<SyncResult, ReplicationError> {
         SyncManager::<P>::is_mode_supported(mode)?;
 
@@ -521,7 +521,9 @@ mod tests {
 
     use crate::replication::errors::{DuplicateSessionRequestError, ReplicationError};
     use crate::replication::message::Message;
-    use crate::replication::{Mode, SyncIngest, SyncMessage, TargetSet, HAVE_TYPE, SYNC_DONE_TYPE};
+    use crate::replication::{
+        Mode, SchemaIdSet, SyncIngest, SyncMessage, HAVE_TYPE, SYNC_DONE_TYPE,
+    };
     use crate::schema::SchemaProvider;
     use crate::test_utils::helpers::random_target_set;
     use crate::test_utils::{
@@ -548,8 +550,8 @@ mod tests {
 
     #[rstest]
     fn initiate_outbound_session(
-        #[from(random_target_set)] target_set_1: TargetSet,
-        #[from(random_target_set)] target_set_2: TargetSet,
+        #[from(random_target_set)] target_set_1: SchemaIdSet,
+        #[from(random_target_set)] target_set_2: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -583,9 +585,9 @@ mod tests {
 
     #[rstest]
     fn initiate_inbound_session(
-        #[from(random_target_set)] target_set_1: TargetSet,
-        #[from(random_target_set)] target_set_2: TargetSet,
-        #[from(random_target_set)] target_set_3: TargetSet,
+        #[from(random_target_set)] target_set_1: SchemaIdSet,
+        #[from(random_target_set)] target_set_2: SchemaIdSet,
+        #[from(random_target_set)] target_set_3: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -670,8 +672,8 @@ mod tests {
     //  ============ SESSION 1 CLOSED ===============
     #[rstest]
     fn concurrent_requests_duplicate_session_ids(
-        #[from(random_target_set)] target_set_1: TargetSet,
-        #[from(random_target_set)] target_set_2: TargetSet,
+        #[from(random_target_set)] target_set_1: SchemaIdSet,
+        #[from(random_target_set)] target_set_2: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -872,7 +874,7 @@ mod tests {
     //  ============== SESSION CLOSED ===============
     #[rstest]
     fn concurrent_requests_duplicate_target_set(
-        #[from(random_target_set)] target_set_1: TargetSet,
+        #[from(random_target_set)] target_set_1: SchemaIdSet,
     ) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
@@ -993,7 +995,7 @@ mod tests {
     }
 
     #[rstest]
-    fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: TargetSet) {
+    fn inbound_checks_supported_mode(#[from(random_target_set)] target_set: SchemaIdSet) {
         let peer_id_local: Peer = Peer::new("local");
         let peer_id_remote: Peer = Peer::new("remote");
 
@@ -1068,7 +1070,7 @@ mod tests {
             populate_and_materialize(&mut node_b, &config_b).await;
 
             let (tx, _rx) = broadcast::channel(8);
-            let target_set = TargetSet::new(&[config_a.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&[config_a.schema.id().to_owned()]);
 
             let mut manager_a = SyncManager::new(
                 node_a.context.store.clone(),

@@ -7,7 +7,7 @@ use serde::de::Visitor;
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 
-use crate::replication::{MessageType, TargetSet, ANNOUNCE_TYPE, REPLICATION_PROTOCOL_VERSION};
+use crate::replication::{MessageType, SchemaIdSet, ANNOUNCE_TYPE, REPLICATION_PROTOCOL_VERSION};
 
 /// u64 timestamp from UNIX epoch until now.
 pub fn now() -> u64 {
@@ -20,9 +20,7 @@ pub fn now() -> u64 {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Announcement {
     /// This contains a list of schema ids this peer allowed to support.
-    // @TODO: `TargetSet` is not a good name anymore in this context. See related issue:
-    // https://github.com/p2panda/aquadoggo/issues/527
-    pub supported_schema_ids: TargetSet,
+    pub supported_schema_ids: SchemaIdSet,
 
     /// Timestamp of this announcement. Helps to understand if we can override the previous
     /// announcement with a newer one.
@@ -30,7 +28,7 @@ pub struct Announcement {
 }
 
 impl Announcement {
-    pub fn new(supported_schema_ids: TargetSet) -> Self {
+    pub fn new(supported_schema_ids: SchemaIdSet) -> Self {
         Self {
             timestamp: now(),
             supported_schema_ids,
@@ -108,7 +106,7 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
                     serde::de::Error::custom("missing timestamp in announce message")
                 })?;
 
-                let supported_schema_ids: TargetSet = seq.next_element()?.ok_or_else(|| {
+                let supported_schema_ids: SchemaIdSet = seq.next_element()?.ok_or_else(|| {
                     serde::de::Error::custom("missing target set in announce message")
                 })?;
                 supported_schema_ids.validate().map_err(|_| {
@@ -144,13 +142,13 @@ mod tests {
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
     use rstest::rstest;
 
-    use crate::replication::TargetSet;
+    use crate::replication::SchemaIdSet;
     use crate::test_utils::helpers::random_target_set;
 
     use super::{Announcement, AnnouncementMessage};
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] supported_schema_ids: TargetSet) {
+    fn serialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
         let announcement = Announcement::new(supported_schema_ids.clone());
         assert_eq!(
             serialize_from(AnnouncementMessage::new(announcement.clone())),
@@ -159,7 +157,7 @@ mod tests {
     }
 
     #[rstest]
-    fn deserialize(#[from(random_target_set)] supported_schema_ids: TargetSet) {
+    fn deserialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
         assert_eq!(
             deserialize_into::<AnnouncementMessage>(&serialize_value(cbor!([
                 0,

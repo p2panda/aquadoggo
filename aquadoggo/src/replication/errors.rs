@@ -3,7 +3,7 @@
 use p2panda_rs::hash::Hash;
 use thiserror::Error;
 
-use crate::replication::TargetSet;
+use crate::replication::SchemaIdSet;
 
 #[derive(Error, Debug)]
 pub enum ReplicationError {
@@ -55,8 +55,8 @@ pub enum IngestError {
 }
 
 #[derive(Error, Debug)]
-pub enum TargetSetError {
-    #[error("Target set contains unsorted or duplicate schema ids")]
+pub enum SchemaIdSetError {
+    #[error("Set contains unsorted or duplicate schema ids")]
     UnsortedSchemaIds,
 }
 
@@ -74,12 +74,12 @@ pub enum DuplicateSessionRequestError {
     #[error(
         "Tried to initialise duplicate inbound replication session for existing target set {0:?}"
     )]
-    InboundExistingTargetSet(TargetSet),
+    InboundExistingTargetSet(SchemaIdSet),
 
     #[error(
         "Tried to initialise duplicate outbound replication session for existing target set {0:?}"
     )]
-    OutboundExistingTargetSet(TargetSet),
+    OutboundExistingTargetSet(SchemaIdSet),
 
     #[error("Tried to initialise duplicate outbound replication session with id {0}")]
     Outbound(u64),
