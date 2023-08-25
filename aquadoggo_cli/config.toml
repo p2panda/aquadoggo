@@ -142,21 +142,22 @@ direct_node_addresses = [
 
 # List of peers which can connect to our node.
 #
-# If set then only peers (identified by their peer id) contained in this list will be able
-# to connect to our node (via a relay or directly). When not set then there are no
-# restrictions on which nodes can connect to ours.
+# If set then only peers (identified by their peer id) contained in this list
+# will be able to connect to our node (via a relay or directly). When not set
+# then there are no restrictions on which nodes can connect to ours.
 #
-# WARNING: When set to wildcard "*", your node will accept connections requests from any peers.
-# This is useful for experimentation and local development or settings where access to the network
-# is secured via other means.
+# WARNING: When set to wildcard "*", your node will accept connections requests
+# from any peers. This is useful for experimentation and local development or
+# settings where access to the network is secured via other means.
 #
 allow_peer_ids = "*"
 
 # List of peers which will be blocked from connecting to our node.
 #
-# If set then any peers (identified by their peer id) contained in this list will be blocked
-# from connecting to our node (via a relay or directly). When an empty list is provided then there
-# are no restrictions on which nodes can connect to ours.
+# If set then any peers (identified by their peer id) contained in this list
+# will be blocked from connecting to our node (via a relay or directly). When
+# an empty list is provided then there are no restrictions on which nodes can
+# connect to ours.
 #
 block_peer_ids = []
 
@@ -184,8 +185,8 @@ block_peer_ids = []
 # of known node addresses instead and only connect to trusted nodes.
 #
 relay_addresses = [
-    #"192.0.2.16:2022",
-    #"192.0.2.17:2022",
+    # "192.0.2.16:2022",
+    # "192.0.2.17:2022",
 ]
 
 # Set to true if node should also function as a relay. Defaults to false.
