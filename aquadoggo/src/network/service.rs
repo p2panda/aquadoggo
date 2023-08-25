@@ -80,8 +80,11 @@ pub async fn network_service(
 
     // If relay node addresses were provided, then connect to each and perform necessary setup before we
     // run the main event loop.
+    //
+    // We are not connecting to other relays when in relay mode (is this even supported by libp2p)?
+    // See related issue: https://github.com/p2panda/aquadoggo/issues/529
     let mut connected_relays = HashMap::new();
-    if !network_config.relay_addresses.is_empty() {
+    if !network_config.relay_addresses.is_empty() && !network_config.relay_mode {
         // First we need to stop the "peers" behaviour.
         //
         // We do this so that the connections we create during initialization do not trigger

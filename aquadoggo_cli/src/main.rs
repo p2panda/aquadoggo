@@ -65,4 +65,8 @@ fn show_warnings(config: &Configuration) {
             warn!("Allowed schema ids is set to wildcard. Your node will support _any_ schemas it will encounter on the network. This is useful for experimentation and local development but _not_ recommended for production settings.");
         }
     }
+
+    if !config.network.relay_addresses.is_empty() && config.network.relay_mode {
+        warn!("Will not connect to given relay addresses when relay mode is enabled");
+    }
 }
