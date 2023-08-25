@@ -50,6 +50,13 @@ pub struct NetworkConfiguration {
     /// restrictions on which nodes can connect to ours.
     pub allow_peer_ids: AllowList<PeerId>,
 
+    /// List of peers which can connect to our node.
+    ///
+    /// If set then only peers (identified by their peer id) contained in this list will be able
+    /// to connect to our node (via a relay or directly). When not set then there are no
+    /// restrictions on which nodes can connect to ours.
+    pub block_peer_ids: AllowList<PeerId>,
+
     /// Notify handler buffer size.
     ///
     /// Defines the buffer size for events sent from a network protocol handler to the connection
@@ -108,6 +115,7 @@ impl Default for NetworkConfiguration {
             relay_mode: false,
             relay_addresses: Vec::new(),
             allow_peer_ids: AllowList::<PeerId>::Wildcard,
+            block_peer_ids: AllowList::<PeerId>::Wildcard,
         }
     }
 }

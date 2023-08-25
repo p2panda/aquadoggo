@@ -8,7 +8,7 @@ use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{connection_limits, dcutr, identify, mdns, relay, rendezvous};
 use libp2p_allow_block_list as allow_block_list;
-use libp2p_allow_block_list::AllowedPeers;
+use libp2p_allow_block_list::{AllowedPeers, BlockedPeers};
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
@@ -76,7 +76,11 @@ pub struct P2pandaBehaviour {
     /// Register peer connections and handle p2panda messaging with them.
     pub peers: peers::Behaviour,
 
+    /// Allow connections based on an allow list of peer ids.
     pub allowed_peers: Toggle<allow_block_list::Behaviour<AllowedPeers>>,
+
+    /// Block connections based on a block list of peer ids.
+    pub blocked_peers: Toggle<allow_block_list::Behaviour<BlockedPeers>>,
 }
 
 impl P2pandaBehaviour {
@@ -168,6 +172,7 @@ impl P2pandaBehaviour {
         // Always create behaviour to manage peer connections and handle p2panda messaging
         let peers = peers::Behaviour::new();
 
+        // Construct behaviour to manage an allow list of peers when configured.
         let allowed_peers = match &network_config.allow_peer_ids {
             crate::AllowList::Wildcard => None,
             crate::AllowList::Set(allow_peer_ids) => {
@@ -176,6 +181,18 @@ impl P2pandaBehaviour {
                     allowed_peers.allow_peer(*peer_id)
                 }
                 Some(allowed_peers)
+            }
+        };
+
+        // Construct behaviour to manage a block list of peers when configured.
+        let blocked_peers = match &network_config.block_peer_ids {
+            crate::AllowList::Wildcard => None,
+            crate::AllowList::Set(block_peer_ids) => {
+                let mut blocked_peers = allow_block_list::Behaviour::default();
+                for peer_id in block_peer_ids {
+                    blocked_peers.block_peer(*peer_id)
+                }
+                Some(blocked_peers)
             }
         };
 
@@ -190,6 +207,7 @@ impl P2pandaBehaviour {
             dcutr: dcutr.into(),
             peers,
             allowed_peers: allowed_peers.into(),
+            blocked_peers: blocked_peers.into(),
         })
     }
 }

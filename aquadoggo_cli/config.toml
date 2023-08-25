@@ -149,7 +149,16 @@ direct_node_addresses = [
 # WARNING: When set to wildcard "*", your node will accept connections requests from any peers.
 # This is useful for experimentation and local development or settings where access to the network
 # is secured via other means.
+#
 allow_peer_ids = "*"
+
+# List of peers which will be blocked from connecting to our node.
+#
+# If set then any peers (identified by their peer id) contained in this list will be blocked
+# from connecting to our node (via a relay or directly). When an empty list is provided then there
+# are no restrictions on which nodes can connect to ours.
+#
+block_peer_ids = []
 
 # ﾟ･｡+☆
 # RELAY

@@ -175,6 +175,11 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     allow_peer_ids: Option<Vec<PeerId>>,
 
+    /// List of peers this node will block connections with.
+    #[arg(short = 'b', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    block_peer_ids: Option<Vec<PeerId>>,
+
     /// Enable if node should also function as a relay. Disabled by default.
     ///
     /// Other nodes can use relays to aid discovery and establishing connectivity.
@@ -232,6 +237,7 @@ pub struct Configuration {
     pub relay_addresses: Vec<SocketAddr>,
     pub relay_mode: bool,
     pub allow_peer_ids: UncheckedAllowList,
+    pub block_peer_ids: UncheckedAllowList,
 }
 
 impl Default for Configuration {
@@ -249,6 +255,7 @@ impl Default for Configuration {
             relay_addresses: vec![],
             relay_mode: false,
             allow_peer_ids: UncheckedAllowList::Wildcard,
+            block_peer_ids: UncheckedAllowList::Wildcard,
         }
     }
 }
@@ -276,8 +283,25 @@ impl TryFrom<Configuration> for NodeConfiguration {
             }
         };
 
-        // Check if given schema ids are valid
+        // Check if given peer ids are valid
         let allow_peer_ids = match value.allow_peer_ids {
+            UncheckedAllowList::Wildcard => AllowList::<PeerId>::Wildcard,
+            UncheckedAllowList::Set(str_values) => {
+                let peer_ids: Result<Vec<PeerId>, anyhow::Error> = str_values
+                    .iter()
+                    .map(|str_value| {
+                        PeerId::from_str(str_value).map_err(|_| {
+                            anyhow!("Invalid peer id '{str_value}' found in 'allow_peer_ids' list")
+                        })
+                    })
+                    .collect();
+
+                AllowList::Set(peer_ids?)
+            }
+        };
+
+        // Check if given peer ids are valid
+        let block_peer_ids = match value.block_peer_ids {
             UncheckedAllowList::Wildcard => AllowList::<PeerId>::Wildcard,
             UncheckedAllowList::Set(str_values) => {
                 let peer_ids: Result<Vec<PeerId>, anyhow::Error> = str_values
@@ -314,6 +338,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .map(to_multiaddress)
                     .collect(),
                 allow_peer_ids,
+                block_peer_ids,
                 ..Default::default()
             },
         })
