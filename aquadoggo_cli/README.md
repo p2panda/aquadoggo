@@ -1,4 +1,4 @@
-<h1 align="center">aquadoggo</h1>
+<h1 align="center">aquadoggo CLI</h1>
 
 <div align="center">
   <strong>Node for the p2panda network</strong>
@@ -59,9 +59,6 @@ aquadoggo
 # By default the config.toml is loaded from the same folder or from the XDG
 # data directory, but you can also specify a custom path
 aquadoggo -c ../config.toml
-
-# Expose your node on all interfaces
-aquadoggo -i 0.0.0.0
 
 # Turn your aquadoggo into a relay
 aquadoggo --relay-mode
