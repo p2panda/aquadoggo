@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix relayed connections, add DCUtR Holepunching and reduce CLI args [#502](https://github.com/p2panda/aquadoggo/pull/502)
 - Announce supported schema ids in network before replication [#515](https://github.com/p2panda/aquadoggo/pull/515)
 - Allow & block lists, direct dial known peers, connect to multiple relays [#542](https://github.com/p2panda/aquadoggo/pull/524)
+- Add configuration to bind to Ipv4 address [#530](https://github.com/p2panda/aquadoggo/pull/530)
 
 ### Changed
 
