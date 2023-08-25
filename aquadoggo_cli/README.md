@@ -24,7 +24,7 @@
 
 <br/>
 
-Configurable node implementation for the [`p2panda`](https://p2panda.org) network.
+Configurable node implementation for the [`p2panda`] network.
 
 ## Install
 
@@ -50,11 +50,32 @@ cargo build --release
 cp ./target/release/aquadoggo ~/.local/bin
 ```
 
+## Examples
+
+```bash
+# For experimental setups it is enough to just start the node!
+aquadoggo
+
+# By default the config.toml is loaded from the same folder or from the XDG
+# data directory, but you can also specify a custom path
+aquadoggo -c ../config.toml
+
+# Expose your node on all interfaces
+aquadoggo -i 0.0.0.0
+
+# Turn your aquadoggo into a relay
+aquadoggo --relay-mode
+
+# Check out the config.toml file for more options or consult the help menu. You
+# might need it for more sophisticated setups
+aquadoggo --help
+```
+
 ## Usage
 
-`aquadoggo` is a powerful node implementation which can run in very different setups during development and in production. It can be configured through a `config.toml` file, environment variables and command line arguments, depending on your needs.
+`aquadoggo` is a powerful node implementation which can run in very different setups during development and in production. It can be configured through a [`config.toml`] file, environment variables and command line arguments, depending on your needs.
 
-Check out the [`config.toml`](config.toml) file for all configurations and documentation or run `--help` to see all possible command line arguments. All values can also be defined as environment variables, written in CAMEL_CASE (for example `HTTP_PORT=3000`).
+Check out the [`config.toml`] file for all configurations and documentation or run `--help` to see all possible command line arguments. All values can also be defined as environment variables, written in CAMEL_CASE (for example `HTTP_PORT=3000`).
 
 ```
 Usage: aquadoggo [OPTIONS]
@@ -168,3 +189,6 @@ GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 *This project has received funding from the European Union’s Horizon 2020
 research and innovation programme within the framework of the NGI-POINTER
 Project funded under grant agreement No 871528*
+
+[`config.toml`]: config.toml
+[`p2panda`]: https://p2panda.org
