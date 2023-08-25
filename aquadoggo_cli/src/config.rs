@@ -166,17 +166,17 @@ struct Cli {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
-    #[arg(short = 'r', long, value_name = "IP:PORT IP:PORT, ...", num_args = 0..)]
+    #[arg(short = 'r', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_addresses: Option<Vec<SocketAddr>>,
 
     /// List of peers this node will accept connections with.
-    #[arg(short = 'a', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
+    #[arg(short = 'a', long, value_name = "PEER_ID", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     allow_peer_ids: Option<Vec<PeerId>>,
 
     /// List of peers this node will block connections with.
-    #[arg(short = 'b', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
+    #[arg(short = 'b', long, value_name = "PEER_ID", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
     block_peer_ids: Option<Vec<PeerId>>,
 
