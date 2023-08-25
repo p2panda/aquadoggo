@@ -162,7 +162,7 @@ pub async fn network_service(
 
     // Dial all nodes we want to directly connect to.
     for direct_node_address in &network_config.direct_node_addresses {
-        if let Some(address) = utils::to_quic_address(&direct_node_address) {
+        if let Some(address) = utils::to_quic_address(direct_node_address) {
             info!("Connecting to node @ {}", address);
         }
 
