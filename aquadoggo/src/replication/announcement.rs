@@ -19,8 +19,8 @@ pub fn now() -> u64 {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Announcement {
-    /// This contains a list of schema ids this peer is interested in.
-    pub target_set: TargetSet,
+    /// This contains a list of schema ids this peer allowed to support.
+    pub supported_schema_ids: TargetSet,
 
     /// Timestamp of this announcement. Helps to understand if we can override the previous
     /// announcement with a newer one.
@@ -28,10 +28,10 @@ pub struct Announcement {
 }
 
 impl Announcement {
-    pub fn new(target_set: TargetSet) -> Self {
+    pub fn new(supported_schema_ids: TargetSet) -> Self {
         Self {
             timestamp: now(),
-            target_set,
+            supported_schema_ids,
         }
     }
 }
@@ -65,7 +65,7 @@ impl Serialize for AnnouncementMessage {
         seq.serialize_element(&ANNOUNCE_TYPE)?;
         seq.serialize_element(&self.0)?;
         seq.serialize_element(&self.1.timestamp)?;
-        seq.serialize_element(&self.1.target_set)?;
+        seq.serialize_element(&self.1.supported_schema_ids)?;
         seq.end()
     }
 }
@@ -106,10 +106,10 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
                     serde::de::Error::custom("missing timestamp in announce message")
                 })?;
 
-                let target_set: TargetSet = seq.next_element()?.ok_or_else(|| {
+                let supported_schema_ids: TargetSet = seq.next_element()?.ok_or_else(|| {
                     serde::de::Error::custom("missing target set in announce message")
                 })?;
-                target_set.validate().map_err(|_| {
+                supported_schema_ids.validate().map_err(|_| {
                     serde::de::Error::custom("invalid target set in announce message")
                 })?;
 
@@ -124,7 +124,7 @@ impl<'de> Deserialize<'de> for AnnouncementMessage {
                 Ok(AnnouncementMessage(
                     protocol_version,
                     Announcement {
-                        target_set,
+                        supported_schema_ids,
                         timestamp,
                     },
                 ))
@@ -142,30 +142,33 @@ mod tests {
     use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
     use rstest::rstest;
 
-    use crate::replication::TargetSet;
+    use crate::replication::SchemaIdSet;
     use crate::test_utils::helpers::random_target_set;
 
     use super::{Announcement, AnnouncementMessage};
 
     #[rstest]
-    fn serialize(#[from(random_target_set)] target_set: TargetSet) {
-        let announcement = Announcement::new(target_set.clone());
+    fn serialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
+        let announcement = Announcement::new(supported_schema_ids.clone());
         assert_eq!(
             serialize_from(AnnouncementMessage::new(announcement.clone())),
-            serialize_value(cbor!([0, 1, announcement.timestamp, target_set]))
+            serialize_value(cbor!([0, 1, announcement.timestamp, supported_schema_ids]))
         );
     }
 
     #[rstest]
-    fn deserialize(#[from(random_target_set)] target_set: TargetSet) {
+    fn deserialize(#[from(random_target_set)] supported_schema_ids: SchemaIdSet) {
         assert_eq!(
             deserialize_into::<AnnouncementMessage>(&serialize_value(cbor!([
-                0, 1, 12345678, target_set
+                0,
+                1,
+                12345678,
+                supported_schema_ids
             ])))
             .unwrap(),
             AnnouncementMessage::new(Announcement {
                 timestamp: 12345678,
-                target_set,
+                supported_schema_ids,
             })
         );
     }

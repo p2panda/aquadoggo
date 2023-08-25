@@ -243,18 +243,18 @@ impl ConnectionManager {
 
         // If this is a SyncRequest message first we check if the contained target set matches our
         // own locally configured one.
-        if let Message::SyncRequest(_, remote_target_set) = message.message() {
-            let local_target_set = &self
+        if let Message::SyncRequest(_, remote_supported_schema_ids) = message.message() {
+            let local_supported_schema_ids = &self
                 .announcement
                 .as_ref()
                 .expect("Announcement state needs to be set with 'update_announcement'")
-                .target_set;
+                .supported_schema_ids;
 
             // If this node has been configured with a whitelist of schema ids then we check the
             // target set of the requests matches our own, otherwise we skip this step and accept
             // any target set.
             if self.schema_provider.is_whitelist_active()
-                && !local_target_set.is_valid_set(remote_target_set)
+                && !local_supported_schema_ids.is_valid_set(remote_supported_schema_ids)
             {
                 // If it doesn't match we signal that an error occurred and return at this point.
                 self.on_replication_error(peer, session_id, ReplicationError::UnsupportedTargetSet)
@@ -334,11 +334,11 @@ impl ConnectionManager {
     /// Determine if we can attempt new replication sessions with the peers we currently know
     /// about.
     async fn update_sessions(&mut self) {
-        let local_target_set = &self
+        let local_supported_schema_ids = &self
             .announcement
             .as_ref()
             .expect("Announcement state needs to be set with 'update_announcement'")
-            .target_set;
+            .supported_schema_ids;
 
         // Iterate through all currently connected peers
         let mut attempt_peers: Vec<(Peer, TargetSet)> = self
@@ -350,15 +350,19 @@ impl ConnectionManager {
 
                 // 1. Did we already receive this peers announcement state? If not we can't do
                 //    anything yet and need to wait.
-                let remote_target_set: TargetSet = if let Some(announcement) = status.announcement {
-                    announcement.target_set
-                } else {
-                    return None;
-                };
+                let remote_supported_schema_ids: TargetSet =
+                    if let Some(announcement) = status.announcement {
+                        announcement.supported_schema_ids
+                    } else {
+                        return None;
+                    };
 
-                // 2. Calculate intersection of local and remote target set. Do we have any
+                // 2. Calculate intersection of local and remote schema id sets. Do we have any
                 //    supported schema id's in common?
-                let target_set = TargetSet::from_intersection(local_target_set, &remote_target_set);
+                let target_set = TargetSet::from_intersection(
+                    local_supported_schema_ids,
+                    &remote_supported_schema_ids,
+                );
                 if target_set.is_empty() {
                     return None;
                 }
