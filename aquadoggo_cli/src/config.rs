@@ -172,8 +172,11 @@ struct Cli {
 
     /// List of peers this node will accept connections with.
     #[arg(short = 'a', long, value_name = "PEER_ID", num_args = 0..)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allow_peer_ids: Option<Vec<PeerId>>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_with_wildcard"
+    )]
+    allow_peer_ids: Option<Vec<String>>,
 
     /// List of peers this node will block connections with.
     #[arg(short = 'b', long, value_name = "PEER_ID", num_args = 0..)]
