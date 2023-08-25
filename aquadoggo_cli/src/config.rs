@@ -13,7 +13,7 @@ use directories::ProjectDirs;
 use figment::providers::{Env, Format, Serialized, Toml};
 use figment::Figment;
 use libp2p::multiaddr::Protocol;
-use libp2p::Multiaddr;
+use libp2p::{Multiaddr, PeerId};
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -157,7 +157,7 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     direct_node_addresses: Option<Vec<SocketAddr>>,
 
-    /// Address of a relay.
+    /// Addresses of a relays.
     ///
     /// A relay helps discover other nodes on the internet (also known as "rendesvouz" or
     /// "bootstrap" server) and helps establishing direct p2p connections when node is behind a
@@ -166,9 +166,19 @@ struct Cli {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
-    #[arg(short = 'r', long, value_name = "IP:PORT")]
+    #[arg(short = 'r', long, value_name = "IP:PORT IP:PORT, ...", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    relay_address: Option<SocketAddr>,
+    relay_addresses: Option<Vec<SocketAddr>>,
+
+    /// List of peers this node will accept connections with.
+    #[arg(short = 'a', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allow_peer_ids: Option<Vec<PeerId>>,
+
+    /// List of peers this node will block connections with.
+    #[arg(short = 'b', long, value_name = "PEER_ID PEER_ID, ...", num_args = 0..)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    block_peer_ids: Option<Vec<PeerId>>,
 
     /// Enable if node should also function as a relay. Disabled by default.
     ///
@@ -224,8 +234,10 @@ pub struct Configuration {
     pub private_key: Option<PathBuf>,
     pub mdns: bool,
     pub direct_node_addresses: Vec<SocketAddr>,
-    pub relay_address: Option<SocketAddr>,
+    pub relay_addresses: Vec<SocketAddr>,
     pub relay_mode: bool,
+    pub allow_peer_ids: UncheckedAllowList,
+    pub block_peer_ids: UncheckedAllowList,
 }
 
 impl Default for Configuration {
@@ -240,8 +252,10 @@ impl Default for Configuration {
             private_key: None,
             mdns: true,
             direct_node_addresses: vec![],
-            relay_address: None,
+            relay_addresses: vec![],
             relay_mode: false,
+            allow_peer_ids: UncheckedAllowList::Wildcard,
+            block_peer_ids: UncheckedAllowList::Wildcard,
         }
     }
 }
@@ -269,6 +283,40 @@ impl TryFrom<Configuration> for NodeConfiguration {
             }
         };
 
+        // Check if given peer ids are valid
+        let allow_peer_ids = match value.allow_peer_ids {
+            UncheckedAllowList::Wildcard => AllowList::<PeerId>::Wildcard,
+            UncheckedAllowList::Set(str_values) => {
+                let peer_ids: Result<Vec<PeerId>, anyhow::Error> = str_values
+                    .iter()
+                    .map(|str_value| {
+                        PeerId::from_str(str_value).map_err(|_| {
+                            anyhow!("Invalid peer id '{str_value}' found in 'allow_peer_ids' list")
+                        })
+                    })
+                    .collect();
+
+                AllowList::Set(peer_ids?)
+            }
+        };
+
+        // Check if given peer ids are valid
+        let block_peer_ids = match value.block_peer_ids {
+            UncheckedAllowList::Wildcard => AllowList::<PeerId>::Wildcard,
+            UncheckedAllowList::Set(str_values) => {
+                let peer_ids: Result<Vec<PeerId>, anyhow::Error> = str_values
+                    .iter()
+                    .map(|str_value| {
+                        PeerId::from_str(str_value).map_err(|_| {
+                            anyhow!("Invalid peer id '{str_value}' found in 'allow_peer_ids' list")
+                        })
+                    })
+                    .collect();
+
+                AllowList::Set(peer_ids?)
+            }
+        };
+
         Ok(NodeConfiguration {
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
@@ -284,7 +332,13 @@ impl TryFrom<Configuration> for NodeConfiguration {
                     .map(to_multiaddress)
                     .collect(),
                 relay_mode: value.relay_mode,
-                relay_address: value.relay_address.map(to_multiaddress),
+                relay_addresses: value
+                    .relay_addresses
+                    .into_iter()
+                    .map(to_multiaddress)
+                    .collect(),
+                allow_peer_ids,
+                block_peer_ids,
                 ..Default::default()
             },
         })

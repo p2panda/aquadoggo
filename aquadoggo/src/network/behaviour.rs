@@ -7,6 +7,8 @@ use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{connection_limits, dcutr, identify, mdns, relay, rendezvous};
+use libp2p_allow_block_list as allow_block_list;
+use libp2p_allow_block_list::{AllowedPeers, BlockedPeers};
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
@@ -73,6 +75,12 @@ pub struct P2pandaBehaviour {
 
     /// Register peer connections and handle p2panda messaging with them.
     pub peers: peers::Behaviour,
+
+    /// Allow connections based on an allow list of peer ids.
+    pub allowed_peers: Toggle<allow_block_list::Behaviour<AllowedPeers>>,
+
+    /// Block connections based on a block list of peer ids.
+    pub blocked_peers: Toggle<allow_block_list::Behaviour<BlockedPeers>>,
 }
 
 impl P2pandaBehaviour {
@@ -87,7 +95,7 @@ impl P2pandaBehaviour {
 
         // Create an identify server behaviour with default configuration if a rendezvous server
         // address has been provided or the rendezvous server flag is set
-        let identify = if network_config.relay_address.is_some() || network_config.relay_mode {
+        let identify = if !network_config.relay_addresses.is_empty() || network_config.relay_mode {
             debug!("Identify network behaviour enabled");
             Some(identify::Behaviour::new(identify::Config::new(
                 format!("{NODE_NAMESPACE}/1.0.0"),
@@ -116,7 +124,7 @@ impl P2pandaBehaviour {
 
         // Create a rendezvous client behaviour with default configuration if a rendezvous server
         // address has been provided
-        let rendezvous_client = if network_config.relay_address.is_some() {
+        let rendezvous_client = if !network_config.relay_addresses.is_empty() {
             debug!("Rendezvous client network behaviour enabled");
             Some(rendezvous::client::Behaviour::new(key_pair))
         } else {
@@ -164,6 +172,30 @@ impl P2pandaBehaviour {
         // Always create behaviour to manage peer connections and handle p2panda messaging
         let peers = peers::Behaviour::new();
 
+        // Construct behaviour to manage an allow list of peers when configured.
+        let allowed_peers = match &network_config.allow_peer_ids {
+            crate::AllowList::Wildcard => None,
+            crate::AllowList::Set(allow_peer_ids) => {
+                let mut allowed_peers = allow_block_list::Behaviour::default();
+                for peer_id in allow_peer_ids {
+                    allowed_peers.allow_peer(*peer_id)
+                }
+                Some(allowed_peers)
+            }
+        };
+
+        // Construct behaviour to manage a block list of peers when configured.
+        let blocked_peers = match &network_config.block_peer_ids {
+            crate::AllowList::Wildcard => None,
+            crate::AllowList::Set(block_peer_ids) => {
+                let mut blocked_peers = allow_block_list::Behaviour::default();
+                for peer_id in block_peer_ids {
+                    blocked_peers.block_peer(*peer_id)
+                }
+                Some(blocked_peers)
+            }
+        };
+
         Ok(Self {
             identify: identify.into(),
             mdns: mdns.into(),
@@ -174,6 +206,8 @@ impl P2pandaBehaviour {
             relay_server: relay_server.into(),
             dcutr: dcutr.into(),
             peers,
+            allowed_peers: allowed_peers.into(),
+            blocked_peers: blocked_peers.into(),
         })
     }
 }

@@ -46,7 +46,7 @@ pub async fn build_client_transport(
 
 // Build the transport stack to be used by nodes with relay capabilities.
 pub async fn build_relay_transport(key_pair: &Keypair) -> Boxed<(PeerId, StreamMuxerBox)> {
-    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::new().port_reuse(true))
+    let tcp_transport = tcp::tokio::Transport::new(tcp::Config::new().port_reuse(true))
         .upgrade(Version::V1)
         .authenticate(NoiseConfig::new(key_pair).unwrap())
         .multiplex(YamuxConfig::default());

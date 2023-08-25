@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use libp2p::connection_limits::ConnectionLimits;
 use libp2p::Multiaddr;
-use serde::{Deserialize, Serialize};
+use libp2p::{connection_limits::ConnectionLimits, PeerId};
+
+use crate::AllowList;
 
 /// The namespace used by the `identify` network behaviour.
 pub const NODE_NAMESPACE: &str = "aquadoggo";
 
 /// Network config for the node.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct NetworkConfiguration {
     /// QUIC port for node-to-node communication.
     pub quic_port: u16,
@@ -31,7 +32,7 @@ pub struct NetworkConfiguration {
     /// static IP address through an VPS.
     pub relay_mode: bool,
 
-    /// Address of a peer which can act as a relay/rendezvous server.
+    /// Addresses of a peers which can act as a relay/rendezvous server.
     ///
     /// Relays help discover other nodes on the internet (also known as "rendesvouz" or "bootstrap"
     /// server) and help establishing direct p2p connections when node is behind a firewall or NAT
@@ -40,7 +41,21 @@ pub struct NetworkConfiguration {
     /// When a direct connection is not possible the relay will help to redirect the (encrypted)
     /// traffic as an intermediary between us and other nodes. The node will contact each server
     /// and register our IP address for other peers.
-    pub relay_address: Option<Multiaddr>,
+    pub relay_addresses: Vec<Multiaddr>,
+
+    /// List of peers which can connect to our node.
+    ///
+    /// If set then only peers (identified by their peer id) contained in this list will be able
+    /// to connect to our node (via a relay or directly). When not set then there are no
+    /// restrictions on which nodes can connect to ours.
+    pub allow_peer_ids: AllowList<PeerId>,
+
+    /// List of peers which can connect to our node.
+    ///
+    /// If set then only peers (identified by their peer id) contained in this list will be able
+    /// to connect to our node (via a relay or directly). When not set then there are no
+    /// restrictions on which nodes can connect to ours.
+    pub block_peer_ids: AllowList<PeerId>,
 
     /// Notify handler buffer size.
     ///
@@ -98,7 +113,9 @@ impl Default for NetworkConfiguration {
             per_connection_event_buffer_size: 8,
             quic_port: 2022,
             relay_mode: false,
-            relay_address: None,
+            relay_addresses: Vec::new(),
+            allow_peer_ids: AllowList::<PeerId>::Wildcard,
+            block_peer_ids: AllowList::<PeerId>::Wildcard,
         }
     }
 }

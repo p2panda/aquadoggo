@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::num::NonZeroU8;
 use std::time::Duration;
@@ -19,7 +20,7 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{identity, peers, swarm, utils, NetworkConfiguration, ShutdownHandler};
+use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
 
 /// Network service which handles all networking logic for a p2panda node.
 ///
@@ -37,7 +38,7 @@ pub async fn network_service(
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    let mut network_config = context.config.network.clone();
+    let network_config = &context.config.network;
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
 
@@ -46,23 +47,19 @@ pub async fn network_service(
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
-        swarm::build_relay_swarm(&network_config, key_pair).await?
+        let mut swarm = swarm::build_relay_swarm(network_config, key_pair).await?;
+
+        // Start listening on tcp address.
+        let listen_addr_tcp = Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(0));
+        swarm.listen_on(listen_addr_tcp)?;
+
+        swarm
     } else {
         info!("Networking service initializing...");
-        swarm::build_client_swarm(&network_config, key_pair).await?
+        swarm::build_client_swarm(network_config, key_pair).await?
     };
-
-    // Start listening on tcp address.
-    //
-    // @TODO: It's still not clear to me if "client" nodes need to do this, when I don't listen
-    // here for clients it doesn't seem to make any difference. Maybe it effects things like dcutr
-    // though, I'm not sure.
-    //
-    // Related issue: https://github.com/p2panda/aquadoggo/issues/508
-    let listen_addr_tcp = Multiaddr::empty()
-        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Tcp(0));
-    swarm.listen_on(listen_addr_tcp)?;
 
     // Start listening on QUIC address. Pick a random one if the given is taken already.
     let listen_addr_quic = Multiaddr::empty()
@@ -81,32 +78,112 @@ pub async fn network_service(
         swarm.listen_on(random_port_addr)?;
     }
 
-    // If a relay node address was provided, then connect and performing necessary setup before we
+    // If relay node addresses were provided, then connect to each and perform necessary setup before we
     // run the main event loop.
-    if let Some(relay_address) = network_config.relay_address.clone() {
-        info!("Connecting to relay node at: {relay_address}");
-        connect_to_relay(&mut swarm, &mut network_config, relay_address).await?;
+    let mut connected_relays = HashMap::new();
+    if !network_config.relay_addresses.is_empty() {
+        // First we need to stop the "peers" behaviour.
+        //
+        // We do this so that the connections we create during initialization do not trigger
+        // replication sessions, which could leave the node in a strange state.
+        swarm.behaviour_mut().peers.disable();
+
+        for mut relay_address in network_config.relay_addresses.clone() {
+            // Attempt to connect to the relay node, we give this a 5 second timeout so as not to
+            // get stuck if one relay is unreachable.
+            info!("Connecting to relay node at: {relay_address}");
+            if let Ok(result) = tokio::time::timeout(
+                Duration::from_secs(5),
+                connect_to_relay(&mut swarm, &mut relay_address),
+            )
+            .await
+            {
+                match result {
+                    // If the connection is successful then add this node to our map of connected relays.
+                    Ok((relay_peer_id, relay_address)) => {
+                        connected_relays.insert(relay_peer_id, relay_address);
+                    }
+                    Err(_) => info!("Failed to connect to relay node"),
+                }
+            } else {
+                info!("Relay connection attempt failed: connection timeout")
+            };
+        }
+
+        // Finally we want to dial any relay nodes we connected to _again_, this time in order to
+        // initiate replication with it, which will happen automatically once the connection succeeds.
+        // And then begin discovering peers in `NODE_NAMESPACE` on each relay node in order to begin
+        // replicating with them too.
+        //
+        // @TODO: This is a workaround since we don't have a way yet to start replication _not_ at the
+        // same time the connection gets successfully established. We should fix this and remove the
+        // second, potentially redundant dial.
+        //
+        // See related issue: https://github.com/p2panda/aquadoggo/issues/507
+
+        // First restart the "peers" behaviour in order to handle the expected messages
+        swarm.behaviour_mut().peers.enable();
+
+        for relay_peer_id in connected_relays.keys() {
+            let opts = DialOpts::peer_id(*relay_peer_id)
+                .condition(PeerCondition::Always) // There is an existing connection, so we force dial here.
+                .build();
+            match swarm.dial(opts) {
+                Ok(_) => (),
+                Err(err) => debug!("Error dialing peer: {:?}", err),
+            };
+
+            // Now request to discover other peers in `NODE_NAMESPACE`.
+            info!("Discovering peers in namespace \"{NODE_NAMESPACE}\"",);
+            swarm
+                .behaviour_mut()
+                .rendezvous_client
+                .as_mut()
+                .expect("Relay client exists as we a relay address was provided")
+                .discover(
+                    Some(
+                        rendezvous::Namespace::new(NODE_NAMESPACE.to_string())
+                            .expect("Valid namespace"),
+                    ),
+                    None,
+                    None,
+                    *relay_peer_id,
+                );
+        }
+    }
+
+    // Dial all nodes we want to directly connect to.
+    for direct_node_address in &network_config.direct_node_addresses {
+        info!("Connecting to node at: {direct_node_address}");
+        let opts = DialOpts::unknown_peer_id()
+            .address(direct_node_address.clone())
+            .build();
+        match swarm.dial(opts) {
+            Ok(_) => (),
+            Err(err) => debug!("Error dialing node: {:?}", err),
+        };
     }
 
     info!("Network service ready!");
 
     // Spawn main event loop handling all p2panda and libp2p network events.
-    spawn_event_loop(swarm, local_peer_id, network_config, shutdown, tx, tx_ready).await
+    spawn_event_loop(
+        swarm,
+        local_peer_id,
+        connected_relays,
+        shutdown,
+        tx,
+        tx_ready,
+    )
+    .await
 }
 
 /// Connect to a relay node, confirm exchange identity information and wait to listen on our
 /// circuit relay address.
 pub async fn connect_to_relay(
     swarm: &mut Swarm<P2pandaBehaviour>,
-    network_config: &mut NetworkConfiguration,
-    mut relay_address: Multiaddr,
-) -> Result<()> {
-    // First we need to stop the "peers" behaviour.
-    //
-    // We do this so that the connections we create during initialization do not trigger
-    // replication sessions, which could leave the node in a strange state.
-    swarm.behaviour_mut().peers.disable();
-
+    relay_address: &mut Multiaddr,
+) -> Result<(PeerId, Multiaddr)> {
     // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
     // our local public address and (b) enable a freshly started relay to learn its public address.
     swarm.dial(relay_address.clone())?;
@@ -143,7 +220,6 @@ pub async fn connect_to_relay(
 
                 // Update values on the config.
                 learned_relay_peer_id = Some(peer_id);
-                network_config.relay_address = Some(relay_address.clone());
 
                 // All done, we've learned our external address successfully.
                 learned_observed_addr = true;
@@ -219,41 +295,7 @@ pub async fn connect_to_relay(
         }
     }
 
-    // Now request to discover other peers in `NODE_NAMESPACE`.
-    info!("Discovering peers in namespace \"{NODE_NAMESPACE}\"",);
-    swarm
-        .behaviour_mut()
-        .rendezvous_client
-        .as_mut()
-        .expect("Relay client exists as we a relay address was provided")
-        .discover(
-            Some(rendezvous::Namespace::new(NODE_NAMESPACE.to_string()).expect("Valid namespace")),
-            None,
-            None,
-            relay_peer_id,
-        );
-
-    // Finally we want to dial the relay node _again_, this time in order to initiate replication
-    // with it, which will happen automatically once the connection succeeds.
-    //
-    // @TODO: This is a workaround since we don't have a way yet to start replication _not_ at the
-    // same time the connection gets successfully established. We should fix this and remove the
-    // second, potentially redundant dial.
-    //
-    // See related issue: https://github.com/p2panda/aquadoggo/issues/507
-
-    // First restart the "peers" behaviour in order to handle the expected messages
-    swarm.behaviour_mut().peers.enable();
-
-    let opts = DialOpts::peer_id(relay_peer_id)
-        .condition(PeerCondition::Always) // There is an existing connection, so we force dial here.
-        .build();
-    match swarm.dial(opts) {
-        Ok(_) => (),
-        Err(err) => debug!("Error dialing peer: {:?}", err),
-    };
-
-    Ok(())
+    Ok((relay_peer_id, relay_address.clone()))
 }
 
 /// Main loop polling the async swarm event stream and incoming service messages stream.
@@ -262,7 +304,7 @@ struct EventLoop {
     local_peer_id: PeerId,
     tx: ServiceSender,
     rx: BroadcastStream<ServiceMessage>,
-    network_config: NetworkConfiguration,
+    relay_addresses: HashMap<PeerId, Multiaddr>,
     shutdown_handler: ShutdownHandler,
     learned_port: bool,
 }
@@ -272,7 +314,7 @@ impl EventLoop {
         swarm: Swarm<P2pandaBehaviour>,
         local_peer_id: PeerId,
         tx: ServiceSender,
-        network_config: NetworkConfiguration,
+        relay_addresses: HashMap<PeerId, Multiaddr>,
         shutdown_handler: ShutdownHandler,
     ) -> Self {
         Self {
@@ -280,7 +322,7 @@ impl EventLoop {
             local_peer_id,
             rx: BroadcastStream::new(tx.subscribe()),
             tx,
-            network_config,
+            relay_addresses,
             shutdown_handler,
             learned_port: false,
         }
@@ -391,16 +433,20 @@ impl EventLoop {
 
     async fn handle_rendezvous_client_events(&mut self, event: &rendezvous::client::Event) {
         match event {
-            rendezvous::client::Event::Discovered { registrations, .. } => {
+            rendezvous::client::Event::Discovered {
+                registrations,
+                rendezvous_node,
+                ..
+            } => {
                 info!("Discovered peers registered at rendezvous: {registrations:?}",);
 
                 for registration in registrations {
                     for address in registration.record.addresses() {
                         let peer_id = registration.record.peer_id();
                         if peer_id != self.local_peer_id {
-                            if let Some(relay_address) = &self.network_config.relay_address {
-                                info!("Add new peer to address book: {} {}", peer_id, address);
+                            info!("Add new peer to address book: {} {}", peer_id, address);
 
+                            if let Some(relay_address) = self.relay_addresses.get(rendezvous_node) {
                                 let peer_circuit_address = relay_address
                                     .clone()
                                     .with(Protocol::P2pCircuit)
@@ -410,7 +456,9 @@ impl EventLoop {
                                     Ok(_) => (),
                                     Err(err) => debug!("Error dialing peer: {:?}", err),
                                 };
-                            }
+                            } else {
+                                debug!("Discovered peer from unknown relay node")
+                            };
                         }
                     }
                 }
@@ -464,7 +512,7 @@ impl EventLoop {
 pub async fn spawn_event_loop(
     swarm: Swarm<P2pandaBehaviour>,
     local_peer_id: PeerId,
-    network_config: NetworkConfiguration,
+    relay_addresses: HashMap<PeerId, Multiaddr>,
     shutdown: Shutdown,
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
@@ -476,7 +524,7 @@ pub async fn spawn_event_loop(
         swarm,
         local_peer_id,
         tx,
-        network_config,
+        relay_addresses,
         shutdown_handler.clone(),
     );
     let handle = task::spawn(event_loop.run());
