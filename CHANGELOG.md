@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parse supported schema ids from `config.toml` [#473](https://github.com/p2panda/aquadoggo/pull/473)
 - Fix relayed connections, add DCUtR Holepunching and reduce CLI args [#502](https://github.com/p2panda/aquadoggo/pull/502)
 - Announce supported schema ids in network before replication [#515](https://github.com/p2panda/aquadoggo/pull/515)
+- Improved configuration API with "config.toml" file, environment vars and command line arguments [#519](https://github.com/p2panda/aquadoggo/pull/519)
 
 ### Changed
 
