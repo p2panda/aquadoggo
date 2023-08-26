@@ -1,4 +1,4 @@
-name: compile and release binaries
+name: release
 
 permissions:
   contents: write
@@ -22,18 +22,20 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu # ARM64 Linux (kernel 4.1, glibc 2.17+)
             os: ubuntu-latest
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-gnu # 64-bit Linux (kernel 3.2+, glibc 2.17+)
             os: ubuntu-latest
-          - target: armv7-unknown-linux-gnueabihf
+          - target: armv7-unknown-linux-gnueabihf # ARMv7-A Linux, hardfloat (kernel 3.2, glibc 2.17, RPi)
             os: ubuntu-latest
-          - target: aarch64-apple-darwin
+          - target: aarch64-apple-darwin # ARM64 macOS (11.0+, Big Sur+)
             os: macos-latest
-          - target: x86_64-apple-darwin
+          - target: x86_64-apple-darwin # # 64-bit macOS (10.7+, Lion+)
             os: macos-latest
-          - target: universal-apple-darwin
-            os: macos-latest
+          - target: x86_64-pc-windows-gnu # 64-bit MinGW (Windows 7+)
+            os: windows-latest
+          - target: x86_64-pc-windows-msvc # 64-bit MSVC (Windows 7+)
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -41,7 +43,8 @@ jobs:
         with:
           bin: aquadoggo
           tar: unix
-          checksum: sha512
+          zip: windows
+          checksum: sha256,sha512
           archive: $bin-$tag-$target
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
