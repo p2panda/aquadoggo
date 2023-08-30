@@ -76,6 +76,89 @@ aquadoggo --help
 
 `aquadoggo` is a powerful node implementation which can run in very different setups during development and in production. It can be configured through a [`config.toml`] file, environment variables and command line arguments, depending on your needs.
 
+### Common setups
+
+#### Support only a certain schema
+
+> "I want to run a node which only replicates and serves data from a limit set of schema. In this case it's schema required by a mushroom sighting app."
+
+```toml
+allow_schema_ids = [
+    "mushroom_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d",
+    "mushroom_finding_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0"
+]
+```
+
+#### Support all schemas but restrict allowed peers
+
+> "Me and my friends are running our own `p2panda` network supported by a couple of relay nodes, we trust each other and want to support all published data, but not allow anyone else to join the network."
+
+```toml
+# I can do this by configuring `allow_schema_ids` to be a wildcard, meaning any schema 
+# are automatically supported!
+allow_schema_ids = "*"
+
+# Add relay addresses to allow establishing connections over the internet
+relay_addresses = [
+    "203.0.113.12:2022",
+    "203.0.113.34:2022",
+]
+
+# Enable discovery using mDNS (true by default)
+mdns = true
+
+# Populate an allow list which will contain the peer ids of our friends (including 
+# the ones acting as relays)
+allow_peer_ids = [
+    "12D3KooWLxGKMgUtekXam9JsSjMa3b7M3rYEYUYUywdehHTRrLgU",
+    "12D3KooWP1ahRHeNp6s1M9qDJD2oyqRsYFeKLYjcjmFxrq6KM8xd",
+]
+```
+
+#### Act as a relay node
+
+> "I want to deploy a relay which assists in connecting edge peers but doesn't persist any data itself."
+
+```toml
+# I can do this by configuring `allow_schema_ids` an empty list, meaning this node
+# does not support any schemas
+allow_schema_ids = []
+
+# Then set the relay flag so this node behaves as a relay for other nodes
+relay_mode = true
+```
+
+#### Directly connect to known peers
+
+> "I want my node to connect to a list of known and accessible peers."
+
+```toml
+# Allow all schemas
+allow_schema_ids = "*"
+
+# Address of nodes with static IP addresses we can connect directly to
+direct_node_addresses = [
+    "192.0.2.78:2022",
+    "198.51.100.22:2022",
+    "192.0.2.211:2022",
+    "203.0.114.123:2022",
+]
+```
+
+#### Persist node identity and database
+
+> "I want my node to persist it's identity and database on the filesystem and retreive them whenever it runs again."
+
+```toml
+# Persist node private key at given location (using Linux XDG paths as an example)
+private_key = "$HOME/.local/share/aquadoggo/private-key.txt"
+
+# Persist SQLite database at given location
+database_url = "sqlite:$HOME/.local/share/aquadoggo/db.sqlite3"
+```
+
+### Configuration
+
 Check out the [`config.toml`] file for all configurations and documentation or run `--help` to see all possible command line arguments. All values can also be defined as environment variables, written in CAMEL_CASE (for example `HTTP_PORT=3000`).
 
 ```
