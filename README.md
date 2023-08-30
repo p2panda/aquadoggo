@@ -78,7 +78,7 @@ For writing an application using Rust you can import `aquadoggo` directly in you
 
 Some example applications which could be built on top of `aquadoggo` are:
 
-- **Community centre resource management:** Members of the centre want to manage some shared resources (table tennis, tools, cooking equipment), they each run an app ([Tauri](https://tauri.app/) desktop app with a bundled `aquadoggo` inside) on their own devices, where they can add resources, view availability and making loan requests. Discovery and syncing of data occurs automatically when member's devices are on the same local network.
+- 🥄 **Community centre resource management:** Members of the centre want to manage some shared resources (table tennis, tools, cooking equipment), they each run an app ([Tauri](https://tauri.app/) desktop app with a bundled `aquadoggo` inside) on their own devices, where they can add resources, view availability and making loan requests. Discovery and syncing of data occurs automatically when member's devices are on the same local network.
     <details>
     <summary>See config</summary>
     <br>
@@ -95,7 +95,7 @@ Some example applications which could be built on top of `aquadoggo` are:
     mdns = true
     ```
     </details>
-- **Local ecology monitoring:** Village residents want to collect data on bird species which are sighted in their area over the year. They want anyone with the app to be able to upload a sighting. All the residents run a native Android app on their smartphone, and they make use of a number of relay nodes which enables discovery and p2p or relayed connection establishment.
+- 🐦 **Local ecology monitoring:** Village residents want to collect data on bird species which are sighted in their area over the year. They want anyone with the app to be able to upload a sighting. All the residents run a native Android app on their smartphone, and they make use of a number of relay nodes which enables discovery and p2p or relayed connection establishment.
     <details>
     <summary>See config</summary>
     <br>
@@ -124,7 +124,7 @@ Some example applications which could be built on top of `aquadoggo` are:
     relay_mode = true
     ```
     </details>
-- **Coop notice boards:** residents of a group of housing coops want to start a collaborative notice board. Each coop deploys a node on their local network and residents access a web-app to post and view ads or news. They're already using a shared VPN so nodes can connect directly, but only some coops are allowed to join the noticeboard network.
+- 🗞️ **Coop notice boards:** residents of a group of housing coops want to start a collaborative notice board. Each coop deploys a node on their local network and residents access a web-app to post and view ads or news. They're already using a shared VPN so nodes can connect directly, but only some coops are allowed to join the noticeboard network.
     <details>
     <summary>See config</summary>
     <br>
