@@ -5,6 +5,7 @@ mod key_pair;
 mod utils;
 
 use std::convert::TryInto;
+use std::str::FromStr;
 
 use anyhow::Context;
 use aquadoggo::{AllowList, Configuration, Node};
@@ -19,12 +20,13 @@ async fn main() -> anyhow::Result<()> {
     // Load configuration from command line arguments, environment variables and .toml file
     let (config_file_path, config) = load_config().context("Could not load configuration")?;
 
-    // Configure log level
+    // Set log verbosity based on config. By default scope it always to the "aquadoggo" module.
     let mut builder = env_logger::Builder::new();
-    builder
-        .filter(Some("aquadoggo"), LevelFilter::Info)
-        .write_style(WriteStyle::Always)
-        .init();
+    let builder = match LevelFilter::from_str(&config.log_level) {
+        Ok(log_level) => builder.filter(Some("aquadoggo"), log_level),
+        Err(_) => builder.parse_filters(&config.log_level),
+    };
+    builder.write_style(WriteStyle::Always).init();
 
     // Convert to `aquadoggo` configuration format and check for invalid inputs
     let node_config = config
