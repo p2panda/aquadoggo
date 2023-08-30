@@ -8,17 +8,23 @@ use std::convert::TryInto;
 
 use anyhow::Context;
 use aquadoggo::{AllowList, Configuration, Node};
-use log::warn;
+use env_logger::WriteStyle;
+use log::{warn, LevelFilter};
 
 use crate::config::{load_config, print_config};
 use crate::key_pair::{generate_ephemeral_key_pair, generate_or_load_key_pair};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
     // Load configuration from command line arguments, environment variables and .toml file
     let (config_file_path, config) = load_config().context("Could not load configuration")?;
+
+    // Configure log level
+    let mut builder = env_logger::Builder::new();
+    builder
+        .filter(Some("aquadoggo"), LevelFilter::Info)
+        .write_style(WriteStyle::Always)
+        .init();
 
     // Convert to `aquadoggo` configuration format and check for invalid inputs
     let node_config = config
