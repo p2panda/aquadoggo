@@ -70,7 +70,7 @@ cargo add aquadoggo
 
 ## Example
 
-Run the node directly within the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
+Run the node directly next to the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
 
 ```rust
 use aquadoggo::{Configuration, Node};
@@ -81,7 +81,7 @@ let key_pair = KeyPair::new();
 let node = Node::start(key_pair, config).await;
 ```
 
-## FFI bindings
+### FFI bindings
 
 If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
 
