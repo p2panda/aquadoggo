@@ -62,7 +62,7 @@ aquadoggo
 aquadoggo --log-level info
 
 # By default the config.toml is loaded from the same folder or from the XDG
-# data directory, but you can also specify a custom path
+# config directory, but you can also specify a custom path
 aquadoggo -c ../config.toml
 
 # Turn your aquadoggo into a relay
