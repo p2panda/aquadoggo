@@ -2,7 +2,6 @@
 
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -44,9 +43,12 @@ fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
     file.sync_all()?;
 
     // Set permission for sensitive information
-    let mut permissions = file.metadata()?.permissions();
-    permissions.set_mode(0o600);
-    fs::set_permissions(path, permissions)?;
+    if cfg!(unix) {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = file.metadata()?.permissions();
+        permissions.set_mode(0o600);
+        fs::set_permissions(path, permissions)?;
+    }
 
     Ok(())
 }
