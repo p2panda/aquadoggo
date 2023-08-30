@@ -2,6 +2,8 @@
 
 use std::fs::{self, File};
 use std::io::{Read, Write};
+#[cfg(target_os = "unix")]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -33,6 +35,7 @@ pub fn generate_ephemeral_key_pair() -> KeyPair {
 ///
 /// This method automatically creates the required directories on that path and fixes the
 /// permissions of the file (0600, read and write permissions only for the owner).
+#[cfg(target_os = "unix")]
 fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
     let private_key_hex = hex::encode(key_pair.private_key().as_bytes());
 
@@ -43,12 +46,22 @@ fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
     file.sync_all()?;
 
     // Set permission for sensitive information
-    if cfg!(unix) {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = file.metadata()?.permissions();
-        permissions.set_mode(0o600);
-        fs::set_permissions(path, permissions)?;
-    }
+    let mut permissions = file.metadata()?.permissions();
+    permissions.set_mode(0o600);
+    fs::set_permissions(path, permissions)?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "unix"))]
+fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
+    let private_key_hex = hex::encode(key_pair.private_key().as_bytes());
+
+    // Make sure that directories exist and write file into it
+    fs::create_dir_all(path.parent().unwrap())?;
+    let mut file = File::create(&path)?;
+    file.write_all(private_key_hex.as_bytes())?;
+    file.sync_all()?;
 
     Ok(())
 }
