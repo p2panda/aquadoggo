@@ -198,7 +198,7 @@ docker run -p 2020:2020 -p 2022:2022 -e LOG_LEVEL=info p2panda/aquadoggo
 
 ### Embed node
 
-Run the node directly within the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
+Run the node directly next to the frontend you're building for full peer-to-peer applications by using the [`aquadoggo`](/aquadoggo) Rust crate. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
 
 ```rust
 use aquadoggo::{Configuration, Node};
