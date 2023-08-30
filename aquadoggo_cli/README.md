@@ -25,13 +25,13 @@
 <br/>
 
 Configurable node for the [`p2panda`] network, which runs as a command line
-application on any computer, Raspberry Pi or server.
+application on any computer, single-board or server.
 
 ## Installation
 
 ### Pre-compiled binaries
 
-Check out our [Releases](releases) section.
+Check out our [Releases](/releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows.
 
 ### Compile it yourself
 
@@ -178,7 +178,10 @@ Options:
 
 ```bash
 # Run node during development with logging enabled
-LOG_LEVEL=debug cargo run
+cargo run -- --log-level debug
+
+# Show logs of all modules
+cargo run -- --log-level "=debug"
 
 # Run tests
 cargo test
