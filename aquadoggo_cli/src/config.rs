@@ -220,6 +220,17 @@ struct Cli {
     )]
     #[serde(skip_serializing_if = "Option::is_none")]
     relay_mode: Option<bool>,
+
+    /// Set log verbosity. Use this for learning more about how your node behaves or for debugging.
+    ///
+    /// Possible log levels are: ERROR, WARN, INFO, DEBUG, TRACE. They are scoped to "aquadoggo" by
+    /// default.
+    ///
+    /// If you want to adjust the scope for deeper inspection use a filter value, for example
+    /// "=TRACE" for logging _everything_ or "aquadoggo=INFO,libp2p=DEBUG" etc.
+    #[arg(short = 'l', long, value_name = "LEVEL")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    log_level: Option<String>,
 }
 
 /// Clap converts wildcard symbols from command line arguments (for example --supported-schema-ids
@@ -250,6 +261,7 @@ where
 /// Configuration derived from environment variables and .toml file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Configuration {
+    pub log_level: String,
     pub allow_schema_ids: UncheckedAllowList,
     pub database_url: String,
     pub database_max_connections: u32,
@@ -268,6 +280,7 @@ pub struct Configuration {
 impl Default for Configuration {
     fn default() -> Self {
         Self {
+            log_level: "off".into(),
             allow_schema_ids: UncheckedAllowList::Wildcard,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
