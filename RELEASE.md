@@ -21,7 +21,7 @@ _This is an example for publising version `1.2.0`._
 
 ## Publishing releases
 
-9. Copy the changelog entry you authored into Github's [new release page](https://github.com/p2panda/aquadoggo/releases/new)'s description field. Title it with your version `v1.2.0`.
+9. The GitHub Action will automatically create the release on GitHub, compile binary targets and upload them as assets. Check if the jobs succeeded.
 10. Run `cargo publish`.
 
 ## Publishing on DockerHub
