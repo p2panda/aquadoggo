@@ -78,9 +78,9 @@ aquadoggo --help
 
 ### Common setups
 
-#### Support only a certain schema
+#### Support only certain schemas
 
-> "I want to run a node which only replicates and serves data from a limit set of schema. In this case it's schema required by a mushroom sighting app."
+> "I want to run a node which only replicates and serves data from a limited set of schemas. In this case it's schemas required by a mushroom sighting app."
 
 ```toml
 allow_schema_ids = [
