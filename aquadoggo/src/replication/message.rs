@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fmt;
-
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
-use p2panda_rs::{Human, Validate};
-use serde::de::Visitor;
+use p2panda_rs::Human;
 use serde::ser::SerializeSeq;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::replication::{
     MessageType, Mode, SchemaIdSet, SessionId, ENTRY_TYPE, HAVE_TYPE, SYNC_DONE_TYPE,
@@ -120,103 +117,12 @@ impl Serialize for SyncMessage {
     }
 }
 
-impl<'de> Deserialize<'de> for SyncMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct SyncMessageVisitor;
-
-        impl<'de> Visitor<'de> for SyncMessageVisitor {
-            type Value = SyncMessage;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("p2panda replication message")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                let message_type: MessageType = seq.next_element()?.ok_or_else(|| {
-                    serde::de::Error::custom("missing message type in replication message")
-                })?;
-
-                let session_id: SessionId = seq.next_element()?.ok_or_else(|| {
-                    serde::de::Error::custom("missing session id in replication message")
-                })?;
-
-                let message = if message_type == SYNC_REQUEST_TYPE {
-                    let mode: Mode = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing mode in sync request message")
-                    })?;
-
-                    let target_set: SchemaIdSet = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing target set in sync request message")
-                    })?;
-
-                    target_set.validate().map_err(|_| {
-                        serde::de::Error::custom("invalid target set in sync request message")
-                    })?;
-
-                    if target_set.is_empty() {
-                        return Err(serde::de::Error::custom(
-                            "empty target set in sync request message",
-                        ));
-                    }
-
-                    Ok(Message::SyncRequest(mode, target_set))
-                } else if message_type == ENTRY_TYPE {
-                    let entry_bytes: EncodedEntry = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing entry bytes in entry message")
-                    })?;
-
-                    let operation_bytes: Option<EncodedOperation> = seq.next_element()?;
-
-                    Ok(Message::Entry(entry_bytes, operation_bytes))
-                } else if message_type == SYNC_DONE_TYPE {
-                    let live_mode: bool = seq.next_element()?.ok_or_else(|| {
-                        serde::de::Error::custom("missing live mode flag in sync done message")
-                    })?;
-
-                    Ok(Message::SyncDone(live_mode))
-                } else if message_type == HAVE_TYPE {
-                    let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> =
-                        seq.next_element()?.ok_or_else(|| {
-                            serde::de::Error::custom("missing log heights in have message")
-                        })?;
-
-                    Ok(Message::Have(log_heights))
-                } else {
-                    Err(serde::de::Error::custom(format!(
-                        "unknown message type {} in replication message",
-                        message_type
-                    )))
-                }?;
-
-                if let Some(items_left) = seq.size_hint() {
-                    if items_left > 0 {
-                        return Err(serde::de::Error::custom(
-                            "too many fields for replication message",
-                        ));
-                    }
-                };
-
-                Ok(SyncMessage::new(session_id, message))
-            }
-        }
-
-        deserializer.deserialize_seq(SyncMessageVisitor)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use ciborium::cbor;
-    use ciborium::value::{Error, Value};
     use p2panda_rs::entry::{LogId, SeqNum};
     use p2panda_rs::identity::PublicKey;
-    use p2panda_rs::serde::{deserialize_into, serialize_from, serialize_value};
+    use p2panda_rs::serde::{serialize_from, serialize_value};
     use p2panda_rs::test_utils::fixtures::public_key;
     use rstest::rstest;
 
@@ -254,65 +160,5 @@ mod tests {
                 )]
             ]))
         );
-    }
-
-    #[rstest]
-    fn deserialize(#[from(random_schema_id_set)] target_set: SchemaIdSet, public_key: PublicKey) {
-        assert_eq!(
-            deserialize_into::<SyncMessage>(&serialize_value(cbor!([1, 12, 0, target_set])))
-                .unwrap(),
-            SyncMessage::new(
-                12,
-                Message::SyncRequest(Mode::LogHeight, target_set.clone())
-            )
-        );
-
-        let log_heights: Vec<(PublicKey, Vec<(LogId, SeqNum)>)> = vec![];
-        assert_eq!(
-            deserialize_into::<SyncMessage>(&serialize_value(cbor!([10, 12, log_heights])))
-                .unwrap(),
-            SyncMessage::new(12, Message::Have(vec![]))
-        );
-
-        assert_eq!(
-            deserialize_into::<SyncMessage>(&serialize_value(cbor!([
-                10,
-                12,
-                vec![(
-                    // Convert explicitly to bytes as `cbor!` macro doesn't understand somehow that
-                    // `PublicKey` serializes to a byte array
-                    serde_bytes::Bytes::new(&public_key.to_bytes()),
-                    vec![(LogId::default(), SeqNum::default())]
-                )]
-            ])))
-            .unwrap(),
-            SyncMessage::new(
-                12,
-                Message::Have(vec![(
-                    public_key,
-                    vec![(LogId::default(), SeqNum::default())]
-                )])
-            )
-        );
-    }
-
-    #[rstest]
-    #[should_panic(expected = "missing message type in replication message")]
-    #[case::no_fields(cbor!([]))]
-    #[should_panic(expected = "unknown message type 122 in replication message")]
-    #[case::unknown_message_type(cbor!([122, 0]))]
-    #[should_panic(expected = "missing session id in replication message")]
-    #[case::only_message_type(cbor!([1]))]
-    #[should_panic(expected = "empty target set in sync request")]
-    #[case::only_message_type(cbor!([1, 0, 0, []]))]
-    #[should_panic(expected = "too many fields for replication message")]
-    #[case::too_many_fields(cbor!([1, 0, 0, ["schema_field_definition_v1"], "too much"]))]
-    fn deserialize_invalid_messages(#[case] cbor: Result<Value, Error>) {
-        // Check the cbor is valid
-        assert!(cbor.is_ok());
-
-        // Deserialize into sync message, we unwrap here to cause a panic and then test for
-        // expected error stings
-        deserialize_into::<SyncMessage>(&serialize_value(cbor)).unwrap();
     }
 }
