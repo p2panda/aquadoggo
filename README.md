@@ -47,7 +47,7 @@
 
 `aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
-Read more about nodes in our [learn](https://p2panda.org/learn/networks) section.
+> 📖 Read more about nodes in our [learn](https://p2panda.org/learn/networks) section
 
 ## Features
 
@@ -62,28 +62,32 @@ Read more about nodes in our [learn](https://p2panda.org/learn/networks) section
 
 ## Who is this for?
 
-`aquadoggo` might be interesting for anyone who wants to participate in a p2p network. This could be as a node maintainer, an application developer or simply someone wanting to learn more about p2p networking in a hands-on fashion. No programming experience is needed to deploy a node on your own machine, and you can even experiment with creating your own data schemas (using [`fishy`](https://github.com/p2panda/fishy)), publishing and replicating data (try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app) or play with [`send-to-node`](https://github.com/p2panda/send-to-node)) and then querying it again using the graphql playground (by default served at `localhost:2020/graphql`).
+`aquadoggo` might be interesting for anyone who wants to participate in a p2p network. This could be as a node maintainer, an application developer or simply someone wanting to learn more about p2p networking in a hands-on fashion. No programming experience is needed to deploy a node on your own machine, and you can even experiment with creating your own data schemas using, publishing and replicating data, and then querying it again using the GraphQL playground.
+
+> 🛠️ Create your own schemas using [`fishy`](https://github.com/p2panda/fishy)<br />
+> 📖 Try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app) or play with [`send-to-node`](https://github.com/p2panda/send-to-node)<br />
+> 🛼 Open the GraphQL playground in your browser, served under `http://localhost:2020/graphql`
 
 ## What can I build with this?
 
-`aquadoggo` is a fully featured p2p "backend", which takes some of the complexity out of building p2p applications. If you want to build a client application which communicates with an `aquadoggo` it will be of great help if you already have some experience with web development or using the Rust programming language. For writing an application using Rust you can import `aquadoggo` directly in your code. If building a TypeScript web frontend which will interface with a local or remote node, you can import the small TypeScript client library [`shirokuma`](https://github.com/p2panda/shirokuma) to your project. We have plans for making it easier to interact with `aquadoggo` using other languages in the future.
+`aquadoggo` is a fully-featured p2p "backend", which takes some of the complexity out of building p2p applications. If you want to build a client application which communicates with an `aquadoggo` it will be of great help if you already have some experience with web development or the Rust programming language. For writing an application using Rust you can import `aquadoggo` directly in your code. If building a TypeScript web frontend which will interface with a local or remote node, you can import the small TypeScript client library [`shirokuma`](https://github.com/p2panda/shirokuma) to your project. We have plans for making it easier to interact with `aquadoggo` using other languages in the future.
 
 Some example applications which could be built on top of `aquadoggo` are:
 
-- **Community Centre resource management:** Members of the centre want to manage some shared resources (table tennis, tools, cooking equipment), they each run an app ([Tauri](https://tauri.app/) desktop app with a bundled `aquadoggo` inside) on their own devices, where they can add resources, view availability and making loan requests. Discovery and syncing of data occurs automatically when member's devices are on the same local network.
+- **Community centre resource management:** Members of the centre want to manage some shared resources (table tennis, tools, cooking equipment), they each run an app ([Tauri](https://tauri.app/) desktop app with a bundled `aquadoggo` inside) on their own devices, where they can add resources, view availability and making loan requests. Discovery and syncing of data occurs automatically when member's devices are on the same local network.
     <details>
     <summary>See config</summary>
     <br>
 
-    ```yaml
-    # Schemas needed for our application
+    ```toml
+    # Schemas needed for our resource management application
     allow_schema_ids = [
         "resource_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d",
         "resource_booking_request_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0",
-        "resource_booking_accepted_00209a75d6f1440c188fa52555c8cdd60b3988e468e1db2e469b7d4425a225eba8ec"
+        "resource_booking_accepted_00209a75d6f1440c188fa52555c8cdd60b3988e468e1db2e469b7d4425a225eba8ec",
     ]
 
-    # We want mDNS discovery enabled
+    # Enable mDNS discovery to automatically find other nodes on the local network and share data with them
     mdns = true
     ```
     </details>
@@ -93,22 +97,22 @@ Some example applications which could be built on top of `aquadoggo` are:
     <br>
 
     _app node config_
-    ```yaml
-    # Schemas needed for our application
+    ```toml
+    # Schemas needed for our ecology monitoring application
     allow_schema_ids = [
         "bird_species_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d",
-        "bird_sighting_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0"
+        "bird_sighting_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0",
     ]
 
-    # Addresses of the relay nodes
+    # Addresses of the relay nodes helping us to connect the residents over the internet
     relay_addresses = [
-        "203.0.114.0:2022",
-        "203.0.114.1:2022",
+        "203.0.113.1:2022",
+        "198.51.100.21:2022",
     ]
     ```
 
     _relay node config_
-    ```yaml
+    ```toml
     # A relay doesn't need to support any schemas
     allow_schema_ids = []
 
@@ -121,22 +125,22 @@ Some example applications which could be built on top of `aquadoggo` are:
     <summary>See config</summary>
     <br>
 
-    ```yaml
-    # Schemas needed for our application
+    ```toml
+    # Schemas needed for our coop notice board application
     allow_schema_ids = [
         "notice_board_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d",
-        "notice_board_post_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0"
+        "notice_board_post_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0",
     ]
 
-    # Address of known nodes we can connect directly to
+    # Addresses of already known nodes we can connect directly to
     direct_node_addresses = [
-        "203.0.114.0:2022",
-        "203.0.114.1:2022",
-        "203.0.114.2:2022",
-        "203.0.114.3:2022",
+        "192.0.2.78:2022",
+        "198.51.100.22:2022",
+        "192.0.2.211:2022",
+        "203.0.114.123:2022",
     ]
 
-    # Peer ids of allowed peers, these will be the expected ids for the nodes we are connecting
+    # Peer ids of allowed peers, these will be the expected identities for the nodes we are connecting
     # directly to
     allowed_peer_ids = [
         "12D3KooWP1ahRHeNp6s1M9qDJD2oyqRsYFeKLYjcjmFxrq6KM8xd",
@@ -153,7 +157,7 @@ We're excited to hear about your ideas! Join our [official chat](https://wald.li
 
 ### Command line application
 
-Check out our [Releases](releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
+Check out our [Releases](/releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
 
 ### Rust Crate
 
@@ -170,7 +174,7 @@ cargo add aquadoggo
 You can also run the node simply as a [command line application](#). `aquadoggo` can be configured in countless ways for your needs, read our [configuration](/aquadoggo_cli/README.md#Usage) section for more examples, usecases and an overview of configuration options.
 
 ```bash
-# Start a local node on your machine
+# Start a local node on your machine, go to http://localhost:2020/graphql for using the GraphQL playground
 aquadoggo
 
 # Check out all configuration options
@@ -190,7 +194,7 @@ docker run -p 2020:2020 -p 2022:2022 -e LOG_LEVEL=info p2panda/aquadoggo
 
 ### Embed node
 
-Run the node directly within the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a Desktop app.
+Run the node directly within the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
 
 ```rust
 use aquadoggo::{Configuration, Node};
@@ -203,7 +207,7 @@ let node = Node::start(key_pair, config).await;
 
 ### FFI bindings
 
-If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Flutter project as an example on how we dealt with FFI bindings for Dart / Flutter.
+If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
 
 ## What shouldn't I do with `aquadoggo`?
 
@@ -216,7 +220,7 @@ If you are not working with Rust you can create FFI bindings from the `aquadoggo
 
 As well as these yet-to-be implemented features, there are also general networking concerns (exposing your IP address, sharing data with untrusted peers) that you should take into account when participating in any network, and particularily in peer-to-peer networks.
 
-So although `aquadoggo` is already very useful in many cases, there are others where it won't be a good fit yet or we would actively warn against use. For now, any uses which would be handling especially sensitive data are not recommended, and any users who have special network security requirements need to take extra precautions.
+So although `aquadoggo` is already very useful in many cases, there are others where it won't be a good fit yet or we would actively warn against use. For now, any uses which would be handling especially sensitive data are not recommended, and any users who have special network security requirements need to take extra precautions. Reach out on our [official chat](https://wald.liebechaos.org/) if you have any questions.
 
 ## License
 
@@ -230,4 +234,4 @@ GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 
 *This project has received funding from the European Union’s Horizon 2020
 research and innovation programme within the framework of the NGI-POINTER
-Project funded under grant agreement No 871528*
+Project funded under grant agreement No 871528 and NGI-ASSURE No 957073*
