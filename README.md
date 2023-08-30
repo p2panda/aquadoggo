@@ -1,7 +1,7 @@
 <h1 align="center">aquadoggo</h1>
 
 <div align="center">
-  <strong>Embeddable p2p network node</strong>
+  <strong>p2panda network node</strong>
 </div>
 
 <br />
@@ -43,18 +43,11 @@
 
 <br/>
 
-Configurable node implementation for the [`p2panda`] network running as a
-[`command line application`] or embedded via the [`library`] inside your Rust
-program.
+`aquadoggo` is a reference node implementation for [p2panda](https://p2panda.org). It is a intended as a tool for making the design and build of local-first, collaborative p2p applications as simple as possible, and hopefully even a little fun!
 
-> The core p2panda [`specification`] is fully functional but still under review so
-> please be prepared for breaking API changes until we reach v1.0. Currently no
-> p2panda implementation has received a security audit.
+`aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
-[`command line application`]: /aquadoggo_cli
-[`library`]: /aquadoggo
-[`p2panda`]: https://p2panda.org/
-[`specification`]: https://p2panda.org/specification
+Read more about nodes in our [learn](https://p2panda.org/learn/networks) section.
 
 ## Features
 
@@ -64,12 +57,140 @@ program.
 - Materializes views on top of the known data.
 - Answers filtered, sorted and paginated data queries via GraphQL.
 - Discovers other nodes in local network and internet.
-- Establishes connections (peer-to-peer via UDP holepunching) or via relays.
+- Establishes peer-to-peer connections via UDP holepunching or via relays.
 - Replicates data efficiently with other nodes.
 
-## Example
+## Who is this for?
 
-Embed the node server in your Rust application, mobile application (via [FFI bindings](https://github.com/p2panda/meli/)) or web container like [`Tauri`]:
+`aquadoggo` might be interesting for anyone who wants to participate in a p2p network. This could be as a node maintainer, an application developer or simply someone wanting to learn more about p2p networking in a hands-on fashion. No programming experience is needed to deploy a node on your own machine, and you can even experiment with creating your own data schemas (using [`fishy`](https://github.com/p2panda/fishy)), publishing and replicating data (try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app) or play with [`send-to-node`](https://github.com/p2panda/send-to-node)) and then querying it again using the graphql playground (by default served at `localhost:2020/graphql`).
+
+## What can I build with this?
+
+`aquadoggo` is a fully featured p2p "backend", which takes some of the complexity out of building p2p applications. If you want to build a client application which communicates with an `aquadoggo` it will be of great help if you already have some experience with web development or using the Rust programming language. For writing an application using Rust you can import `aquadoggo` directly in your code. If building a TypeScript web frontend which will interface with a local or remote node, you can import the small TypeScript client library [`shirokuma`](https://github.com/p2panda/shirokuma) to your project. We have plans for making it easier to interact with `aquadoggo` using other languages in the future.
+
+Some example applications which could be built on top of `aquadoggo` are:
+
+- **Community Centre resource management:** Members of the centre want to manage some shared resources (table tennis, tools, cooking equipment), they each run an app ([Tauri](https://tauri.app/) desktop app with a bundled `aquadoggo` inside) on their own devices, where they can add resources, view availability and making loan requests. Discovery and syncing of data occurs automatically when member's devices are on the same local network.
+    <details>
+    <summary>See config</summary>
+    <br>
+
+    ```yaml
+    # Schemas needed for our application
+    allow_schema_ids = [
+        "resource_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d",
+        "resource_booking_request_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0",
+        "resource_booking_accepted_00209a75d6f1440c188fa52555c8cdd60b3988e468e1db2e469b7d4425a225eba8ec"
+    ]
+
+    # We want mDNS discovery enabled
+    mdns = true
+    ```
+    </details>
+- **Local ecology monitoring:** Village residents want to collect data on bird species which are sighted in their area over the year. They want anyone with the app to be able to upload a sighting. All the residents run a native Android app on their smartphone, and they make use of a number of relay nodes which enables discovery and p2p or relayed connection establishment.
+    <details>
+    <summary>See config</summary>
+    <br>
+
+    _app node config_
+    ```yaml
+    # Schemas needed for our application
+    allow_schema_ids = [
+        "bird_species_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d",
+        "bird_sighting_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0"
+    ]
+
+    # Addresses of the relay nodes
+    relay_addresses = [
+        "203.0.114.0:2022",
+        "203.0.114.1:2022",
+    ]
+    ```
+
+    _relay node config_
+    ```yaml
+    # A relay doesn't need to support any schemas
+    allow_schema_ids = []
+
+    # Enable relay mode
+    relay_mode = true
+    ```
+    </details>
+- **Coop notice boards:** residents of a group of housing coops want to start a collaborative notice board. Each coop deploys a node on their local network and residents access a web-app to post and view ads or news. They're already using a shared VPN so nodes can connect directly, but only some coops are allowed to join the noticeboard network.
+    <details>
+    <summary>See config</summary>
+    <br>
+
+    ```yaml
+    # Schemas needed for our application
+    allow_schema_ids = [
+        "notice_board_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d",
+        "notice_board_post_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0"
+    ]
+
+    # Address of known nodes we can connect directly to
+    direct_node_addresses = [
+        "203.0.114.0:2022",
+        "203.0.114.1:2022",
+        "203.0.114.2:2022",
+        "203.0.114.3:2022",
+    ]
+
+    # Peer ids of allowed peers, these will be the expected ids for the nodes we are connecting
+    # directly to
+    allowed_peer_ids = [
+        "12D3KooWP1ahRHeNp6s1M9qDJD2oyqRsYFeKLYjcjmFxrq6KM8xd",
+        "12D3KooWPC9zdWXQ3aCEcxvuct9KUWU5tPsUT6KFo29Wf8jWRW24",
+        "12D3KooWDNNSdY8vxYKYZBGdfDTg1ZafxEVuEmh49jtF8rUeMkq2",
+        "12D3KooWMKiBvAxynLn7KmqbWdEzA8yq3of6yoLZF1cpmb4Z9fHf",
+    ]
+    ```
+    </details>
+
+We're excited to hear about your ideas! Join our [official chat](https://wald.liebechaos.org/) and reach out.
+
+## Installation
+
+### Command line application
+
+Check out our [Releases](releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
+
+### Rust Crate
+
+For using `aquadoggo` in your Rust project, you can add it as a dependency with the following command:
+
+```bash
+cargo add aquadoggo
+```
+
+## Usage
+
+### Run node
+
+You can also run the node simply as a [command line application](#). `aquadoggo` can be configured in countless ways for your needs, read our [configuration](/aquadoggo_cli/README.md#Usage) section for more examples, usecases and an overview of configuration options.
+
+```bash
+# Start a local node on your machine
+aquadoggo
+
+# Check out all configuration options
+aquadoggo --help
+
+# Enable logging
+aquadoggo --log-level info
+```
+
+### Docker
+
+For server deployments you might prefer using [Docker](https://hub.docker.com/r/p2panda/aquadoggo) to run `aquadoggo`.
+
+```bash
+docker run -p 2020:2020 -p 2022:2022 -e LOG_LEVEL=info p2panda/aquadoggo
+```
+
+### Embed node
+
+Run the node directly within the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a Desktop app.
 
 ```rust
 use aquadoggo::{Configuration, Node};
@@ -80,35 +201,22 @@ let key_pair = KeyPair::new();
 let node = Node::start(key_pair, config).await;
 ```
 
-You can also run the node simply as a [command line application][`command line application`] and [configure](/aquadoggo_cli/README.md#Usage) it:
+### FFI bindings
 
-```bash
-# Run local node
-aquadoggo
+If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Flutter project as an example on how we dealt with FFI bindings for Dart / Flutter.
 
-# Enable logging
-RUST_LOG=aquadoggo=info aquadoggo
-```
+## What shouldn't I do with `aquadoggo`?
 
-.. or run it inside a [Docker](https://hub.docker.com/r/p2panda/aquadoggo) container:
+`aquadoggo` is built using the [p2panda](https://p2panda.org) protocol which is in development and some planned features are still missing, the main ones being:
 
-```bash
-docker run -p 2020:2020 -p 2022:2022 -e RUST_LOG=aquadoggo=info p2panda/aquadoggo
-```
+- **Capabilities:** Currently all data can be edited by any author who has access to the network. In many cases, permissions can be handled where needed on the client side (planned mid-2024).
+- **Privacy:** While node communication is encrypted with TLS the data stored on nodes itself is not. Integration of [MLS](https://p2panda.org/specification/encryption/) is underway but not complete yet.
+- **Deletion:** Network-wide purging of data is dependent on having a capabilities system already in place, so these two features will arrive together.
+- **Anonymity:** Networking exposes sensitive data about your used devices, we're waiting for [Arti](https://tpo.pages.torproject.net/core/arti/) supporting Onion Services to make this a configurable option.
 
-[`Tauri`]: https://tauri.studio
+As well as these yet-to-be implemented features, there are also general networking concerns (exposing your IP address, sharing data with untrusted peers) that you should take into account when participating in any network, and particularily in peer-to-peer networks.
 
-## Installation
-
-### Command line application
-
-Check out our [Releases](releases) section or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
-
-### Rust Crate
-
-```sh
-cargo add aquadoggo
-```
+So although `aquadoggo` is already very useful in many cases, there are others where it won't be a good fit yet or we would actively warn against use. For now, any uses which would be handling especially sensitive data are not recommended, and any users who have special network security requirements need to take extra precautions.
 
 ## License
 
