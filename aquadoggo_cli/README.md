@@ -1,7 +1,7 @@
 <h1 align="center">aquadoggo CLI</h1>
 
 <div align="center">
-  <strong>Node for the p2panda network</strong>
+  <strong>p2panda network node</strong>
 </div>
 
 <br />
@@ -25,7 +25,7 @@
 <br/>
 
 Configurable node for the [`p2panda`] network, which runs as a command line
-application on any computer, raspberry pi or server.
+application on any computer, Raspberry Pi or server.
 
 ## Installation
 
@@ -56,6 +56,9 @@ cp ./target/release/aquadoggo ~/.local/bin
 ```bash
 # For experimental setups it is enough to just start the node!
 aquadoggo
+
+# Enable logging
+aquadoggo --log-level info
 
 # By default the config.toml is loaded from the same folder or from the XDG
 # data directory, but you can also specify a custom path
@@ -157,6 +160,13 @@ Options:
 
           [possible values: true, false]
 
+  -l, --log-level <LEVEL>
+          Set log verbosity. Use this for learning more about how your node behaves or for debugging.
+
+          Possible log levels are: ERROR, WARN, INFO, DEBUG, TRACE. They are scoped to "aquadoggo" by default.
+
+          If you want to adjust the scope for deeper inspection use a filter value, for example "=TRACE" for logging _everything_ or "aquadoggo=INFO,libp2p=DEBUG" etc.
+
   -h, --help
           Print help (see a summary with '-h')
 
@@ -168,7 +178,7 @@ Options:
 
 ```bash
 # Run node during development with logging enabled
-RUST_LOG=aquadoggo=debug cargo run
+LOG_LEVEL=debug cargo run
 
 # Run tests
 cargo test
@@ -186,7 +196,7 @@ GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 
 *This project has received funding from the European Union’s Horizon 2020
 research and innovation programme within the framework of the NGI-POINTER
-Project funded under grant agreement No 871528*
+Project funded under grant agreement No 871528 and NGI-ASSURE No 957073*
 
 [`config.toml`]: config.toml
 [`p2panda`]: https://p2panda.org
