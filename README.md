@@ -175,7 +175,7 @@ cargo add aquadoggo
 
 ### Run node
 
-You can also run the node simply as a [command line application](#). `aquadoggo` can be configured in countless ways for your needs, read our [configuration](/aquadoggo_cli/README.md#Usage) section for more examples, usecases and an overview of configuration options.
+You can also run the node simply as a [command line application](/aquadoggo_cli). `aquadoggo` can be configured in countless ways for your needs, read our [configuration](/aquadoggo_cli/README.md#Usage) section for more examples, usecases and an overview of configuration options.
 
 ```bash
 # Start a local node on your machine, go to http://localhost:2020/graphql for using the GraphQL playground
