@@ -153,6 +153,111 @@ Some example applications which could be built on top of `aquadoggo` are:
 
 We're excited to hear about your ideas! Join our [official chat](https://wald.liebechaos.org/) and reach out.
 
+### GraphQL query API
+
+As an application developer the interface to `aquadoggo` you will use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered. For example:
+
+This query fetches own mushroom by it's id, returning values for only the selected fields.   
+
+```graphql
+{
+  mushroom: mushroom_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d(
+    id: "0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0"
+  ) {
+    fields {
+      description
+      edible
+      latin
+      title
+    }
+  }
+}
+```
+
+<details>
+<summary>Example query response</summary>
+<br>
+
+```json
+{
+  "mushroom": {
+    "description": "Its scientific name rhacodes comes from the Greek word rhakos, which means a piece of cloth. It does often have a soft, ragged fabric-like appearance.",
+    "edible": true,
+    "latin": "Chlorophyllum rhacodes",
+    "title": "Shaggy parasol"
+  }
+}
+```
+</details>
+
+
+This is a collection query for "events" which includes ordering and filtering as well as selecting some meta fields. Here only events between the specified dates and with a title containing the string `"funtastic"` will be returned, they will be arranged in ascending chronological order.
+
+```graphql
+{
+  events: all_events_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0(
+    first: 20
+    orderBy: "happening_at"
+    orderDirection: ASC
+    filter: {
+      title: { contains: "funtastic" }
+      happening_at: { gte: 2023-08-31, lte: 2023-09-14 }
+    }
+  ) {
+    totalCount
+    documents {
+      meta {
+        owner
+        documentId
+        viewId
+      }
+      fields {
+        title
+        happening_at
+      }
+    }
+  }
+}
+```
+
+<details>
+<summary>Example query response</summary>
+<br>
+
+```json
+{
+  "events": {
+    "documents": [
+      {
+        "meta": {
+          "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+          "documentId": "0020f3214a136fd6d0a649e14432409bb28a59a6caf723fa329129c404c92574cb41",
+          "viewId": "00206e365e3a6a9b66dfe96ea4b3b3b7c61b250330a46b0c99134121603db5feef11"
+        },
+        "fields": {
+          "title": "Try funtasticize!!",
+          "happening_at": 1680264880
+        }
+      },
+      {
+        "meta": {
+          "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+          "documentId": "002048a55d9265a16ba44b5f3be3e457238e02d3219ecca777d7b4edf28ba2f6d011",
+          "viewId": "002048a55d9265a16ba44b5f3be3e457238e02d3219ecca777d7b4edf28ba2f6d011"
+        },
+        "fields": {
+          "title": "Is funtastic even a real word?",
+          "happening_at": 1693484080
+        }
+      }
+    ]
+  }
+}
+```
+</details>
+
+From these examples you might already see how useful the query api will be when retrieving and displaying data in your application.
+
 ## Installation
 
 ### Command line application
