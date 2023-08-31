@@ -47,8 +47,8 @@
 
 `aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
-> 📖 Read more about nodes in our [learn](https://p2panda.org/learn/networks) section
-> 🐬 Visit the main project [repository](https://github.com/p2panda/aquadoggo) for examples on how `aquadoggo` can be integrated into different applications
+> 📖 Read more about nodes in our [learn](https://p2panda.org/learn/networks) section<br>
+> 🐬 Visit the main repo [README](https://github.com/p2panda/aquadoggo) for more general info 
 
 ## Features
 
