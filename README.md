@@ -209,7 +209,6 @@ let node = Node::start(key_pair, config).await;
 
 If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
 
-
 ## Query API
 
 As an application developer the interface to `aquadoggo` you are likely to use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered.
