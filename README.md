@@ -68,9 +68,9 @@ If you are familiar with (or are keen to learn) how to use command line interfac
 
 ## What can I build with this?
 
-`aquadoggo` is a fully-featured p2p "backend" which takes some of the complexity out of building p2p applications, leaving you to focus on building applications using your preferred development tools.
+Many applications which rely on being able to store and retrieve data from a persistent store could likely be built using `aquadoggo` as their data layer. `aquadoggo` can be considered as p2p "backend" for your application, which takes some of the complexity out of p2p development, leaving you to focus on building applications using your preferred tools.
 
-If you want to build a client application which communicates with an `aquadoggo` you will need to have some experience with web development or the Rust programming language. For writing an application using Rust you can import `aquadoggo` directly in your code. If building a TypeScript web frontend which will interface with a local or remote node, you can import the small TypeScript client library [`shirokuma`](https://github.com/p2panda/shirokuma) to your project. We have plans for making it easier to interact with `aquadoggo` using other languages in the future.
+> If you want to build a client application which communicates with an `aquadoggo` you will need to have some experience with web development or the Rust programming language. For writing an application using Rust you can import `aquadoggo` directly in your code. If building a TypeScript web frontend which will interface with a local or remote node, you can import the small TypeScript client library [`shirokuma`](https://github.com/p2panda/shirokuma) to your project. We have plans for making it easier to interact with `aquadoggo` using other languages in the future.
 
 Some example applications which could be built on top of `aquadoggo` are:
 
