@@ -155,10 +155,10 @@ We're excited to hear about your ideas! Join our [official chat](https://wald.li
 
 ### GraphQL query API
 
-As an application developer the interface to `aquadoggo` you will use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered. For example:
+As an application developer the interface to `aquadoggo` you will use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered.
 
+Fetch one "mushroom" by it's id, returning values for only the selected fields:
 ```graphql
-<!-- Fetch one "mushroom" by it's id, returning values for only the selected fields. -->
 {
   mushroom: mushroom_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d(
     id: "0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0"
@@ -189,9 +189,8 @@ As an application developer the interface to `aquadoggo` you will use the most i
 ```
 </details>
 
-
+A collection query for "events" which includes ordering and filtering as well as selecting some meta fields. Here only events between the specified dates and with a title containing the string 'funtastic' will be returned, they will be arranged in ascending chronological order:
 ```graphql
-<!-- A collection query for "events" which includes ordering and filtering as well as selecting some meta fields. Here only events between the specified dates and with a title containing the string 'funtastic' will be returned, they will be arranged in ascending chronological order. -->
 {
   events: all_events_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0(
     first: 20
