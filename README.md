@@ -64,11 +64,7 @@
 
 `aquadoggo` might be interesting for anyone who wants to participate in a p2p network. This could be as a node maintainer, an application developer or simply someone wanting to learn more about p2p networking in a hands-on fashion.
 
-No programming experience is needed to deploy a node on your own machine, and you can even experiment with creating your own data schemas using, publishing and replicating data, and then querying it again using the GraphQL playground.
-
-> 🛠️ Create your own schemas using [`fishy`](https://github.com/p2panda/fishy)<br />
-> 📖 Try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app) or play with [`send-to-node`](https://github.com/p2panda/send-to-node)<br />
-> 🛼 Open the GraphQL playground in your browser, served under `http://localhost:2020/graphql`
+If you are familiar with (or are keen to learn) how to use a command line interfaces then you're able to deploy a node on your own machine, you can then experiment with creating data schemas, publishing and replicating data, and then querying it again using the GraphQL playground. Check out the [resources](#Resources) section for ideas on next steps when you're ready.
 
 ## What can I build with this?
 
@@ -212,6 +208,15 @@ let node = Node::start(key_pair, config).await;
 ### FFI bindings
 
 If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
+
+## Resources
+
+- 🐬 Deploy your own `aquadoggo` following the [tutorial](https://p2panda.org/tutorials/aquadoggo)
+- 🛠️ Create your own schemas using [`fishy`](https://github.com/p2panda/fishy)
+- 🛼 Open the GraphQL playground in your browser, served under `http://localhost:2020/graphql`
+- 📖 Try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app)
+- 🔬 Manually publish JSON encoded data to a node [`send-to-node`](https://github.com/p2panda/send-to-node)
+- 🐼 [Learn more](https://p2panda.org/learn/) about how p2panda works
 
 ## What shouldn't I do with `aquadoggo`?
 
