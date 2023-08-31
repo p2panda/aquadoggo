@@ -64,13 +64,13 @@
 
 `aquadoggo` might be interesting for anyone who wants to participate in a p2p network. This could be as a node maintainer, an application developer or simply someone wanting to learn more about p2p networking in a hands-on fashion.
 
-If you are familiar with (or are keen to learn) how to use a command line interfaces then you're able to deploy a node on your own machine, you can then experiment with creating data schemas, publishing and replicating data, and then querying it again using the GraphQL playground. Check out the [resources](#Resources) section for ideas on next steps when you're ready.
+If you are familiar with (or are keen to learn) how to use command line interfaces then you're able to deploy a node on your own machine, you can then experiment with creating data schemas, publishing and replicating data, and then querying it again using the GraphQL playground. Check out the [resources](#Resources) section for ideas on next steps when you're ready.
 
 ## What can I build with this?
 
-`aquadoggo` is a fully-featured p2p "backend", which takes some of the complexity out of building p2p applications. If you want to build a client application which communicates with an `aquadoggo` it will be of great help if you already have some experience with web development or the Rust programming language.
+`aquadoggo` is a fully-featured p2p "backend" which takes some of the complexity out of building p2p applications, leaving you to focus on building applications using your preferred development tools.
 
-For writing an application using Rust you can import `aquadoggo` directly in your code. If building a TypeScript web frontend which will interface with a local or remote node, you can import the small TypeScript client library [`shirokuma`](https://github.com/p2panda/shirokuma) to your project. We have plans for making it easier to interact with `aquadoggo` using other languages in the future.
+If you want to build a client application which communicates with an `aquadoggo` you will need to have some experience with web development or the Rust programming language. For writing an application using Rust you can import `aquadoggo` directly in your code. If building a TypeScript web frontend which will interface with a local or remote node, you can import the small TypeScript client library [`shirokuma`](https://github.com/p2panda/shirokuma) to your project. We have plans for making it easier to interact with `aquadoggo` using other languages in the future.
 
 Some example applications which could be built on top of `aquadoggo` are:
 
