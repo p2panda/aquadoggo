@@ -695,7 +695,6 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             let mode = Mode::LogHeight;
             let (tx, _rx) = broadcast::channel(8);
-            let schema_provider = SchemaProvider::default();
             let ingest = SyncIngest::new(SchemaProvider::default(), tx);
 
             // Sanity check: Id of peer A is < id of peer B.

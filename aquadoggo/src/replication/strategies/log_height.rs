@@ -668,7 +668,7 @@ mod tests {
             )
             .await;
 
-            let target_set = TargetSet::new(&target_set_schema);
+            let target_set = SchemaIdSet::new(&target_set_schema);
             let _ = node_a.context.schema_provider.update(schema).await;
 
             let strategy_a =
