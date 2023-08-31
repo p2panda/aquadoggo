@@ -319,7 +319,7 @@ From these examples you might already see how useful the query api will be when 
 - 🛠️ Create your own schemas using [`fishy`](https://github.com/p2panda/fishy)
 - 🛼 Open the GraphQL playground in your browser, served under `http://localhost:2020/graphql`
 - 📖 Try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app)
-- 🔬 Manually publish JSON encoded data to a node [`send-to-node`](https://github.com/p2panda/send-to-node)
+- 🔬 Manually publish data to a node [`send-to-node`](https://github.com/p2panda/send-to-node)
 - 🐼 [Learn more](https://p2panda.org/learn/) about how p2panda works
 
 ## What shouldn't I do with `aquadoggo`?
