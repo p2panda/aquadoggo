@@ -73,7 +73,7 @@ cargo add aquadoggo
 
 Run the node directly next to the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
 
-```rust
+```rust,ignore
 use aquadoggo::{Configuration, Node};
 use p2panda_rs::identity::KeyPair;
 
