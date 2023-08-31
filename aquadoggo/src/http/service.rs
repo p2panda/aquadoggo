@@ -13,7 +13,6 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 
 use crate::bus::ServiceSender;
-use crate::config::BLOBS_DIR_NAME;
 use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
 use crate::http::api::{handle_graphql_playground, handle_graphql_query};
@@ -66,15 +65,10 @@ pub async fn http_service(
     let graphql_schema_manager =
         GraphQLSchemaManager::new(context.store.clone(), tx, context.schema_provider.clone()).await;
 
-    let blob_dir_path = context
-        .config
-        .base_path
-        .as_ref()
-        .expect("Base path not set")
-        .join(BLOBS_DIR_NAME);
+    let blob_dir_path = context.config.blob_dir.as_ref().expect("Base path not set");
 
     // Introduce a new context for all HTTP routes
-    let http_context = HttpServiceContext::new(graphql_schema_manager, blob_dir_path);
+    let http_context = HttpServiceContext::new(graphql_schema_manager, blob_dir_path.to_owned());
 
     // Start HTTP server with given port and re-attempt with random port if it was taken already
     let builder = if let Ok(builder) = axum::Server::try_bind(&http_address) {
@@ -111,9 +105,9 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
+    use crate::config::BLOBS_DIR_NAME;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
-    use crate::http::service::BLOBS_DIR_NAME;
     use crate::schema::SchemaProvider;
     use crate::test_utils::TestClient;
     use crate::test_utils::{test_runner, TestNode};

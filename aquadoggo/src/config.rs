@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::path::PathBuf;
+
 use p2panda_rs::schema::SchemaId;
 
 use crate::network::NetworkConfiguration;
-
-/// Data directory name.
-const DATA_DIR_NAME: &str = "aquadoggo";
-
-/// Filename of default sqlite database.
-const DEFAULT_SQLITE_NAME: &str = "aquadoggo-node.sqlite3";
 
 /// Blobs directory
 pub const BLOBS_DIR_NAME: &str = "blobs";
@@ -31,6 +27,9 @@ pub struct Configuration {
     /// will encounter on the network. This is useful for experimentation and local development but
     /// _not_ recommended for production settings.
     pub allow_schema_ids: AllowList<SchemaId>,
+
+    /// Path to blobs directory.
+    pub blob_dir: Option<PathBuf>,
 
     /// URL / connection string to PostgreSQL or SQLite database.
     pub database_url: String,
@@ -62,6 +61,7 @@ impl Default for Configuration {
     fn default() -> Self {
         Self {
             allow_schema_ids: AllowList::Wildcard,
+            blob_dir: None,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
             http_port: 2020,

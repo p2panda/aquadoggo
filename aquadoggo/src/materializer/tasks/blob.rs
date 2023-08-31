@@ -11,7 +11,7 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
 
-use crate::config::{BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
+use crate::config::BLOBS_SYMLINK_DIR_NAME;
 use crate::context::Context;
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
@@ -78,14 +78,12 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .unwrap();
 
         // Compose, and when needed create, the path for the blob file.
-        let base_path = match &context.config.base_path {
+        let base_path = match &context.config.blob_dir {
             Some(base_path) => base_path,
             None => return Err(TaskError::Critical("No base path configured".to_string())),
         };
 
-        let blob_dir = base_path
-            .join(BLOBS_DIR_NAME)
-            .join(blob_document.id().as_str());
+        let blob_dir = base_path.join(blob_document.id().as_str());
 
         fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
         let blob_view_path = blob_dir.join(blob_document.view_id().to_string());
@@ -101,7 +99,6 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             info!("Creating symlink from document id to current view");
 
             let link_path = base_path
-                .join(BLOBS_DIR_NAME)
                 .join(BLOBS_SYMLINK_DIR_NAME)
                 .join(blob_document.id().as_str());
 
@@ -185,7 +182,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
-    use crate::config::{BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
+    use crate::config::BLOBS_SYMLINK_DIR_NAME;
     use crate::materializer::tasks::blob_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{add_document, test_runner, TestNode};
@@ -244,9 +241,8 @@ mod tests {
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Construct the expected path to the blob view file.
-            let base_path = node.context.config.base_path.as_ref().unwrap();
+            let base_path = node.context.config.blob_dir.as_ref().unwrap();
             let blob_path = base_path
-                .join(BLOBS_DIR_NAME)
                 .join(document_id.as_str())
                 .join(blob_view_id.to_string());
 
@@ -259,7 +255,6 @@ mod tests {
 
             // Construct the expected path to the blob symlink file location.
             let blob_path = base_path
-                .join(BLOBS_DIR_NAME)
                 .join(BLOBS_SYMLINK_DIR_NAME)
                 .join(document_id.as_str());
 

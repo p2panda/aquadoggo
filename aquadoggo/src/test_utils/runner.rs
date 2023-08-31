@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::panic;
 use std::sync::Arc;
+use std::{fs, panic};
 
 use futures::Future;
 use p2panda_rs::identity::KeyPair;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
+use crate::config::{BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
 use crate::context::Context;
 use crate::db::Pool;
 use crate::db::SqlStore;
@@ -65,11 +66,8 @@ impl TestNodeManager {
         // Initialise test store using pool.
         let store = SqlStore::new(pool.clone());
 
-        // Construct tempfile directory for the test runner.
-        let tmp_dir = tempfile::TempDir::new().unwrap();
-
         // Construct node config supporting any schema.
-        let cfg = Configuration::new(Some(tmp_dir.path().to_path_buf())).unwrap();
+        let cfg = Configuration::default();
 
         // Construct the actual test node
         let test_node = TestNode {
@@ -106,9 +104,12 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
 
         // Construct tempfile directory for the test runner.
         let tmp_dir = tempfile::TempDir::new().unwrap();
+        let blob_dir_path = tmp_dir.path().join(BLOBS_DIR_NAME);
+        fs::create_dir_all(blob_dir_path.join(BLOBS_SYMLINK_DIR_NAME)).unwrap();
 
         // Construct node config supporting any schema.
-        let cfg = Configuration::new(Some(tmp_dir.path().to_path_buf())).unwrap();
+        let mut cfg = Configuration::default();
+        cfg.blob_dir = Some(blob_dir_path);
 
         // Construct the actual test node
         let node = TestNode {

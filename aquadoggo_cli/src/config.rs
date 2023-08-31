@@ -340,6 +340,7 @@ impl TryFrom<Configuration> for NodeConfiguration {
 
         Ok(NodeConfiguration {
             allow_schema_ids,
+            blob_dir: None,
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
             http_port: value.http_port,
