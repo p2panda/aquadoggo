@@ -4,12 +4,14 @@ use log::{debug, info};
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::entry::traits::AsEncodedEntry;
 use p2panda_rs::identity::KeyPair;
-use p2panda_rs::operation::{OperationBuilder, OperationValue};
+use p2panda_rs::operation::{OperationAction, OperationBuilder, OperationId, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::memory_store::helpers::{
     populate_store, send_to_store, PopulateStoreConfig,
 };
 use rstest::fixture;
+use sqlx::query_scalar;
 
 use crate::context::Context;
 use crate::db::SqlStore;
@@ -97,13 +99,18 @@ pub async fn populate_and_materialize(
         // Create reduce task input.
         let input = TaskInput::DocumentId(document_id);
         // Run reduce task and collect returned dependency tasks.
-        let dependency_tasks = reduce_task(node.context.clone(), input.clone())
+        let next_tasks = reduce_task(node.context.clone(), input.clone())
             .await
             .expect("Reduce document");
 
         // Run dependency tasks.
-        if let Some(tasks) = dependency_tasks {
-            for task in tasks {
+        if let Some(tasks) = next_tasks {
+            // We only want to issue dependency tasks.
+            let dependency_tasks = tasks
+                .iter()
+                .filter(|task| task.worker_name() == "depenedency");
+
+            for task in dependency_tasks {
                 dependency_task(node.context.clone(), task.input().to_owned())
                     .await
                     .expect("Run dependency task");
@@ -145,13 +152,18 @@ pub async fn add_document(
         .expect("Publish CREATE operation");
 
     let input = TaskInput::DocumentId(DocumentId::from(entry_signed.hash()));
-    let dependency_tasks = reduce_task(node.context.clone(), input.clone())
+    let next_tasks = reduce_task(node.context.clone(), input.clone())
         .await
         .expect("Reduce document");
 
     // Run dependency tasks
-    if let Some(tasks) = dependency_tasks {
-        for task in tasks {
+    if let Some(tasks) = next_tasks {
+        // We only want to issue dependency tasks.
+        let dependency_tasks = tasks
+            .iter()
+            .filter(|task| task.worker_name() == "depenedency");
+
+        for task in dependency_tasks {
             dependency_task(node.context.clone(), task.input().to_owned())
                 .await
                 .expect("Run dependency task");
@@ -263,4 +275,106 @@ pub async fn add_schema_and_documents(
     }
 
     (schema, view_ids)
+}
+
+/// Helper method for updating documents.
+pub async fn update_document(
+    node: &mut TestNode,
+    schema_id: &SchemaId,
+    fields: Vec<(&str, OperationValue)>,
+    previous: &DocumentViewId,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    // Get requested schema from store.
+    let schema = node
+        .context
+        .schema_provider
+        .get(schema_id)
+        .await
+        .expect("Schema not found");
+
+    // Build, publish and reduce an update operation for document.
+    let create_op = OperationBuilder::new(schema.id())
+        .action(OperationAction::Update)
+        .fields(&fields)
+        .previous(previous)
+        .build()
+        .expect("Build operation");
+
+    let (entry_signed, _) = send_to_store(&node.context.store, &create_op, &schema, key_pair)
+        .await
+        .expect("Publish UPDATE operation");
+
+    let document_id = node
+        .context
+        .store
+        .get_document_id_by_operation_id(&OperationId::from(entry_signed.hash()))
+        .await
+        .expect("No db errors")
+        .expect("Can get document id");
+
+    let input = TaskInput::DocumentId(document_id);
+    let next_tasks = reduce_task(node.context.clone(), input.clone())
+        .await
+        .expect("Reduce document");
+
+    // Run dependency tasks
+    if let Some(tasks) = next_tasks {
+        // We only want to issue dependency tasks.
+        let dependency_tasks = tasks
+            .iter()
+            .filter(|task| task.worker_name() == "dependency");
+
+        for task in dependency_tasks {
+            dependency_task(node.context.clone(), task.input().to_owned())
+                .await
+                .expect("Run dependency task");
+        }
+    }
+    DocumentViewId::from(entry_signed.hash())
+}
+
+pub async fn add_blob(node: &mut TestNode, blob_data: &str, key_pair: &KeyPair) -> DocumentViewId {
+    // Publish blob pieces and blob.
+    let (blob_data_a, blob_data_b) = blob_data.split_at(blob_data.len() / 2);
+    let blob_piece_view_id_1 = add_document(
+        node,
+        &SchemaId::BlobPiece(1),
+        vec![("data", blob_data_a.into())],
+        &key_pair,
+    )
+    .await;
+
+    let blob_piece_view_id_2 = add_document(
+        node,
+        &SchemaId::BlobPiece(1),
+        vec![("data", blob_data_b.into())],
+        &key_pair,
+    )
+    .await;
+    let blob_view_id = add_document(
+        node,
+        &SchemaId::Blob(1),
+        vec![
+            ("length", { blob_data.len() as i64 }.into()),
+            ("mime_type", "text/plain".into()),
+            (
+                "pieces",
+                vec![blob_piece_view_id_1, blob_piece_view_id_2].into(),
+            ),
+        ],
+        &key_pair,
+    )
+    .await;
+
+    blob_view_id
+}
+
+// Helper for asserting expected number of items yielded from a SQL query.
+pub async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
+    let result: Result<Vec<String>, _> =
+        query_scalar(sql).fetch_all(&node.context.store.pool).await;
+
+    assert!(result.is_ok(), "{:#?}", result);
+    assert_eq!(result.unwrap().len(), expected_len, "{:?}", sql);
 }

@@ -17,6 +17,10 @@ pub enum SqlStoreError {
     /// Error returned from BlobStore.
     #[error(transparent)]
     BlobStoreError(#[from] BlobStoreError),
+
+    /// Error returned from `DocumentStore` methods.
+    #[error(transparent)]
+    DocumentStorage(#[from] DocumentStorageError),
 }
 
 /// `SchemaStore` errors.

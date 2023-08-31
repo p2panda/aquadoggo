@@ -995,8 +995,9 @@ mod tests {
                 .await
                 .unwrap()
                 .expect("Should have returned new tasks");
-            assert_eq!(tasks.len(), 1);
-            assert_eq!(tasks[0].worker_name(), &String::from("dependency"));
+            assert_eq!(tasks.len(), 2);
+            assert_eq!(tasks[0].worker_name(), &String::from("garbage_collection"));
+            assert_eq!(tasks[1].worker_name(), &String::from("dependency"));
 
             // We should have now a materialized latest post and comment document but not the
             // pinned historical version of the post, where the comment was pointing at!
@@ -1026,7 +1027,7 @@ mod tests {
 
             // 2. The "dependency" task followed materialising the "post" found a reverse relation
             //    to a "comment" document .. it dispatches another "dependency" task for it
-            let tasks = dependency_task(node_b.context.clone(), tasks[0].input().clone())
+            let tasks = dependency_task(node_b.context.clone(), tasks[1].input().clone())
                 .await
                 .unwrap();
             assert_eq!(
