@@ -255,7 +255,7 @@ A collection query for "events" which includes ordering and filtering as well as
     orderDirection: ASC
     filter: {
       title: { contains: "funtastic" }
-      happening_at: { gte: 2023-08-31, lte: 2023-09-14 }
+      happening_at: { gte: 1677676480, lte: 1696162480 }
     }
   ) {
     totalCount
