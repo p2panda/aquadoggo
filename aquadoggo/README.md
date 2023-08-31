@@ -48,6 +48,7 @@
 `aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
 > 📖 Read more about nodes in our [learn](https://p2panda.org/learn/networks) section
+> 🐬 Visit the main project [repository](https://github.com/p2panda/aquadoggo) for examples on how `aquadoggo` can be integrated into different applications
 
 ## Features
 
@@ -84,6 +85,10 @@ let node = Node::start(key_pair, config).await;
 ### FFI bindings
 
 If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
+
+### Command line application
+
+Check out our [Releases](/releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows.
 
 ## Development
 
