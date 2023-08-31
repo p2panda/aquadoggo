@@ -153,9 +153,66 @@ Some example applications which could be built on top of `aquadoggo` are:
 
 We're excited to hear about your ideas! Join our [official chat](https://wald.liebechaos.org/) and reach out.
 
-### GraphQL query API
+## Installation
 
-As an application developer the interface to `aquadoggo` you will use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered.
+### Command line application
+
+Check out our [Releases](/releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
+
+### Rust Crate
+
+For using `aquadoggo` in your Rust project, you can add it as a dependency with the following command:
+
+```bash
+cargo add aquadoggo
+```
+
+## Usage
+
+### Run node
+
+You can also run the node simply as a [command line application](/aquadoggo_cli). `aquadoggo` can be configured in countless ways for your needs, read our [configuration](/aquadoggo_cli/README.md#Usage) section for more examples, usecases and an overview of configuration options.
+
+```bash
+# Start a local node on your machine, go to http://localhost:2020/graphql for using the GraphQL playground
+aquadoggo
+
+# Check out all configuration options
+aquadoggo --help
+
+# Enable logging
+aquadoggo --log-level info
+```
+
+### Docker
+
+For server deployments you might prefer using [Docker](https://hub.docker.com/r/p2panda/aquadoggo) to run `aquadoggo`.
+
+```bash
+docker run -p 2020:2020 -p 2022:2022 -e LOG_LEVEL=info p2panda/aquadoggo
+```
+
+### Embed node
+
+Run the node directly next to the frontend you're building for full peer-to-peer applications by using the [`aquadoggo`](/aquadoggo) Rust crate. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
+
+```rust
+use aquadoggo::{Configuration, Node};
+use p2panda_rs::identity::KeyPair;
+
+let config = Configuration::default();
+let key_pair = KeyPair::new();
+let node = Node::start(key_pair, config).await;
+```
+
+### FFI bindings
+
+If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
+
+
+## Query API
+
+As an application developer the interface to `aquadoggo` you are likely to use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered.
 
 Fetch one "mushroom" by it's id, returning values for only the selected fields:
 ```graphql
@@ -255,62 +312,6 @@ A collection query for "events" which includes ordering and filtering as well as
 </details>
 
 From these examples you might already see how useful the query api will be when retrieving and displaying data in your application.
-
-## Installation
-
-### Command line application
-
-Check out our [Releases](/releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
-
-### Rust Crate
-
-For using `aquadoggo` in your Rust project, you can add it as a dependency with the following command:
-
-```bash
-cargo add aquadoggo
-```
-
-## Usage
-
-### Run node
-
-You can also run the node simply as a [command line application](/aquadoggo_cli). `aquadoggo` can be configured in countless ways for your needs, read our [configuration](/aquadoggo_cli/README.md#Usage) section for more examples, usecases and an overview of configuration options.
-
-```bash
-# Start a local node on your machine, go to http://localhost:2020/graphql for using the GraphQL playground
-aquadoggo
-
-# Check out all configuration options
-aquadoggo --help
-
-# Enable logging
-aquadoggo --log-level info
-```
-
-### Docker
-
-For server deployments you might prefer using [Docker](https://hub.docker.com/r/p2panda/aquadoggo) to run `aquadoggo`.
-
-```bash
-docker run -p 2020:2020 -p 2022:2022 -e LOG_LEVEL=info p2panda/aquadoggo
-```
-
-### Embed node
-
-Run the node directly next to the frontend you're building for full peer-to-peer applications by using the [`aquadoggo`](/aquadoggo) Rust crate. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
-
-```rust
-use aquadoggo::{Configuration, Node};
-use p2panda_rs::identity::KeyPair;
-
-let config = Configuration::default();
-let key_pair = KeyPair::new();
-let node = Node::start(key_pair, config).await;
-```
-
-### FFI bindings
-
-If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
 
 ## Resources
 
