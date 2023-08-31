@@ -43,15 +43,12 @@
 
 <br/>
 
-Configurable node server implementation for the [`p2panda`] network which can
-be embedded inside your Rust program.
+`aquadoggo` is a reference node implementation for [p2panda](https://p2panda.org). It is a intended as a tool for making the design and build of local-first, collaborative p2p applications as simple as possible, and hopefully even a little fun!
 
-> The core p2panda [`specification`] is fully functional but still under review so
-> please be prepared for breaking API changes until we reach v1.0. Currently no
-> p2panda implementation has recieved a security audit.
+`aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
-[`p2panda`]: https://p2panda.org
-[`specification`]: https://p2panda.org/specification
+> 📖 Read more about nodes in our [learn](https://p2panda.org/learn/networks) section<br>
+> 🐬 Visit the main repo [README](https://github.com/p2panda/aquadoggo) for more general info 
 
 ## Features
 
@@ -59,15 +56,24 @@ be embedded inside your Rust program.
 - Verifies the consistency, format and signature of operations and rejects invalid ones.
 - Stores operations of the network in an SQL database of your choice (SQLite, PostgreSQL).
 - Materializes views on top of the known data.
-- Answers filterable and paginated data queries via GraphQL.
+- Answers filtered, sorted and paginated data queries via GraphQL.
 - Discovers other nodes in local network and internet.
-- Replicates data with other nodes.
+- Establishes peer-to-peer connections via UDP holepunching or via relays.
+- Replicates data efficiently with other nodes.
+
+## Installation
+
+For using `aquadoggo` in your Rust project, you can add it as a dependency with the following command:
+
+```bash
+cargo add aquadoggo
+```
 
 ## Example
 
-Embed the node server in your Rust application or web container like [`Tauri`]:
+Run the node directly next to the frontend you're building for full peer-to-peer applications. Check out our [Tauri](https://github.com/p2panda/tauri-example) example for writing a desktop app.
 
-```rust
+```rust,ignore
 use aquadoggo::{Configuration, Node};
 use p2panda_rs::identity::KeyPair;
 
@@ -76,17 +82,13 @@ let key_pair = KeyPair::new();
 let node = Node::start(key_pair, config).await;
 ```
 
-[`Tauri`]: https://tauri.studio
+### FFI bindings
 
-## Installation
+If you are not working with Rust you can create FFI bindings from the `aquadoggo` crate into your preferred programming language. Dealing with FFI bindings can be a bit cumbersome and we do not have much prepared for you (yet), but check out our [Meli](https://github.com/p2panda/meli/) Android project as an example on how we dealt with FFI bindings for Dart / Flutter.
 
-With [`cargo-edit`](https://github.com/killercup/cargo-edit) installed run:
+### Command line application
 
-```bash
-$ cargo add aquadoggo
-```
-
-[`cargo-edit`]: https://github.com/killercup/cargo-edit
+Check out our [Releases](/releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows.
 
 ## Development
 
@@ -107,8 +109,9 @@ GNU Affero General Public License v3.0 [`AGPL-3.0-or-later`](LICENSE)
 ## Supported by
 
 <img src="https://raw.githubusercontent.com/p2panda/.github/main/assets/ngi-logo.png" width="auto" height="80px"><br />
+<img src="https://raw.githubusercontent.com/p2panda/.github/main/assets/nlnet-logo.svg" width="auto" height="80px"><br />
 <img src="https://raw.githubusercontent.com/p2panda/.github/main/assets/eu-flag-logo.png" width="auto" height="80px">
 
 *This project has received funding from the European Union’s Horizon 2020
 research and innovation programme within the framework of the NGI-POINTER
-Project funded under grant agreement No 871528*
+Project funded under grant agreement No 871528 and NGI-ASSURE No 957073*
