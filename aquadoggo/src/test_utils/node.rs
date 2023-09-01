@@ -161,7 +161,7 @@ pub async fn add_document(
         // We only want to issue dependency tasks.
         let dependency_tasks = tasks
             .iter()
-            .filter(|task| task.worker_name() == "depenedency");
+            .filter(|task| task.worker_name() == "dependency");
 
         for task in dependency_tasks {
             dependency_task(node.context.clone(), task.input().to_owned())
