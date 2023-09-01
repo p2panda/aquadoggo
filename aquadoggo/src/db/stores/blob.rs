@@ -235,7 +235,7 @@ impl SqlStore {
         &self,
         document_id: &DocumentId,
     ) -> Result<Vec<DocumentId>, SqlStoreError> {
-        let document_ids: Vec<String> = query_scalar(&format!(
+        let document_ids: Vec<String> = query_scalar(
             "
             SELECT DISTINCT 
                 document_views.document_id
@@ -266,7 +266,7 @@ impl SqlStore {
                     document_views.document_id = $1
             )
             "
-        ))
+        )
         .bind(document_id.as_str())
         .fetch_all(&self.pool)
         .await
