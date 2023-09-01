@@ -152,7 +152,6 @@ async fn get_related_blobs(
 mod tests {
     use std::fs;
 
-    use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::key_pair;
@@ -212,14 +211,9 @@ mod tests {
             // It should return no extra tasks
             assert!(result.unwrap().is_none());
 
-            // Convert blob view id to document id
-            let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
-
             // Construct the expected path to the blob view file
             let base_path = node.context.config.blob_dir.as_ref().unwrap();
-            let blob_path = base_path
-                .join(document_id.as_str())
-                .join(blob_view_id.to_string());
+            let blob_path = base_path.join(blob_view_id.to_string());
 
             // Read from this file
             let retrieved_blob_data = fs::read_to_string(blob_path);

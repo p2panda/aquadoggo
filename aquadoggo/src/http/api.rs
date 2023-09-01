@@ -64,6 +64,7 @@ async fn respond_with_blob(
 ) -> Result<Response, BlobHttpError> {
     let view_id = document.view_id();
 
+    // Determine MIME type of blob by looking at it's self-declared value
     let mime_type_str = match document.get("mime_type") {
         Some(p2panda_rs::operation::OperationValue::String(value)) => Ok(value),
         _ => Err(BlobHttpError::InternalError(anyhow!(
@@ -71,6 +72,7 @@ async fn respond_with_blob(
         ))),
     }?;
 
+    // Respond with stream of stored file from file system
     let mut file_path = blob_dir_path;
     file_path.push(format!("{view_id}"));
 
