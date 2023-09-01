@@ -103,7 +103,7 @@ pub async fn handle_blob_document(
         return Err(BlobHttpError::NotFound);
     }
 
-    return respond_with_blob(context.blob_dir_path, document).await;
+    respond_with_blob(context.blob_dir_path, document).await
 }
 
 pub async fn handle_blob_view(
@@ -119,16 +119,14 @@ pub async fn handle_blob_view(
         .store
         .get_document_by_view_id(&view_id)
         .await
-        .map_err(|err| {
-            return BlobHttpError::InternalError(err.into());
-        })?
+        .map_err(|err| BlobHttpError::InternalError(err.into()))?
         .ok_or(BlobHttpError::NotFound)?;
 
     if document.id() != &document_id || document.schema_id() != &SchemaId::Blob(1) {
         return Err(BlobHttpError::NotFound);
     }
 
-    return respond_with_blob(context.blob_dir_path, document).await;
+    respond_with_blob(context.blob_dir_path, document).await
 }
 
 #[cfg(test)]
