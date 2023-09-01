@@ -185,65 +185,6 @@ impl EntryStore for SqlStore {
 }
 
 impl SqlStore {
-    pub async fn get_log_heights(
-        &self,
-        schema_id: &SchemaId,
-    ) -> Result<Vec<(PublicKey, Vec<(LogId, SeqNum)>)>, EntryStorageError> {
-        let log_height_rows = query_as::<_, LogHeightRow>(
-            "
-            SELECT
-                entries.public_key,
-                entries.log_id,
-                CAST(MAX(CAST(entries.seq_num AS NUMERIC)) AS TEXT) as seq_num
-            FROM
-                entries
-            INNER JOIN logs
-                ON entries.log_id = logs.log_id
-                    AND entries.public_key = logs.public_key
-            WHERE
-                logs.schema = $1
-            GROUP BY
-                entries.public_key, entries.log_id
-            ORDER BY
-                entries.public_key, CAST(entries.log_id AS NUMERIC)
-            ",
-        )
-        .bind(schema_id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
-
-        let mut log_heights = HashMap::<PublicKey, Vec<(LogId, SeqNum)>>::new();
-
-        // Aggregate log height rows into a map.
-        for LogHeightRow {
-            public_key,
-            log_id,
-            seq_num,
-        } in log_height_rows
-        {
-            let public_key: PublicKey = public_key
-                .parse()
-                .expect("Values stored in the database are valid");
-            let log_id: LogId = log_id
-                .parse()
-                .expect("Values stored in the database are valid");
-            let seq_num: SeqNum = seq_num
-                .parse()
-                .expect("Values stored in the database are valid");
-
-            if let Some(author_logs) = log_heights.get_mut(&public_key) {
-                author_logs.push((log_id, seq_num));
-            } else {
-                let author_logs = vec![(log_id, seq_num)];
-                log_heights.insert(public_key, author_logs);
-            }
-        }
-
-        // Convert log heights map back into vec.
-        Ok(log_heights.into_iter().collect())
-    }
-
     pub async fn get_document_log_heights(
         &self,
         document_ids: &[DocumentId],
@@ -619,39 +560,6 @@ mod tests {
                 .await
                 .unwrap();
             assert!(entry.is_none());
-        });
-    }
-
-    #[rstest]
-    fn get_log_heights(
-        #[from(populate_store_config)]
-        #[with(5, 5, 5)]
-        config: PopulateStoreConfig,
-    ) {
-        test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
-
-            let log_heights = node
-                .context
-                .store
-                .get_log_heights(config.schema.id())
-                .await
-                .unwrap();
-
-            assert_eq!(log_heights.len(), 5);
-
-            for (public_key, author_logs) in log_heights {
-                assert!(key_pairs
-                    .iter()
-                    .find(|key_pair| key_pair.public_key() == public_key)
-                    .is_some());
-                assert_eq!(author_logs.len(), 5);
-
-                for (_, seq_num) in author_logs {
-                    assert_eq!(seq_num.as_u64(), 5)
-                }
-            }
         });
     }
 
