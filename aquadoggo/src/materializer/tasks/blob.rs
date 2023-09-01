@@ -2,19 +2,16 @@
 
 use std::fs::{self, File};
 use std::io::Write;
-use std::os::unix::fs::symlink;
 
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
-use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+use p2panda_rs::storage_provider::traits::DocumentStore;
 
-use crate::config::BLOBS_SYMLINK_DIR_NAME;
 use crate::context::Context;
 use crate::db::types::StorageDocument;
-use crate::db::SqlStore;
 use crate::materializer::worker::{TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
@@ -75,7 +72,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             // We don't raise a critical error here, as it is possible that this method returns an
             // error.
             .map_err(|err| TaskError::Failure(err.to_string()))?
-            .unwrap();
+            .expect("Blob data exists at this point");
 
         // Compose, and when needed create, the path for the blob file.
         let base_path = match &context.config.blob_dir {
@@ -93,20 +90,6 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
         let mut file = File::create(&blob_view_path).unwrap();
         file.write_all(blob_data.as_bytes()).unwrap();
-
-        // create a symlink from `../documents/<document_id>` -> `../<document_id>/<current_view_id>`
-        if is_current_view(&context.store, blob_document.view_id()).await? {
-            info!("Creating symlink from document id to current view");
-
-            let link_path = base_path
-                .join(BLOBS_SYMLINK_DIR_NAME)
-                .join(blob_document.id().as_str());
-
-            let _ = fs::remove_file(&link_path);
-
-            symlink(blob_view_path, link_path)
-                .map_err(|err| TaskError::Critical(err.to_string()))?;
-        }
     }
 
     Ok(None)
@@ -152,26 +135,6 @@ async fn get_related_blobs(
     Ok(related_blobs)
 }
 
-// Check if this is the current view for this blob.
-async fn is_current_view(
-    store: &SqlStore,
-    document_view_id: &DocumentViewId,
-) -> Result<bool, TaskError> {
-    let blob_document_id = store
-        .get_document_id_by_operation_id(document_view_id.graph_tips().first().unwrap())
-        .await
-        .map_err(|err| TaskError::Critical(err.to_string()))?
-        .expect("Document for blob exists");
-
-    let current_blob_document = store
-        .get_document(&blob_document_id)
-        .await
-        .map_err(|err| TaskError::Critical(err.to_string()))?
-        .expect("Document for blob exists");
-
-    Ok(current_blob_document.view_id() == document_view_id)
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -182,7 +145,6 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
-    use crate::config::BLOBS_SYMLINK_DIR_NAME;
     use crate::materializer::tasks::blob_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{add_document, test_runner, TestNode};
@@ -192,7 +154,7 @@ mod tests {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".to_string();
 
-            // Publish blob pieces and blob.
+            // Publish blob pieces and blob
             let blob_piece_view_id_1 = add_document(
                 &mut node,
                 &SchemaId::BlobPiece(1),
@@ -209,7 +171,7 @@ mod tests {
             )
             .await;
 
-            // Publish blob.
+            // Publish blob
             let blob_view_id = add_document(
                 &mut node,
                 &SchemaId::Blob(1),
@@ -225,22 +187,22 @@ mod tests {
             )
             .await;
 
-            // Run blob task.
+            // Run blob task
             let result = blob_task(
                 node.context.clone(),
                 TaskInput::DocumentViewId(blob_view_id.clone()),
             )
             .await;
 
-            // It shouldn't fail.
+            // It shouldn't fail
             assert!(result.is_ok(), "{:#?}", result);
-            // It should return no extra tasks.
+            // It should return no extra tasks
             assert!(result.unwrap().is_none());
 
-            // Convert blob view id to document id.
+            // Convert blob view id to document id
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
-            // Construct the expected path to the blob view file.
+            // Construct the expected path to the blob view file
             let base_path = node.context.config.blob_dir.as_ref().unwrap();
             let blob_path = base_path
                 .join(document_id.as_str())
@@ -249,21 +211,9 @@ mod tests {
             // Read from this file
             let retrieved_blob_data = fs::read_to_string(blob_path);
 
-            // It should match the complete published blob data.
+            // It should match the complete published blob data
             assert!(retrieved_blob_data.is_ok(), "{:?}", retrieved_blob_data);
             assert_eq!(blob_data, retrieved_blob_data.unwrap());
-
-            // Construct the expected path to the blob symlink file location.
-            let blob_path = base_path
-                .join(BLOBS_SYMLINK_DIR_NAME)
-                .join(document_id.as_str());
-
-            // Read from this file
-            let retrieved_blob_data = fs::read_to_string(blob_path);
-
-            // It should match the complete published blob data.
-            assert!(retrieved_blob_data.is_ok(), "{:?}", retrieved_blob_data);
-            assert_eq!(blob_data, retrieved_blob_data.unwrap())
         })
     }
 }
