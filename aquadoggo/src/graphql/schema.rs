@@ -271,15 +271,15 @@ mod test {
     use rstest::rstest;
     use serde_json::{json, Value};
 
-    use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
+    use crate::test_utils::{add_schema, http_test_client, test_runner, TestNode};
 
     #[rstest]
     fn schema_updates() {
         test_runner(|mut node: TestNode| async move {
             // Create test client in the beginning so it is initialised with just the system
-            // schemas. Then we create a new application schema to test that the graphql schema
-            // is updated and we can query the changed schema.
-            let client = graphql_test_client(&node).await;
+            // schemas. Then we create a new application schema to test that the graphql schema is
+            // updated and we can query the changed schema.
+            let client = http_test_client(&node).await;
 
             // This test uses a fixed private key to allow us to anticipate the schema typename.
             let key_pair = key_pair(PRIVATE_KEY);

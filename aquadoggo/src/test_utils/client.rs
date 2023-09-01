@@ -2,6 +2,7 @@
 
 use std::convert::TryFrom;
 use std::net::{SocketAddr, TcpListener};
+use std::time::Duration;
 
 use axum::body::HttpBody;
 use axum::BoxError;
@@ -13,7 +14,7 @@ use tower::make::Shared;
 use tower_service::Service;
 
 use crate::graphql::GraphQLSchemaManager;
-use crate::http::{build_server, HttpServiceContext, BLOBS_ROUTE};
+use crate::http::{build_server, HttpServiceContext};
 use crate::test_utils::TestNode;
 
 /// GraphQL client which can be used for querying a node in tests.
@@ -39,12 +40,14 @@ impl TestClient {
         tokio::spawn(async move {
             let server = Server::from_tcp(listener)
                 .unwrap()
+                .http1_half_close(true)
                 .serve(Shared::new(service));
             server.await.expect("server error");
         });
 
         let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::default())
             .build()
             .unwrap();
 
@@ -65,8 +68,8 @@ impl TestClient {
     }
 }
 
-/// Configures a test client that can be used for GraphQL testing.
-pub async fn graphql_test_client(node: &TestNode) -> TestClient {
+/// Configures a test client that can be used for HTTP API testing.
+pub async fn http_test_client(node: &TestNode) -> TestClient {
     let (tx, _) = broadcast::channel(120);
     let manager = GraphQLSchemaManager::new(
         node.context.store.clone(),
@@ -74,7 +77,11 @@ pub async fn graphql_test_client(node: &TestNode) -> TestClient {
         node.context.schema_provider.clone(),
     )
     .await;
-    let http_context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
+    let http_context = HttpServiceContext::new(
+        node.context.store.clone(),
+        manager,
+        node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+    );
     TestClient::new(build_server(http_context))
 }
 

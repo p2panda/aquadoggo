@@ -4,6 +4,7 @@ use std::fs;
 
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
+use tempfile::TempDir;
 
 use crate::bus::ServiceMessage;
 use crate::config::{Configuration, BLOBS_DIR_NAME};
@@ -68,8 +69,9 @@ impl Node {
         //
         // @TODO: Implement configuring this path for persistent storage, see related issue:
         // https://github.com/p2panda/aquadoggo/issues/542
-        let tmp_dir = tempfile::TempDir::new().unwrap();
+        let tmp_dir = TempDir::new().unwrap();
         let blob_dir_path = tmp_dir.path().join(BLOBS_DIR_NAME);
+        println!("{:?}", blob_dir_path);
         fs::create_dir_all(&blob_dir_path).unwrap();
         config.blob_dir = Some(blob_dir_path);
 

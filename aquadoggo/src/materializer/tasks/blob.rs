@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs;
 
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
@@ -9,6 +8,8 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
 use crate::context::Context;
 use crate::db::types::StorageDocument;
@@ -79,17 +80,29 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             Some(base_path) => base_path,
             None => return Err(TaskError::Critical("No base path configured".to_string())),
         };
-
-        let blob_dir = base_path.join(blob_document.id().as_str());
-
-        fs::create_dir_all(&blob_dir).map_err(|err| TaskError::Critical(err.to_string()))?;
-        let blob_view_path = blob_dir.join(blob_document.view_id().to_string());
+        // @TODO: Why is this required here? Shouldn't the folder already exist at this point? (if
+        // I remove this writing a file fails ..)
+        fs::create_dir_all(base_path).unwrap();
+        let blob_view_path = base_path.join(blob_document.view_id().to_string());
 
         // Write the blob to the filesystem.
-        info!("Creating blob at path {blob_view_path:?}");
+        info!("Creating blob at path {}", blob_view_path.display());
 
-        let mut file = File::create(&blob_view_path).unwrap();
-        file.write_all(blob_data.as_bytes()).unwrap();
+        let mut file = File::create(&blob_view_path).await.map_err(|err| {
+            TaskError::Critical(format!(
+                "Could not create blob file @ {}: {}",
+                blob_view_path.display(),
+                err
+            ))
+        })?;
+
+        file.write_all(blob_data.as_bytes()).await.map_err(|err| {
+            TaskError::Critical(format!(
+                "Could not write blob file @ {}: {}",
+                blob_view_path.display(),
+                err
+            ))
+        })?;
     }
 
     Ok(None)

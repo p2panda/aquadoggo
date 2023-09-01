@@ -64,7 +64,11 @@ pub async fn http_service(
     let blob_dir_path = context.config.blob_dir.as_ref().expect("Base path not set");
 
     // Introduce a new context for all HTTP routes
-    let http_context = HttpServiceContext::new(graphql_schema_manager, blob_dir_path.to_owned());
+    let http_context = HttpServiceContext::new(
+        context.store.clone(),
+        graphql_schema_manager,
+        blob_dir_path.to_owned(),
+    );
 
     // Start HTTP server with given port and re-attempt with random port if it was taken already
     let builder = if let Ok(builder) = axum::Server::try_bind(&http_address) {
@@ -117,7 +121,11 @@ mod tests {
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(node.context.store.clone(), tx, schema_provider).await;
-            let context = HttpServiceContext::new(graphql_schema_manager, BLOBS_DIR_NAME.into());
+            let context = HttpServiceContext::new(
+                node.context.store.clone(),
+                graphql_schema_manager,
+                BLOBS_DIR_NAME.into(),
+            );
             let client = TestClient::new(build_server(context));
 
             let response = client

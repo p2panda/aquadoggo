@@ -2,10 +2,14 @@
 
 use std::path::PathBuf;
 
+use crate::db::SqlStore;
 use crate::graphql::GraphQLSchemaManager;
 
 #[derive(Clone)]
 pub struct HttpServiceContext {
+    /// SQL database.
+    pub store: SqlStore,
+
     /// Dynamic GraphQL schema manager.
     pub schema: GraphQLSchemaManager,
 
@@ -14,9 +18,9 @@ pub struct HttpServiceContext {
 }
 
 impl HttpServiceContext {
-    /// Create a new HttpServiceContext.
-    pub fn new(schema: GraphQLSchemaManager, blob_dir_path: PathBuf) -> Self {
+    pub fn new(store: SqlStore, schema: GraphQLSchemaManager, blob_dir_path: PathBuf) -> Self {
         Self {
+            store,
             schema,
             blob_dir_path,
         }
