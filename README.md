@@ -211,9 +211,10 @@ If you are not working with Rust you can create FFI bindings from the `aquadoggo
 
 ## Query API
 
-As an application developer the interface to `aquadoggo` you are likely to use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered.
+As an application developer the interface you are likely to use the most is the GraphQL query API. For whichever schema your node supports a custom query API is generated, you use this to fetch data into your app. Results from a collection query can be paginated, sorted and filtered.
 
 Fetch one "mushroom" by it's id, returning values for only the selected fields:
+
 ```graphql
 {
   mushroom: mushroom_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d(
@@ -245,7 +246,8 @@ Fetch one "mushroom" by it's id, returning values for only the selected fields:
 ```
 </details>
 
-A collection query for "events" which includes ordering and filtering as well as selecting some meta fields. Here only events between the specified dates and with a title containing the string 'funtastic' will be returned, they will be arranged in ascending chronological order:
+Fetch all "events" with ordering and filtering as well as selecting some meta fields. Here only events between the specified dates and with a title containing the string 'funtastic' will be returned, they will be arranged in ascending chronological order:
+
 ```graphql
 {
   events: all_events_0020aaabb3edecb2e8b491b0c0cb6d7d175e4db0e9da6003b93de354feb9c52891d0(
@@ -310,8 +312,6 @@ A collection query for "events" which includes ordering and filtering as well as
 ```
 </details>
 
-From these examples you might already see how useful the query api will be when retrieving and displaying data in your application.
-
 ## Resources
 
 - 🐬 Deploy your own `aquadoggo` following the [tutorial](https://p2panda.org/tutorials/aquadoggo)
@@ -328,7 +328,7 @@ From these examples you might already see how useful the query api will be when 
 - **Capabilities:** Currently all data can be edited by any author who has access to the network. In many cases, permissions can be handled where needed on the client side (planned mid-2024).
 - **Privacy:** While node communication is encrypted with TLS the data stored on nodes itself is not. Integration of [MLS](https://p2panda.org/specification/encryption/) is underway but not complete yet.
 - **Deletion:** Network-wide purging of data is dependent on having a capabilities system already in place, so these two features will arrive together.
-- **Anonymity:** Networking exposes sensitive data about your used devices, we're waiting for [Arti](https://tpo.pages.torproject.net/core/arti/) supporting Onion Services to make this a configurable option.
+- **Anonymity:** Networking exposes sensitive data, we're waiting for [Arti](https://tpo.pages.torproject.net/core/arti/) supporting Onion Services to make this a configurable option.
 
 As well as these yet-to-be implemented features, there are also general networking concerns (exposing your IP address, sharing data with untrusted peers) that you should take into account when participating in any network, and particularily in peer-to-peer networks.
 
