@@ -15,7 +15,7 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
 use crate::graphql::utils::{graphql_input, graphql_to_operation_value};
 
-/// Construct a mutation query based on a schema, for creating, updating and deleting documents. 
+/// Construct a mutation query based on a schema, for creating, updating and deleting documents.
 pub fn build_document_mutation(query: Object, schema: &Schema) -> Object {
     let schema_id = schema.id().clone();
     let schema_clone = schema.clone();
@@ -69,13 +69,14 @@ fn parse_arguments(
     let arguments: HashMap<Name, Value> = ctx.field().arguments()?.into_iter().collect();
 
     for (name, field_type) in schema.fields().iter() {
-        let value = arguments
-            .get(&Name::new(name))
-            .expect("Values should be provided for all fields");
-        fields.push((
-            name.to_owned(),
-            graphql_to_operation_value(&value, field_type.to_owned()),
-        ))
+        let value = arguments.get(&Name::new(name));
+
+        if let Some(value) = value {
+            fields.push((
+                name.to_owned(),
+                graphql_to_operation_value(&value, field_type.to_owned()),
+            ))
+        }
     }
 
     Ok(fields)
