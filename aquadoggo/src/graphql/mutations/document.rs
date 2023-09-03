@@ -48,6 +48,8 @@ pub fn build_document_mutation(query: Object, schema: &Schema) -> Object {
 
                 let operation = operation_builder.build()?;
 
+                // @TODO: We need to consider what key pair we want to use here (the node's?) and how to 
+                // make it available here to sign entries.
                 let (encoded_entry, _) =
                     send_to_store(store, &operation, &schema_clone, &KeyPair::new()).await?;
 
