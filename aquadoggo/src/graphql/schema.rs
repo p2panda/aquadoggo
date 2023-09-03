@@ -13,9 +13,10 @@ use tokio::sync::Mutex;
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::graphql::input_values::{
-    build_filter_input_object, build_order_enum_value, BooleanFilter, FloatFilter, HexBytesFilter,
-    IntegerFilter, MetaFilterInputObject, OrderDirection, PinnedRelationFilter,
-    PinnedRelationListFilter, RelationFilter, RelationListFilter, StringFilter,
+    build_fields_input_object, build_filter_input_object, build_order_enum_value, BooleanFilter,
+    FloatFilter, HexBytesFilter, IntegerFilter, MetaFilterInputObject, OrderDirection,
+    PinnedRelationFilter, PinnedRelationListFilter, RelationFilter, RelationListFilter,
+    StringFilter,
 };
 use crate::graphql::mutations::{build_document_mutation, MutationRoot, Publish};
 use crate::graphql::objects::{
@@ -104,6 +105,7 @@ pub async fn build_root_schema(
         // Construct the filter and ordering input values for this schema
         let filter_input = build_filter_input_object(&schema);
         let order_input = build_order_enum_value(&schema);
+        let fields_input = build_fields_input_object(&schema);
 
         // Register a schema, schema fields and filter type for every schema
         schema_builder = schema_builder
@@ -112,7 +114,8 @@ pub async fn build_root_schema(
             .register(document_collection_object)
             .register(paginated_document_object)
             .register(order_input)
-            .register(filter_input);
+            .register(filter_input)
+            .register(fields_input);
 
         // Add a query for each schema. It offers an interface to retrieve a single document of
         // this schema by its document id or view id. Its resolver parses and validates the passed

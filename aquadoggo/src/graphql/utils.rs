@@ -5,6 +5,7 @@ use std::num::NonZeroU64;
 
 use async_graphql::dynamic::{InputValue, ObjectAccessor, ResolverContext, TypeRef, ValueAccessor};
 use async_graphql::{Error, Value};
+use dynamic_graphql::ScalarValue;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
@@ -22,6 +23,7 @@ use crate::graphql::scalars::{CursorScalar, DocumentIdScalar, DocumentViewIdScal
 
 // Type name suffixes.
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
+const DOCUMENT_FIELDS_INPUT_SUFFIX: &str = "FieldsInput";
 const FILTER_INPUT_SUFFIX: &str = "Filter";
 const ORDER_BY_SUFFIX: &str = "OrderBy";
 const COLLECTION_ITEM_SUFFIX: &str = "Item";
@@ -40,6 +42,11 @@ pub fn collection_item_name(schema_id: &SchemaId) -> String {
 /// Formats the name of a document fields type.
 pub fn fields_name(schema_id: &SchemaId) -> String {
     format!("{}{DOCUMENT_FIELDS_SUFFIX}", schema_id)
+}
+
+/// Formats the name of a document fields input type.
+pub fn fields_input_name(schema_id: &SchemaId) -> String {
+    format!("{}{DOCUMENT_FIELDS_INPUT_SUFFIX}", schema_id)
 }
 
 /// Formats the name of a collection filter type.
