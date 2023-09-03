@@ -132,26 +132,27 @@ pub fn graphql_to_operation_value(value: &Value, field_type: FieldType) -> Opera
             }
         }
         FieldType::Relation(_) => {
-            if let Value::String(value) = value {
-                let document_id: DocumentId = value.parse().expect("Value is document id");
-                document_id.into()
-            } else {
-                unreachable!()
-            }
-        }
+            let document_id: DocumentId = DocumentIdScalar::from_value(value.to_owned())
+                .expect("Value is document id")
+                .into();
+            document_id.into()
+        },
         FieldType::PinnedRelation(_) => {
-            if let Value::String(value) = value {
-                let document_id: DocumentViewId = value.parse().expect("Value is document view id");
-                document_id.into()
-            } else {
-                unreachable!()
-            }
+            let document_view_id: DocumentViewId = DocumentViewIdScalar::from_value(value.to_owned())
+            .expect("Value is document id")
+            .into();
+        document_view_id.into()
+
         }
         FieldType::RelationList(_) => {
             if let Value::List(value_list) = value {
                 let document_ids: Vec<DocumentId> = value_list
                     .iter()
-                    .map(|value| value.to_string().parse().expect("Value is document id"))
+                    .map(|value| {
+                        DocumentIdScalar::from_value(value.to_owned())
+                            .expect("Value is document id")
+                            .into()
+                    })
                     .collect();
                 document_ids.into()
             } else {
@@ -162,7 +163,11 @@ pub fn graphql_to_operation_value(value: &Value, field_type: FieldType) -> Opera
             if let Value::List(value_list) = value {
                 let document_ids: Vec<DocumentViewId> = value_list
                     .iter()
-                    .map(|value| value.to_string().parse().expect("Value is document view id"))
+                    .map(|value| {
+                        DocumentViewIdScalar::from_value(value.to_owned())
+                            .expect("Value is document view id")
+                            .into()
+                    })
                     .collect();
                 document_ids.into()
             } else {
@@ -387,10 +392,10 @@ pub async fn get_document_from_params(
     match (document_id, document_view_id) {
         (None, Some(document_view_id)) => {
             store
-                .get_document_by_view_id(&DocumentViewId::from(document_view_id.to_owned()))
+                .get_document_by_view_id(&document_view_id.clone().into())
                 .await
         }
-        (Some(document_id), None) => store.get_document(&DocumentId::from(document_id)).await,
+        (Some(document_id), None) => store.get_document(&document_id.clone().into()).await,
         _ => panic!("Invalid values passed from query field parent"),
     }
 }

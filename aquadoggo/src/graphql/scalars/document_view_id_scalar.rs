@@ -39,9 +39,9 @@ impl From<&DocumentViewId> for DocumentViewIdScalar {
     }
 }
 
-impl From<DocumentViewIdScalar> for DocumentViewId {
-    fn from(value: DocumentViewIdScalar) -> Self {
-        DocumentViewId::new(value.0.graph_tips())
+impl Into<DocumentViewId> for DocumentViewIdScalar {
+    fn into(self) -> DocumentViewId {
+        self.0.clone()
     }
 }
 

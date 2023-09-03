@@ -38,9 +38,9 @@ impl From<&DocumentId> for DocumentIdScalar {
     }
 }
 
-impl From<&DocumentIdScalar> for DocumentId {
-    fn from(document_id: &DocumentIdScalar) -> DocumentId {
-        document_id.0.clone()
+impl Into<DocumentId> for DocumentIdScalar {
+    fn into(self) -> DocumentId {
+        self.0.clone()
     }
 }
 
