@@ -86,6 +86,92 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
     }
 }
 
+/// Convert a schema field to a GraphQL input.
+pub fn graphql_input(field_type: &FieldType) -> TypeRef {
+    match field_type {
+        FieldType::Boolean => TypeRef::named(TypeRef::BOOLEAN),
+        FieldType::Integer => TypeRef::named(TypeRef::INT),
+        FieldType::Float => TypeRef::named(TypeRef::FLOAT),
+        FieldType::String => TypeRef::named(TypeRef::STRING),
+        FieldType::Relation(_) => TypeRef::named("DocumentId"),
+        FieldType::PinnedRelation(_) => TypeRef::named("DocumentViewId"),
+        FieldType::RelationList(_) => TypeRef::named_list("DocumentId"),
+        FieldType::PinnedRelationList(_) => TypeRef::named_list("DocumentViewId"),
+    }
+}
+
+/// Convert a async_graphql value into an operation value.
+pub fn graphql_to_operation_value(value: &Value, field_type: FieldType) -> OperationValue {
+    match field_type {
+        FieldType::Boolean => {
+            if let Value::Boolean(value) = value {
+                value.to_owned().into()
+            } else {
+                unreachable!()
+            }
+        }
+        FieldType::Integer => {
+            if let Value::Number(value) = value {
+                value.as_i64().expect("Value is integer").into()
+            } else {
+                unreachable!()
+            }
+        }
+        FieldType::Float => {
+            if let Value::Number(value) = value {
+                value.as_f64().expect("Value is integer").into()
+            } else {
+                unreachable!()
+            }
+        }
+        FieldType::String => {
+            if let Value::String(value) = value {
+                value.to_owned().into()
+            } else {
+                unreachable!()
+            }
+        }
+        FieldType::Relation(_) => {
+            if let Value::String(value) = value {
+                let document_id: DocumentId = value.parse().expect("Value is document id");
+                document_id.into()
+            } else {
+                unreachable!()
+            }
+        }
+        FieldType::PinnedRelation(_) => {
+            if let Value::String(value) = value {
+                let document_id: DocumentViewId = value.parse().expect("Value is document view id");
+                document_id.into()
+            } else {
+                unreachable!()
+            }
+        }
+        FieldType::RelationList(_) => {
+            if let Value::List(value_list) = value {
+                let document_ids: Vec<DocumentId> = value_list
+                    .iter()
+                    .map(|value| value.to_string().parse().expect("Value is document id"))
+                    .collect();
+                document_ids.into()
+            } else {
+                unreachable!()
+            }
+        }
+        FieldType::PinnedRelationList(_) => {
+            if let Value::List(value_list) = value {
+                let document_ids: Vec<DocumentViewId> = value_list
+                    .iter()
+                    .map(|value| value.to_string().parse().expect("Value is document view id"))
+                    .collect();
+                document_ids.into()
+            } else {
+                unreachable!()
+            }
+        }
+    }
+}
+
 /// Parse a filter value into a typed operation value.
 pub fn filter_to_operation_value(
     filter_value: &ValueAccessor,

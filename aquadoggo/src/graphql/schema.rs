@@ -17,7 +17,7 @@ use crate::graphql::input_values::{
     IntegerFilter, MetaFilterInputObject, OrderDirection, PinnedRelationFilter,
     PinnedRelationListFilter, RelationFilter, RelationListFilter, StringFilter,
 };
-use crate::graphql::mutations::{MutationRoot, Publish};
+use crate::graphql::mutations::{build_document_mutation, MutationRoot, Publish};
 use crate::graphql::objects::{
     build_document_collection_object, build_document_fields_object, build_document_object,
     build_paginated_document_object, DocumentMeta,
@@ -75,7 +75,7 @@ pub async fn build_root_schema(
         .register::<PublicKeyScalar>()
         .register::<SeqNumScalar>();
 
-    let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
+    let mut schema_builder = Schema::build("Query", Some("Mutation"), None);
 
     // Populate it with the registered types. We can now use these in any following dynamically
     // created query object fields.
@@ -83,6 +83,7 @@ pub async fn build_root_schema(
 
     // Construct the root query object
     let mut root_query = Object::new("Query");
+    let mut mutation_root = Object::new("Mutation");
 
     // Loop through all schema retrieved from the schema store, dynamically create GraphQL objects,
     // input values and a query for the documents they describe
@@ -120,6 +121,8 @@ pub async fn build_root_schema(
 
         // Add a query for retrieving all documents of a certain schema
         root_query = build_collection_query(root_query, &schema);
+
+        mutation_root = build_document_mutation(mutation_root, &schema);
     }
 
     // Add next args to the query object
@@ -129,6 +132,7 @@ pub async fn build_root_schema(
     // register all required types above
     schema_builder
         .register(root_query)
+        .register(mutation_root)
         .data(store)
         .data(schema_provider)
         .data(tx)
