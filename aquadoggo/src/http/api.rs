@@ -11,10 +11,12 @@ use axum::extract::{Extension, Path};
 use axum::http::StatusCode;
 use axum::response::{self, IntoResponse, Response};
 use http::header;
+use log::warn;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
+use p2panda_rs::Human;
 use tokio::fs::File;
 use tokio_util::io::ReaderStream;
 
@@ -33,66 +35,15 @@ pub async fn handle_graphql_query(
     context.schema.execute(req.into_inner()).await.into()
 }
 
-#[derive(Debug)]
-pub enum BlobHttpError {
-    NotFound,
-    InternalError(anyhow::Error),
-    InvalidIdentifier,
-}
-
-impl IntoResponse for BlobHttpError {
-    fn into_response(self) -> Response {
-        match self {
-            BlobHttpError::NotFound => {
-                (StatusCode::NOT_FOUND, "Could not find document").into_response()
-            }
-            BlobHttpError::InvalidIdentifier => {
-                (StatusCode::BAD_REQUEST, "Invalid blob document identifier").into_response()
-            }
-            BlobHttpError::InternalError(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Something went wrong: {}", err),
-            )
-                .into_response(),
-        }
-    }
-}
-
-async fn respond_with_blob(
-    blob_dir_path: PathBuf,
-    document: impl AsDocument,
-) -> Result<Response, BlobHttpError> {
-    let view_id = document.view_id();
-
-    // Determine MIME type of blob by looking at it's self-declared value
-    let mime_type_str = match document.get("mime_type") {
-        Some(p2panda_rs::operation::OperationValue::String(value)) => Ok(value),
-        _ => Err(BlobHttpError::InternalError(anyhow!(
-            "Blob document did not contain a valid 'mime_type' field"
-        ))),
-    }?;
-
-    // Respond with stream of stored file from file system
-    let mut file_path = blob_dir_path;
-    file_path.push(format!("{view_id}"));
-
-    let file = File::open(file_path)
-        .await
-        .map_err(|_| BlobHttpError::NotFound)?;
-
-    let stream = ReaderStream::new(file);
-    let body = StreamBody::new(stream);
-    let headers = [(header::CONTENT_TYPE, mime_type_str)];
-
-    Ok((headers, body).into_response())
-}
-
+/// Handle requests for a blob document served via HTTP.
+///
+/// This method automatically returns the "latest" version of the document.
 pub async fn handle_blob_document(
     Extension(context): Extension<HttpServiceContext>,
     Path(document_id): Path<String>,
 ) -> Result<Response, BlobHttpError> {
-    let document_id: DocumentId =
-        DocumentId::from_str(&document_id).map_err(|_| BlobHttpError::InvalidIdentifier)?;
+    let document_id: DocumentId = DocumentId::from_str(&document_id)
+        .map_err(|err| BlobHttpError::InvalidFormat(err.into()))?;
 
     let document = context
         .store
@@ -101,6 +52,7 @@ pub async fn handle_blob_document(
         .map_err(|err| BlobHttpError::InternalError(err.into()))?
         .ok_or_else(|| BlobHttpError::NotFound)?;
 
+    // Requested document is not a blob, treat this as a "not found" error
     if document.schema_id() != &SchemaId::Blob(1) {
         return Err(BlobHttpError::NotFound);
     }
@@ -108,14 +60,17 @@ pub async fn handle_blob_document(
     respond_with_blob(context.blob_dir_path, document).await
 }
 
+/// Handle requests for a blob document view served via HTTP.
+///
+/// This method returns the version which was specified by the document view id.
 pub async fn handle_blob_view(
     Extension(context): Extension<HttpServiceContext>,
     Path((document_id, view_id)): Path<(String, String)>,
 ) -> Result<Response, BlobHttpError> {
-    let document_id =
-        DocumentId::from_str(&document_id).map_err(|_| BlobHttpError::InvalidIdentifier)?;
-    let view_id =
-        DocumentViewId::from_str(&view_id).map_err(|_| BlobHttpError::InvalidIdentifier)?;
+    let document_id = DocumentId::from_str(&document_id)
+        .map_err(|err| BlobHttpError::InvalidFormat(err.into()))?;
+    let view_id = DocumentViewId::from_str(&view_id)
+        .map_err(|err| BlobHttpError::InvalidFormat(err.into()))?;
 
     let document = context
         .store
@@ -129,6 +84,70 @@ pub async fn handle_blob_view(
     }
 
     respond_with_blob(context.blob_dir_path, document).await
+}
+
+/// Returns HTTP response with the contents and given MIME type of a blob.
+async fn respond_with_blob(
+    blob_dir_path: PathBuf,
+    document: impl AsDocument,
+) -> Result<Response, BlobHttpError> {
+    let view_id = document.view_id();
+
+    // Get MIME type of blob
+    let mime_type_str = match document.get("mime_type") {
+        Some(p2panda_rs::operation::OperationValue::String(value)) => Ok(value),
+        _ => Err(BlobHttpError::InternalError(anyhow!(
+            "Blob document did not contain a valid 'mime_type' field"
+        ))),
+    }?;
+
+    // Get body from read-stream of stored file on file system
+    let mut file_path = blob_dir_path;
+    file_path.push(format!("{view_id}"));
+    match File::open(&file_path).await {
+        Ok(file) => {
+            let stream = ReaderStream::new(file);
+            let body = StreamBody::new(stream);
+            let headers = [(header::CONTENT_TYPE, mime_type_str)];
+            Ok((headers, body).into_response())
+        }
+        Err(_) => {
+            warn!(
+                "Data inconsistency detected: Blob document {} exists in database but not on file system at path {}!",
+                view_id.display(),
+                file_path.display()
+            );
+
+            Err(BlobHttpError::NotFound)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum BlobHttpError {
+    NotFound,
+    InvalidFormat(anyhow::Error),
+    InternalError(anyhow::Error),
+}
+
+impl IntoResponse for BlobHttpError {
+    fn into_response(self) -> Response {
+        match self {
+            BlobHttpError::NotFound => {
+                (StatusCode::NOT_FOUND, "Could not find document").into_response()
+            }
+            BlobHttpError::InvalidFormat(err) => (
+                StatusCode::BAD_REQUEST,
+                format!("Could not parse identifier: {}", err),
+            )
+                .into_response(),
+            BlobHttpError::InternalError(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Something went wrong: {}", err),
+            )
+                .into_response(),
+        }
+    }
 }
 
 #[cfg(test)]
