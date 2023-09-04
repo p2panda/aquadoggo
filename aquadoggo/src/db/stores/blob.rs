@@ -19,7 +19,7 @@ use crate::db::SqlStore;
 /// p2panda-rs blob validation too.
 const MAX_BLOB_PIECES: u64 = 10000;
 
-pub type BlobData = String;
+pub type BlobData = Vec<u8>;
 
 impl SqlStore {
     /// Get the data for one blob from the store, identified by it's document id.
@@ -71,9 +71,9 @@ impl SqlStore {
                     operation_fields_v1.value
                 FROM
                     operation_fields_v1
-                LEFT JOIN 
+                LEFT JOIN
                     operations_v1
-                ON 
+                ON
                     operations_v1.operation_id = operation_fields_v1.operation_id
                 WHERE
                     operations_v1.document_id = $1
@@ -126,9 +126,9 @@ async fn reverse_relations(
 
     query_scalar(&format!(
         "
-        SELECT 
-            document_view_fields.document_view_id 
-        FROM 
+        SELECT
+            document_view_fields.document_view_id
+        FROM
             document_view_fields
         LEFT JOIN
             operation_fields_v1
@@ -136,18 +136,18 @@ async fn reverse_relations(
             document_view_fields.operation_id = operation_fields_v1.operation_id
         AND
             document_view_fields.name = operation_fields_v1.name
-        LEFT JOIN 
+        LEFT JOIN
             document_views
         ON
             document_view_fields.document_view_id = document_views.document_view_id
         WHERE
             operation_fields_v1.field_type
-        IN 
+        IN
             ('pinned_relation', 'pinned_relation_list', 'relation', 'relation_list')
         {schema_id_condition}
-        AND 
+        AND
             operation_fields_v1.value IN (
-                SELECT document_views.document_view_id 
+                SELECT document_views.document_view_id
                 FROM document_views
                 WHERE document_views.document_id = $1
             ) OR operation_fields_v1.value = $1
@@ -178,8 +178,8 @@ async fn document_to_blob_data(
 
     // Now collect all existing pieces for the blob.
     //
-    // We do this using the stores' query method, targeting pieces which are in the relation
-    // list of the blob.
+    // We do this using the stores' query method, targeting pieces which are in the relation list
+    // of the blob.
     let schema = Schema::get_system(SchemaId::BlobPiece(1)).unwrap();
     let list = RelationList::new_pinned(blob.view_id(), "pieces");
     let pagination = Pagination {
@@ -224,7 +224,7 @@ async fn document_to_blob_data(
         return Err(BlobStoreError::IncorrectLength);
     };
 
-    Ok(Some(blob_data))
+    Ok(Some(blob_data.into_bytes()))
 }
 
 #[cfg(test)]
@@ -245,18 +245,18 @@ mod tests {
     #[rstest]
     fn get_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
 
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
-            // Get blob by document id.
+            // Get blob by document id
             let blob = node.context.store.get_blob(&document_id).await.unwrap();
 
             assert!(blob.is_some());
             assert_eq!(blob.unwrap(), blob_data);
 
-            // Get blob by view id.
+            // Get blob by view id
             let blob = node
                 .context
                 .store
@@ -376,8 +376,8 @@ mod tests {
     #[rstest]
     fn purge_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
 
             // There is one blob and two blob pieces in database.
             //
@@ -419,8 +419,8 @@ mod tests {
         test_runner(|mut node: TestNode| async move {
             let _ = populate_and_materialize(&mut node, &config).await;
 
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
 
             // There is one blob and two blob pieces in database.
             //
@@ -453,8 +453,8 @@ mod tests {
     #[rstest]
     fn does_not_purge_blob_if_still_pinned(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
 
             let _ = add_schema_and_documents(
                 &mut node,
@@ -497,8 +497,8 @@ mod tests {
     #[rstest]
     fn purge_all_pieces_of_updated_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
 
             // Create a new blob piece.
             let new_blob_pieces = add_document(

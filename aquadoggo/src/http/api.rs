@@ -8,8 +8,10 @@ use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::body::StreamBody;
 use axum::extract::{Extension, Path};
+use axum::headers::{ETag, IfNoneMatch};
 use axum::http::StatusCode;
 use axum::response::{self, IntoResponse, Response};
+use axum::TypedHeader;
 use http::header;
 use log::warn;
 use p2panda_rs::document::traits::AsDocument;
@@ -39,6 +41,7 @@ pub async fn handle_graphql_query(
 ///
 /// This method automatically returns the "latest" version of the document.
 pub async fn handle_blob_document(
+    TypedHeader(if_none_match): TypedHeader<IfNoneMatch>,
     Extension(context): Extension<HttpServiceContext>,
     Path(document_id): Path<String>,
 ) -> Result<Response, BlobHttpError> {
@@ -57,13 +60,14 @@ pub async fn handle_blob_document(
         return Err(BlobHttpError::NotFound);
     }
 
-    respond_with_blob(context.blob_dir_path, document).await
+    respond_with_blob(if_none_match, context.blob_dir_path, document).await
 }
 
 /// Handle requests for a blob document view served via HTTP.
 ///
 /// This method returns the version which was specified by the document view id.
 pub async fn handle_blob_view(
+    TypedHeader(if_none_match): TypedHeader<IfNoneMatch>,
     Extension(context): Extension<HttpServiceContext>,
     Path((document_id, view_id)): Path<(String, String)>,
 ) -> Result<Response, BlobHttpError> {
@@ -83,15 +87,23 @@ pub async fn handle_blob_view(
         return Err(BlobHttpError::NotFound);
     }
 
-    respond_with_blob(context.blob_dir_path, document).await
+    respond_with_blob(if_none_match, context.blob_dir_path, document).await
 }
 
 /// Returns HTTP response with the contents and given MIME type of a blob.
 async fn respond_with_blob(
+    if_none_match: IfNoneMatch,
     blob_dir_path: PathBuf,
     document: impl AsDocument,
 ) -> Result<Response, BlobHttpError> {
     let view_id = document.view_id();
+
+    // Respond with 304 "not modified" if etag still matches (document did not get updated)
+    let etag = ETag::from_str(&view_id.to_string())
+        .map_err(|err| BlobHttpError::InternalError(err.into()))?;
+    if if_none_match.precondition_passes(&etag) {
+        return Ok(StatusCode::NOT_MODIFIED.into_response());
+    }
 
     // Get MIME type of blob
     let mime_type_str = match document.get("mime_type") {
@@ -106,9 +118,16 @@ async fn respond_with_blob(
     file_path.push(format!("{view_id}"));
     match File::open(&file_path).await {
         Ok(file) => {
+            let headers = [
+                // MIME type to allow browsers to correctly handle this specific blob format
+                (header::CONTENT_TYPE, mime_type_str),
+                // ETag to allow browsers handle caching
+                (header::ETAG, &view_id.to_string()),
+            ];
+
             let stream = ReaderStream::new(file);
             let body = StreamBody::new(stream);
-            let headers = [(header::CONTENT_TYPE, mime_type_str)];
+
             Ok((headers, body).into_response())
         }
         Err(_) => {
@@ -162,10 +181,35 @@ mod tests {
     use crate::test_utils::{add_blob, http_test_client, test_runner, TestNode};
 
     #[rstest]
-    fn responds_with_latest_blob_view(key_pair: KeyPair) {
+    fn responds_with_blob_in_http_body(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Make sure to materialize blob on file system
+            blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await
+            .unwrap();
+
+            let client = http_test_client(&node).await;
+            let response = client.get(&format!("/blobs/{}", document_id)).send().await;
+            let status_code = response.status();
+            let body = response.text().await;
+
+            assert_eq!(status_code, StatusCode::OK);
+            assert_eq!(body, "Hello, World!");
+        })
+    }
+
+    #[rstest]
+    fn handles_etag_if_none_match_caching(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Make sure to materialize blob on file system

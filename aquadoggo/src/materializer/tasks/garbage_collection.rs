@@ -376,11 +376,18 @@ mod tests {
     #[rstest]
     fn purges_blobs(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            // Publish a blob.
-            let blob_document_view = add_blob(&mut node, "Hello World!", &key_pair).await;
+            // Publish a blob
+            let blob_document_view = add_blob(
+                &mut node,
+                "Hello World!".as_bytes(),
+                6,
+                "text/plain",
+                &key_pair,
+            )
+            .await;
             let blob_document_id: DocumentId = blob_document_view.to_string().parse().unwrap();
 
-            // Check the blob is there.
+            // Check the blob is there
             let blob = node
                 .context
                 .store
@@ -389,7 +396,7 @@ mod tests {
                 .unwrap();
             assert!(blob.is_some());
 
-            // Run a garbage collection task for the blob document.
+            // Run a garbage collection task for the blob document
             let next_tasks = garbage_collection_task(
                 node.context.clone(),
                 TaskInput::DocumentId(blob_document_id.clone()),
@@ -397,10 +404,10 @@ mod tests {
             .await
             .unwrap();
 
-            // It shouldn't return any new tasks.
+            // It shouldn't return any new tasks
             assert!(next_tasks.is_none());
 
-            // The blob should no longer be available.
+            // The blob should no longer be available
             let blob = node
                 .context
                 .store
@@ -423,12 +430,12 @@ mod tests {
     #[rstest]
     fn purges_newly_detached_blobs(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            // Create a blob document.
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            // Create a blob document
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
-            // Relate to the blob from a new document.
+            // Relate to the blob from a new document
             let (schema, documents_pinning_blob) = add_schema_and_documents(
                 &mut node,
                 "img",
@@ -441,8 +448,8 @@ mod tests {
             )
             .await;
 
-            // Now update the document to relate to another blob. This means the previously
-            // created blob is now "dangling".
+            // Now update the document to relate to another blob. This means the previously created
+            // blob is now "dangling"
             update_document(
                 &mut node,
                 schema.id(),
@@ -452,7 +459,7 @@ mod tests {
             )
             .await;
 
-            // Run a task for the parent document.
+            // Run a task for the parent document
             let document_id: DocumentId = documents_pinning_blob[0].to_string().parse().unwrap();
             let next_tasks =
                 garbage_collection_task(node.context.clone(), TaskInput::DocumentId(document_id))
@@ -460,16 +467,16 @@ mod tests {
                     .unwrap()
                     .unwrap();
 
-            // It issues one new task which is for the blob document.
+            // It issues one new task which is for the blob document
             assert_eq!(next_tasks.len(), 1);
             let next_tasks =
                 garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
                     .await
                     .unwrap();
-            // No new tasks issued.
+            // No new tasks issued
             assert!(next_tasks.is_none());
 
-            // The blob has correctly been purged.
+            // The blob has correctly been purged
             let blob = node
                 .context
                 .store
@@ -485,8 +492,8 @@ mod tests {
     fn other_documents_keep_blob_alive(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             // Create a blob document.
-            let blob_data = "Hello, World!".to_string();
-            let blob_view_id = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Relate to the blob from a new document.
@@ -558,12 +565,12 @@ mod tests {
     #[rstest]
     fn all_relation_types_keep_blobs_alive(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
+            let blob_data = "Hello, World!".as_bytes();
 
             // Any type of relation can keep a blob alive, here we create one of each and run
             // garbage collection tasks for each blob.
 
-            let blob_view_id_1 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id_1 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",
@@ -576,7 +583,7 @@ mod tests {
             )
             .await;
 
-            let blob_view_id_2 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id_2 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",
@@ -589,7 +596,7 @@ mod tests {
             )
             .await;
 
-            let blob_view_id_3 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id_3 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",
@@ -606,7 +613,7 @@ mod tests {
             )
             .await;
 
-            let blob_view_id_4 = add_blob(&mut node, &blob_data, &key_pair).await;
+            let blob_view_id_4 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",

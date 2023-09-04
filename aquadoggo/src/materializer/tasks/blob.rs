@@ -96,7 +96,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             ))
         })?;
 
-        file.write_all(blob_data.as_bytes()).await.map_err(|err| {
+        file.write_all(&blob_data).await.map_err(|err| {
             TaskError::Critical(format!(
                 "Could not write blob file @ {}: {}",
                 blob_view_path.display(),

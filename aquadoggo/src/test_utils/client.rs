@@ -17,7 +17,7 @@ use crate::graphql::GraphQLSchemaManager;
 use crate::http::{build_server, HttpServiceContext};
 use crate::test_utils::TestNode;
 
-/// GraphQL client which can be used for querying a node in tests.
+/// HTTP client for testing request and responses.
 pub struct TestClient {
     client: reqwest::Client,
     addr: SocketAddr,
@@ -40,7 +40,6 @@ impl TestClient {
         tokio::spawn(async move {
             let server = Server::from_tcp(listener)
                 .unwrap()
-                .http1_half_close(true)
                 .serve(Shared::new(service));
             server.await.expect("server error");
         });
@@ -54,7 +53,6 @@ impl TestClient {
         TestClient { client, addr }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         RequestBuilder {
             builder: self.client.get(format!("http://{}{}", self.addr, url)),
@@ -71,17 +69,20 @@ impl TestClient {
 /// Configures a test client that can be used for HTTP API testing.
 pub async fn http_test_client(node: &TestNode) -> TestClient {
     let (tx, _) = broadcast::channel(120);
+
     let manager = GraphQLSchemaManager::new(
         node.context.store.clone(),
         tx,
         node.context.schema_provider.clone(),
     )
     .await;
+
     let http_context = HttpServiceContext::new(
         node.context.store.clone(),
         manager,
         node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
     );
+
     TestClient::new(build_server(http_context))
 }
 
@@ -110,7 +111,6 @@ impl RequestBuilder {
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) fn header<K, V>(mut self, key: K, value: V) -> Self
     where
         HeaderName: TryFrom<K>,
@@ -139,7 +139,6 @@ impl TestResponse {
         self.response.json().await.unwrap()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn status(&self) -> StatusCode {
         self.response.status()
     }
