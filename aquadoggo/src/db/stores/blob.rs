@@ -15,6 +15,7 @@ use crate::db::query::{Filter, Order, Pagination, PaginationField, Select};
 use crate::db::stores::query::{Query, RelationList};
 use crate::db::SqlStore;
 
+/// Number of blob pieces requested per database query iteration.
 const BLOB_QUERY_PAGE_SIZE: u64 = 10;
 
 pub type BlobData = Vec<u8>;
