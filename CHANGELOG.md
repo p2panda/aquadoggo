@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - HTTP routes to serve files with correct content type headers [#544](https://github.com/p2panda/aquadoggo/pull/544)
+- Build a byte buffer over paginated pieces when assembling blobs [#547](https://github.com/p2panda/aquadoggo/pull/547)
 
 ## [0.5.0]
 
