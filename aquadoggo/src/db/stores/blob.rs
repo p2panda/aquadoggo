@@ -166,13 +166,13 @@ async fn document_to_blob_data(
     // Get the length of the blob
     let expected_length = match blob.get("length").unwrap() {
         OperationValue::Integer(length) => *length as usize,
-        _ => panic!(), // We should never hit this as we already validated that this is a blob document
+        _ => unreachable!(), // We already validated that this is a blob document
     };
 
     // Get the number of pieces in the blob
     let expected_num_pieces = match blob.get("pieces").unwrap() {
         OperationValue::PinnedRelationList(list) => list.len(),
-        _ => panic!(), // We should never hit this as we already validated that this is a blob document
+        _ => unreachable!(), // We already validated that this is a blob document
     };
 
     // Now collect all existing pieces for the blob.
