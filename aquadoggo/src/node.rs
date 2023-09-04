@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fs;
-
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
 use tempfile::TempDir;
+use tokio::fs;
 
 use crate::bus::ServiceMessage;
 use crate::config::{Configuration, BLOBS_DIR_NAME};
@@ -71,7 +70,7 @@ impl Node {
         // https://github.com/p2panda/aquadoggo/issues/542
         let tmp_dir = TempDir::new().unwrap();
         let blob_dir_path = tmp_dir.path().join(BLOBS_DIR_NAME);
-        fs::create_dir_all(&blob_dir_path).unwrap();
+        fs::create_dir_all(&blob_dir_path).await.unwrap();
         config.blob_dir = Some(blob_dir_path);
 
         // Create service manager with shared data between services

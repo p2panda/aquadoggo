@@ -24,7 +24,7 @@ pub type BlobData = Vec<u8>;
 impl SqlStore {
     /// Get the data for one blob from the store, identified by it's document id.
     pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobData>, BlobStoreError> {
-        // Get the root blob document.
+        // Get the root blob document
         let blob_document = match self.get_document(id).await? {
             Some(document) => {
                 if document.schema_id != SchemaId::Blob(1) {
@@ -42,7 +42,7 @@ impl SqlStore {
         &self,
         view_id: &DocumentViewId,
     ) -> Result<Option<BlobData>, BlobStoreError> {
-        // Get the root blob document.
+        // Get the root blob document
         let blob_document = match self.get_document_by_view_id(view_id).await? {
             Some(document) => {
                 if document.schema_id != SchemaId::Blob(1) {

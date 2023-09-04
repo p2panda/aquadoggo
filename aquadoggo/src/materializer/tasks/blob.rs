@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fs;
-
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
@@ -80,9 +78,6 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             Some(base_path) => base_path,
             None => return Err(TaskError::Critical("No base path configured".to_string())),
         };
-        // @TODO: Why is this required here? Shouldn't the folder already exist at this point? (if
-        // I remove this writing a file fails ..)
-        fs::create_dir_all(base_path).unwrap();
         let blob_view_path = base_path.join(blob_document.view_id().to_string());
 
         // Write the blob to the filesystem.
@@ -150,54 +145,22 @@ async fn get_related_blobs(
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use p2panda_rs::identity::KeyPair;
-    use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
+    use tokio::fs;
 
     use crate::materializer::tasks::blob_task;
     use crate::materializer::TaskInput;
-    use crate::test_utils::{add_document, test_runner, TestNode};
+    use crate::test_utils::{add_blob, test_runner, TestNode};
 
     #[rstest]
     fn materializes_blob_to_filesystem(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
-
-            // Publish blob pieces and blob
-            let blob_piece_view_id_1 = add_document(
-                &mut node,
-                &SchemaId::BlobPiece(1),
-                vec![("data", blob_data[..5].into())],
-                &key_pair,
-            )
-            .await;
-
-            let blob_piece_view_id_2 = add_document(
-                &mut node,
-                &SchemaId::BlobPiece(1),
-                vec![("data", blob_data[5..].into())],
-                &key_pair,
-            )
-            .await;
-
             // Publish blob
-            let blob_view_id = add_document(
-                &mut node,
-                &SchemaId::Blob(1),
-                vec![
-                    ("length", { blob_data.len() as i64 }.into()),
-                    ("mime_type", "text/plain".into()),
-                    (
-                        "pieces",
-                        vec![blob_piece_view_id_1, blob_piece_view_id_2].into(),
-                    ),
-                ],
-                &key_pair,
-            )
-            .await;
+            let blob_data = "Hello, World!";
+            let blob_view_id =
+                add_blob(&mut node, blob_data.as_bytes(), 5, "plain/text", &key_pair).await;
 
             // Run blob task
             let result = blob_task(
@@ -216,7 +179,7 @@ mod tests {
             let blob_path = base_path.join(blob_view_id.to_string());
 
             // Read from this file
-            let retrieved_blob_data = fs::read_to_string(blob_path);
+            let retrieved_blob_data = fs::read_to_string(blob_path).await;
 
             // It should match the complete published blob data
             assert!(retrieved_blob_data.is_ok(), "{:?}", retrieved_blob_data);
