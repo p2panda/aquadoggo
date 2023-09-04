@@ -179,13 +179,17 @@ impl IntoResponse for BlobHttpError {
 #[cfg(test)]
 mod tests {
     use http::{header, StatusCode};
+    use p2panda_rs::document::DocumentId;
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::test_utils::fixtures::key_pair;
-    use p2panda_rs::{document::DocumentId, identity::KeyPair};
     use rstest::rstest;
 
     use crate::materializer::tasks::blob_task;
     use crate::materializer::TaskInput;
-    use crate::test_utils::{add_blob, http_test_client, test_runner, TestNode};
+    use crate::test_utils::{add_blob, http_test_client, test_runner, update_blob, TestNode};
+
+    // @TODO: Would be nice if this would come out of p2panda_rs
+    const MAX_BLOB_PIECE_LENGTH: usize = 256;
 
     #[rstest]
     fn responds_with_blob_in_http_body(key_pair: KeyPair) {
@@ -203,12 +207,107 @@ mod tests {
             .unwrap();
 
             let client = http_test_client(&node).await;
+
+            // "/blobs/<document_id>" path
             let response = client.get(&format!("/blobs/{}", document_id)).send().await;
             let status_code = response.status();
             let body = response.text().await;
 
             assert_eq!(status_code, StatusCode::OK);
             assert_eq!(body, "Hello, World!");
+
+            // "/blobs/<document_id>/<view_id>" path
+            let response = client
+                .get(&format!("/blobs/{}/{}", document_id, blob_view_id))
+                .send()
+                .await;
+            let status_code = response.status();
+            let body = response.text().await;
+
+            assert_eq!(status_code, StatusCode::OK);
+            assert_eq!(body, "Hello, World!");
+        })
+    }
+
+    #[rstest]
+    fn document_route_responds_with_latest_view(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Make sure to materialize blob on file system
+            blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await
+            .unwrap();
+
+            // Update the blob
+            let blob_data = "Hello, Panda!".as_bytes();
+            let blob_view_id_2 =
+                update_blob(&mut node, &blob_data, 6, &blob_view_id, &key_pair).await;
+
+            blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id_2.clone()),
+            )
+            .await
+            .unwrap();
+
+            // Expect to receive latest version
+            let client = http_test_client(&node).await;
+            let response = client.get(&format!("/blobs/{}", document_id)).send().await;
+            let status_code = response.status();
+            let body = response.text().await;
+
+            assert_eq!(status_code, StatusCode::OK);
+            assert_eq!(body, "Hello, Panda!");
+        })
+    }
+
+    #[rstest]
+    fn responds_with_content_type_header(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            let blob_data = r#"
+                <svg version="1.1" width="300" height="200" xmlns="http://www.w3.org/2000/svg">
+                  <rect width="100%" height="100%" fill="red" />
+                  <circle cx="150" cy="100" r="80" fill="green" />
+                </svg>
+            "#
+            .as_bytes();
+            let blob_view_id = add_blob(
+                &mut node,
+                &blob_data,
+                MAX_BLOB_PIECE_LENGTH,
+                "image/svg+xml",
+                &key_pair,
+            )
+            .await;
+            let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Make sure to materialize blob on file system
+            blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await
+            .unwrap();
+
+            // Expect correctly set content type header and body in response
+            let client = http_test_client(&node).await;
+            let response = client.get(&format!("/blobs/{}", document_id)).send().await;
+            let status_code = response.status();
+            let headers = response.headers();
+            let body = response.bytes().await;
+            let content_type = headers
+                .get(header::CONTENT_TYPE)
+                .expect("ContentType to exist in header");
+
+            assert_eq!(content_type, "image/svg+xml");
+            assert_eq!(status_code, StatusCode::OK);
+            assert_eq!(body, blob_data);
         })
     }
 
@@ -227,41 +326,78 @@ mod tests {
             .await
             .unwrap();
 
-            // 1. Get blob and ETag connected to it
             let client = http_test_client(&node).await;
+
+            // 1. Get blob and ETag connected to it
             let response = client.get(&format!("/blobs/{}", document_id)).send().await;
             let status_code = response.status();
             let headers = response.headers();
             let body = response.text().await;
+            let etag = headers.get(header::ETAG).expect("ETag to exist in header");
 
-            assert!(headers.get(header::ETAG).is_some());
             assert_eq!(status_code, StatusCode::OK);
             assert_eq!(body, "Hello, World!");
+
+            // 2. Send another request, including the received ETag inside a "IfNoneMatch" header
+            let response = client
+                .get(&format!("/blobs/{}", document_id))
+                .header(header::IF_NONE_MATCH, etag)
+                .send()
+                .await;
+            let status_code = response.status();
+            let body = response.text().await;
+            assert_eq!(status_code, StatusCode::NOT_MODIFIED);
+            assert_eq!(body, "");
+
+            // 3. Update the blob
+            let blob_data = "Hello, Panda!".as_bytes();
+            let blob_view_id_2 =
+                update_blob(&mut node, &blob_data, 6, &blob_view_id, &key_pair).await;
+
+            // Make sure to materialize blob on file system
+            blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id_2.clone()),
+            )
+            .await
+            .unwrap();
+
+            // 4. Send request again, including the (now outdated) ETag
+            let response = client
+                .get(&format!("/blobs/{}", document_id))
+                .header(header::IF_NONE_MATCH, etag)
+                .send()
+                .await;
+            let status_code = response.status();
+            let headers = response.headers();
+            let body = response.text().await;
+            let etag_2 = headers.get(header::ETAG).expect("ETag to exist in header");
+
+            assert_ne!(etag, etag_2);
+            assert_eq!(status_code, StatusCode::OK);
+            assert_eq!(body, "Hello, Panda!");
         })
     }
 
-    #[test]
-    fn not_found_error() {
-        test_runner(|node: TestNode| async move {
+    #[rstest]
+    #[case::inexisting_document_id(
+        "/blobs/0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        StatusCode::NOT_FOUND
+    )]
+    #[case::inexisting_document_view_id(
+        "/blobs/0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        StatusCode::NOT_FOUND
+    )]
+    #[case::invalid_document_id("/blobs/not_valid", StatusCode::BAD_REQUEST)]
+    #[case::invalid_document_view_id(
+        "/blobs/0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/not_valid",
+        StatusCode::BAD_REQUEST
+    )]
+    fn error_responses(#[case] path: &'static str, #[case] expected_status_code: StatusCode) {
+        test_runner(move |node: TestNode| async move {
             let client = http_test_client(&node).await;
-
-            // Document id not found
-            let response = client
-                .get(&format!(
-                    "/blobs/0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                ))
-                .send()
-                .await;
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-            // Document view id not found
-            let response = client
-                .get(&format!(
-                    "/blobs/0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                ))
-                .send()
-                .await;
-            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            let response = client.get(path).send().await;
+            assert_eq!(response.status(), expected_status_code);
         })
     }
 }

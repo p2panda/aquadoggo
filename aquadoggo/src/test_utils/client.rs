@@ -128,6 +128,10 @@ pub(crate) struct TestResponse {
 }
 
 impl TestResponse {
+    pub(crate) async fn bytes(self) -> Vec<u8> {
+        self.response.bytes().await.unwrap().to_vec()
+    }
+
     pub(crate) async fn text(self) -> String {
         self.response.text().await.unwrap()
     }
