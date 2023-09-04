@@ -90,7 +90,9 @@ pub async fn handle_blob_view(
     respond_with_blob(if_none_match, context.blob_dir_path, document).await
 }
 
-/// Returns HTTP response with the contents and given MIME type of a blob.
+/// Returns HTTP response with the contents, ETag and given MIME type of a blob.
+///
+/// Supports basic caching by handling "IfNoneMatch" headers matching the latest ETag.
 async fn respond_with_blob(
     if_none_match: IfNoneMatch,
     blob_dir_path: PathBuf,
@@ -98,10 +100,14 @@ async fn respond_with_blob(
 ) -> Result<Response, BlobHttpError> {
     let view_id = document.view_id();
 
-    // Respond with 304 "not modified" if etag still matches (document did not get updated)
-    let etag = ETag::from_str(&view_id.to_string())
-        .map_err(|err| BlobHttpError::InternalError(err.into()))?;
-    if if_none_match.precondition_passes(&etag) {
+    // Convert document view id into correct ETag value (with quotation marks defined in
+    // https://datatracker.ietf.org/doc/html/rfc7232#section-2.3)
+    let to_etag_str = || format!("\"{}\"", view_id);
+
+    // Respond with 304 "not modified" if ETag still matches (document did not get updated)
+    let etag =
+        ETag::from_str(&to_etag_str()).map_err(|err| BlobHttpError::InternalError(err.into()))?;
+    if !if_none_match.precondition_passes(&etag) {
         return Ok(StatusCode::NOT_MODIFIED.into_response());
     }
 
@@ -122,7 +128,7 @@ async fn respond_with_blob(
                 // MIME type to allow browsers to correctly handle this specific blob format
                 (header::CONTENT_TYPE, mime_type_str),
                 // ETag to allow browsers handle caching
-                (header::ETAG, &view_id.to_string()),
+                (header::ETAG, &to_etag_str()),
             ];
 
             let stream = ReaderStream::new(file);
@@ -132,7 +138,8 @@ async fn respond_with_blob(
         }
         Err(_) => {
             warn!(
-                "Data inconsistency detected: Blob document {} exists in database but not on file system at path {}!",
+                "Data inconsistency detected: Blob document {} exists in database but not on file
+                system at path {}!",
                 view_id.display(),
                 file_path.display()
             );
