@@ -7,7 +7,7 @@ use std::time::Duration;
 use axum::body::HttpBody;
 use axum::BoxError;
 use http::header::{HeaderName, HeaderValue};
-use http::{Request, StatusCode};
+use http::{HeaderMap, Request, StatusCode};
 use hyper::{Body, Server};
 use tokio::sync::broadcast;
 use tower::make::Shared;
@@ -141,5 +141,9 @@ impl TestResponse {
 
     pub(crate) fn status(&self) -> StatusCode {
         self.response.status()
+    }
+
+    pub(crate) fn headers(&self) -> HeaderMap {
+        self.response.headers().clone()
     }
 }

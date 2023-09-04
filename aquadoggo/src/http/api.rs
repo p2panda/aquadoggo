@@ -178,7 +178,7 @@ impl IntoResponse for BlobHttpError {
 
 #[cfg(test)]
 mod tests {
-    use http::StatusCode;
+    use http::{header, StatusCode};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use p2panda_rs::{document::DocumentId, identity::KeyPair};
     use rstest::rstest;
@@ -213,7 +213,7 @@ mod tests {
     }
 
     #[rstest]
-    fn handles_etag_if_none_match_caching(key_pair: KeyPair) {
+    fn handles_etag_and_if_none_match_precondition(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
             let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
@@ -227,11 +227,14 @@ mod tests {
             .await
             .unwrap();
 
+            // 1. Get blob and ETag connected to it
             let client = http_test_client(&node).await;
             let response = client.get(&format!("/blobs/{}", document_id)).send().await;
             let status_code = response.status();
+            let headers = response.headers();
             let body = response.text().await;
 
+            assert!(headers.get(header::ETAG).is_some());
             assert_eq!(status_code, StatusCode::OK);
             assert_eq!(body, "Hello, World!");
         })

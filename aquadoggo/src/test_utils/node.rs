@@ -334,13 +334,14 @@ pub async fn update_document(
     DocumentViewId::from(entry_signed.hash())
 }
 
-pub async fn add_blob(
+/// Splits bytes into chunks with a defined maximum length (256 bytes is the specified maximum) and
+/// publishes a blob_piece_v1 document for each chunk.
+pub async fn add_blob_pieces(
     node: &mut TestNode,
     body: &[u8],
     max_piece_length: usize,
-    mime_type: &str,
     key_pair: &KeyPair,
-) -> DocumentViewId {
+) -> Vec<DocumentViewId> {
     let blob_pieces = body.chunks(max_piece_length);
 
     let mut blob_pieces_view_ids = Vec::with_capacity(blob_pieces.len());
@@ -360,6 +361,18 @@ pub async fn add_blob(
         blob_pieces_view_ids.push(view_id);
     }
 
+    blob_pieces_view_ids
+}
+
+pub async fn add_blob(
+    node: &mut TestNode,
+    body: &[u8],
+    max_piece_length: usize,
+    mime_type: &str,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    let blob_pieces_view_ids = add_blob_pieces(node, body, max_piece_length, key_pair).await;
+
     let blob_view_id = add_document(
         node,
         &SchemaId::Blob(1),
@@ -368,6 +381,30 @@ pub async fn add_blob(
             ("mime_type", mime_type.into()),
             ("pieces", blob_pieces_view_ids.into()),
         ],
+        &key_pair,
+    )
+    .await;
+
+    blob_view_id
+}
+
+pub async fn update_blob(
+    node: &mut TestNode,
+    body: &[u8],
+    max_piece_length: usize,
+    previous: &DocumentViewId,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    let blob_pieces_view_ids = add_blob_pieces(node, body, max_piece_length, key_pair).await;
+
+    let blob_view_id = update_document(
+        node,
+        &SchemaId::Blob(1),
+        vec![
+            ("length", { body.len() as i64 }.into()),
+            ("pieces", blob_pieces_view_ids.into()),
+        ],
+        &previous,
         &key_pair,
     )
     .await;
