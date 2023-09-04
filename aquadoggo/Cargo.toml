@@ -27,6 +27,7 @@ asynchronous-codec = { version = "0.6.2", features = ["cbor"] }
 axum = { version = "0.6.10", features = ["headers"] }
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 bs58 = "0.4.0"
+bytes = "1.4.0"
 deadqueue = { version = "0.2.3", default-features = false, features = [
     "unlimited",
 ] }

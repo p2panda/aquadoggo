@@ -2,6 +2,7 @@
 
 use std::num::NonZeroU64;
 
+use bytes::{BufMut, BytesMut};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
@@ -10,14 +11,11 @@ use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::{query_scalar, AnyPool};
 
 use crate::db::errors::{BlobStoreError, SqlStoreError};
-use crate::db::query::{Field, Filter, Order, Pagination, Select};
+use crate::db::query::{Filter, Order, Pagination, PaginationField, Select};
 use crate::db::stores::query::{Query, RelationList};
 use crate::db::SqlStore;
 
-/// The maximum allowed number of blob pieces per blob.
-/// @TODO: do we want this? If so, what value should it be and we should add this to
-/// p2panda-rs blob validation too.
-const MAX_BLOB_PIECES: u64 = 10000;
+const BLOB_QUERY_PAGE_SIZE: u64 = 10;
 
 pub type BlobData = Vec<u8>;
 
@@ -164,16 +162,16 @@ async fn document_to_blob_data(
     store: &SqlStore,
     blob: impl AsDocument,
 ) -> Result<Option<BlobData>, BlobStoreError> {
-    // Get the length of the blob.
-    let length = match blob.get("length").unwrap() {
-        OperationValue::Integer(length) => length,
-        _ => panic!(), // We should never hit this as we already validated that this is a blob document.
+    // Get the length of the blob
+    let expected_length = match blob.get("length").unwrap() {
+        OperationValue::Integer(length) => *length as usize,
+        _ => panic!(), // We should never hit this as we already validated that this is a blob document
     };
 
-    // Get the number of pieces in the blob.
-    let num_pieces = match blob.get("pieces").unwrap() {
+    // Get the number of pieces in the blob
+    let expected_num_pieces = match blob.get("pieces").unwrap() {
         OperationValue::PinnedRelationList(list) => list.len(),
-        _ => panic!(), // We should never hit this as we already validated that this is a blob document.
+        _ => panic!(), // We should never hit this as we already validated that this is a blob document
     };
 
     // Now collect all existing pieces for the blob.
@@ -182,49 +180,57 @@ async fn document_to_blob_data(
     // of the blob.
     let schema = Schema::get_system(SchemaId::BlobPiece(1)).unwrap();
     let list = RelationList::new_pinned(blob.view_id(), "pieces");
-    let pagination = Pagination {
-        first: NonZeroU64::new(MAX_BLOB_PIECES).unwrap(),
-        ..Default::default()
-    };
 
-    let args = Query::new(
-        &pagination,
-        &Select::new(&[Field::new("data")]),
+    let mut has_next_page = true;
+    let mut args = Query::new(
+        &Pagination::new(
+            &NonZeroU64::new(BLOB_QUERY_PAGE_SIZE).unwrap(),
+            None,
+            &vec![PaginationField::EndCursor, PaginationField::HasNextPage],
+        ),
+        &Select::new(&["data".into()]),
         &Filter::default(),
         &Order::default(),
     );
 
-    let (_, results) = store.query(schema, &args, Some(&list)).await?;
+    let mut buf = BytesMut::with_capacity(expected_length);
+    let mut num_pieces = 0;
 
-    // No pieces were found.
-    if results.is_empty() {
-        return Err(BlobStoreError::NoBlobPiecesFound);
-    };
+    while has_next_page {
+        let (pagination_data, documents) = store.query(schema, &args, Some(&list)).await?;
+        has_next_page = pagination_data.has_next_page;
+        args.pagination.after = pagination_data.end_cursor;
+        num_pieces += documents.len();
 
-    // Not all pieces were found.
-    if results.len() != num_pieces {
-        return Err(BlobStoreError::MissingPieces);
-    }
-
-    // Now we construct the blob data.
-    let mut blob_data = "".to_string();
-
-    for (_, blob_piece_document) in results {
-        match blob_piece_document
-            .get("data")
-            .expect("Blob piece document without \"data\" field")
-        {
-            OperationValue::String(data_str) => blob_data += data_str,
-            _ => panic!(), // We should never hit this as we only queried for blob piece documents.
+        for (_, blob_piece_document) in documents {
+            match blob_piece_document
+                .get("data")
+                .expect("Blob piece document without \"data\" field")
+            {
+                // @TODO: Use bytes here instead, see related issue:
+                // https://github.com/p2panda/aquadoggo/issues/543
+                OperationValue::String(data_str) => buf.put(data_str.as_bytes()),
+                _ => unreachable!(), // We only queried for blob piece documents
+            }
         }
     }
 
-    // Combined blob data length doesn't match the claimed length.
-    if blob_data.len() != *length as usize {
+    // No pieces were found
+    if buf.is_empty() {
+        return Err(BlobStoreError::NoBlobPiecesFound);
+    };
+
+    // Not all pieces were found
+    if expected_num_pieces != num_pieces {
+        return Err(BlobStoreError::MissingPieces);
+    }
+
+    // Combined blob data length doesn't match the claimed length
+    if expected_length != buf.len() {
         return Err(BlobStoreError::IncorrectLength);
     };
 
-    Ok(Some(blob_data.into_bytes()))
+    Ok(Some(buf.into()))
 }
 
 #[cfg(test)]
