@@ -15,7 +15,7 @@ use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{
     add_documents_from_ast, add_schemas_from_ast, parse_filter, parse_selected_fields, FieldName,
 };
-use crate::test_utils::{graphql_test_client, test_runner, TestClient, TestNode};
+use crate::test_utils::{http_test_client, test_runner, TestClient, TestNode};
 
 use super::filter_strategies::{
     application_filters_strategy, meta_field_filter_strategy, Filter, MetaField,
@@ -212,7 +212,7 @@ proptest! {
             sanity_checks(&node, &documents, &schemas).await;
 
             // Create a GraphQL client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Run the test for each schema and related documents that have been generated.
             for schema_id in schemas {
@@ -249,7 +249,7 @@ proptest! {
             sanity_checks(&node, &documents, &schemas).await;
 
             // Create a GraphQL client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Get the root schema from the provider.
             let schema = node.context.schema_provider.get(&schema_ast.id).await.expect("Schema should exist on node");

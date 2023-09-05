@@ -10,20 +10,18 @@ use axum::Router;
 use http::header::CONTENT_TYPE;
 use log::{debug, warn};
 use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
 
 use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
-use crate::http::api::{handle_graphql_playground, handle_graphql_query};
+use crate::http::api::{
+    handle_blob_document, handle_blob_view, handle_graphql_playground, handle_graphql_query,
+};
 use crate::http::context::HttpServiceContext;
 use crate::manager::{ServiceReadySender, Shutdown};
 
 /// Route to the GraphQL playground
 const GRAPHQL_ROUTE: &str = "/graphql";
-
-/// Route to the blobs static file server
-pub const BLOBS_ROUTE: &str = "/blobs";
 
 /// Build HTTP server with GraphQL API.
 pub fn build_server(http_context: HttpServiceContext) -> Router {
@@ -34,17 +32,15 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
         .allow_credentials(false)
         .allow_origin(Any);
 
-    // Construct static file server
-    let blob_service = ServeDir::new(http_context.blob_dir_path.clone());
-
     Router::new()
-        // Add blobs static file server
-        .nest_service(BLOBS_ROUTE, blob_service)
         // Add GraphQL routes
         .route(
             GRAPHQL_ROUTE,
             get(|| handle_graphql_playground(GRAPHQL_ROUTE)).post(handle_graphql_query),
         )
+        // Add blob routes
+        .route("/blobs/:document_id", get(handle_blob_document))
+        .route("/blobs/:document_id/:view_hash", get(handle_blob_view))
         // Add middlewares
         .layer(cors)
         // Add shared context
@@ -68,7 +64,11 @@ pub async fn http_service(
     let blob_dir_path = context.config.blob_dir.as_ref().expect("Base path not set");
 
     // Introduce a new context for all HTTP routes
-    let http_context = HttpServiceContext::new(graphql_schema_manager, blob_dir_path.to_owned());
+    let http_context = HttpServiceContext::new(
+        context.store.clone(),
+        graphql_schema_manager,
+        blob_dir_path.to_owned(),
+    );
 
     // Start HTTP server with given port and re-attempt with random port if it was taken already
     let builder = if let Ok(builder) = axum::Server::try_bind(&http_address) {
@@ -121,7 +121,11 @@ mod tests {
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(node.context.store.clone(), tx, schema_provider).await;
-            let context = HttpServiceContext::new(graphql_schema_manager, BLOBS_DIR_NAME.into());
+            let context = HttpServiceContext::new(
+                node.context.store.clone(),
+                graphql_schema_manager,
+                BLOBS_DIR_NAME.into(),
+            );
             let client = TestClient::new(build_server(context));
 
             let response = client

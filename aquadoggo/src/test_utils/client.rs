@@ -2,21 +2,22 @@
 
 use std::convert::TryFrom;
 use std::net::{SocketAddr, TcpListener};
+use std::time::Duration;
 
 use axum::body::HttpBody;
 use axum::BoxError;
 use http::header::{HeaderName, HeaderValue};
-use http::{Request, StatusCode};
+use http::{HeaderMap, Request, StatusCode};
 use hyper::{Body, Server};
 use tokio::sync::broadcast;
 use tower::make::Shared;
 use tower_service::Service;
 
 use crate::graphql::GraphQLSchemaManager;
-use crate::http::{build_server, HttpServiceContext, BLOBS_ROUTE};
+use crate::http::{build_server, HttpServiceContext};
 use crate::test_utils::TestNode;
 
-/// GraphQL client which can be used for querying a node in tests.
+/// HTTP client for testing request and responses.
 pub struct TestClient {
     client: reqwest::Client,
     addr: SocketAddr,
@@ -44,14 +45,14 @@ impl TestClient {
         });
 
         let client = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::default())
             .build()
             .unwrap();
 
         TestClient { client, addr }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn get(&self, url: &str) -> RequestBuilder {
         RequestBuilder {
             builder: self.client.get(format!("http://{}{}", self.addr, url)),
@@ -65,16 +66,23 @@ impl TestClient {
     }
 }
 
-/// Configures a test client that can be used for GraphQL testing.
-pub async fn graphql_test_client(node: &TestNode) -> TestClient {
+/// Configures a test client that can be used for HTTP API testing.
+pub async fn http_test_client(node: &TestNode) -> TestClient {
     let (tx, _) = broadcast::channel(120);
+
     let manager = GraphQLSchemaManager::new(
         node.context.store.clone(),
         tx,
         node.context.schema_provider.clone(),
     )
     .await;
-    let http_context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
+
+    let http_context = HttpServiceContext::new(
+        node.context.store.clone(),
+        manager,
+        node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+    );
+
     TestClient::new(build_server(http_context))
 }
 
@@ -103,7 +111,6 @@ impl RequestBuilder {
         self
     }
 
-    #[allow(dead_code)]
     pub(crate) fn header<K, V>(mut self, key: K, value: V) -> Self
     where
         HeaderName: TryFrom<K>,
@@ -121,6 +128,10 @@ pub(crate) struct TestResponse {
 }
 
 impl TestResponse {
+    pub(crate) async fn bytes(self) -> Vec<u8> {
+        self.response.bytes().await.unwrap().to_vec()
+    }
+
     pub(crate) async fn text(self) -> String {
         self.response.text().await.unwrap()
     }
@@ -132,8 +143,11 @@ impl TestResponse {
         self.response.json().await.unwrap()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn status(&self) -> StatusCode {
         self.response.status()
+    }
+
+    pub(crate) fn headers(&self) -> HeaderMap {
+        self.response.headers().clone()
     }
 }

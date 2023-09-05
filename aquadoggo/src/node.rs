@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fs;
-
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
+use tempfile::TempDir;
+use tokio::fs;
 
 use crate::bus::ServiceMessage;
-use crate::config::{Configuration, BLOBS_DIR_NAME, BLOBS_SYMLINK_DIR_NAME};
+use crate::config::{Configuration, BLOBS_DIR_NAME};
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
@@ -64,12 +64,13 @@ impl Node {
         let schema_provider =
             SchemaProvider::new(application_schema, config.allow_schema_ids.clone());
 
-        // Create tmp dirs for blob storage.
+        // Create temporary dirs for blob storage.
         //
-        // @TODO: implement configuring this path for persistent storage.
-        let tmp_dir = tempfile::TempDir::new().unwrap();
+        // @TODO: Implement configuring this path for persistent storage, see related issue:
+        // https://github.com/p2panda/aquadoggo/issues/542
+        let tmp_dir = TempDir::new().unwrap();
         let blob_dir_path = tmp_dir.path().join(BLOBS_DIR_NAME);
-        fs::create_dir_all(blob_dir_path.join(BLOBS_SYMLINK_DIR_NAME)).unwrap();
+        fs::create_dir_all(&blob_dir_path).await.unwrap();
         config.blob_dir = Some(blob_dir_path);
 
         // Create service manager with shared data between services

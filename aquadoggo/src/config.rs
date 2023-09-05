@@ -6,10 +6,8 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::network::NetworkConfiguration;
 
-/// Blobs directory
+/// Blobs directory name.
 pub const BLOBS_DIR_NAME: &str = "blobs";
-
-pub const BLOBS_SYMLINK_DIR_NAME: &str = "documents";
 
 /// Configuration object holding all important variables throughout the application.
 #[derive(Debug, Clone)]

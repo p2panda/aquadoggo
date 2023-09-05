@@ -24,7 +24,7 @@ async-graphql = { version = "5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "5.0.6"
 async-trait = "0.1.64"
 asynchronous-codec = { version = "0.6.2", features = ["cbor"] }
-axum = "0.6.10"
+axum = { version = "0.6.10", features = ["headers"] }
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 bs58 = "0.4.0"
 deadqueue = { version = "0.2.3", default-features = false, features = [
@@ -76,11 +76,12 @@ tokio = { version = "1.28.2", features = [
     "rt-multi-thread",
     "sync",
     "time",
+    "fs",
 ] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
+tokio-util = { version = "0.7.8", features = ["io"] }
 tower-http = { version = "0.4.0", default-features = false, features = [
     "cors",
-    "fs",
 ] }
 triggered = "0.1.2"
 void = "1.0.2"

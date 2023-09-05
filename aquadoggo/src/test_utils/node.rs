@@ -161,7 +161,7 @@ pub async fn add_document(
         // We only want to issue dependency tasks.
         let dependency_tasks = tasks
             .iter()
-            .filter(|task| task.worker_name() == "depenedency");
+            .filter(|task| task.worker_name() == "dependency");
 
         for task in dependency_tasks {
             dependency_task(node.context.clone(), task.input().to_owned())
@@ -334,35 +334,77 @@ pub async fn update_document(
     DocumentViewId::from(entry_signed.hash())
 }
 
-pub async fn add_blob(node: &mut TestNode, blob_data: &str, key_pair: &KeyPair) -> DocumentViewId {
-    // Publish blob pieces and blob.
-    let (blob_data_a, blob_data_b) = blob_data.split_at(blob_data.len() / 2);
-    let blob_piece_view_id_1 = add_document(
-        node,
-        &SchemaId::BlobPiece(1),
-        vec![("data", blob_data_a.into())],
-        &key_pair,
-    )
-    .await;
+/// Splits bytes into chunks with a defined maximum length (256 bytes is the specified maximum) and
+/// publishes a blob_piece_v1 document for each chunk.
+pub async fn add_blob_pieces(
+    node: &mut TestNode,
+    body: &[u8],
+    max_piece_length: usize,
+    key_pair: &KeyPair,
+) -> Vec<DocumentViewId> {
+    let blob_pieces = body.chunks(max_piece_length);
 
-    let blob_piece_view_id_2 = add_document(
-        node,
-        &SchemaId::BlobPiece(1),
-        vec![("data", blob_data_b.into())],
-        &key_pair,
-    )
-    .await;
+    let mut blob_pieces_view_ids = Vec::with_capacity(blob_pieces.len());
+    for piece in blob_pieces {
+        // @TODO: No need to convert bytes into a string when we introduced our new bytes operation
+        // field type. Related issue: https://github.com/p2panda/aquadoggo/issues/543
+        let byte_str = std::str::from_utf8(piece).expect("Invalid UTF-8 sequence");
+
+        let view_id = add_document(
+            node,
+            &SchemaId::BlobPiece(1),
+            vec![("data", byte_str.into())],
+            &key_pair,
+        )
+        .await;
+
+        blob_pieces_view_ids.push(view_id);
+    }
+
+    blob_pieces_view_ids
+}
+
+pub async fn add_blob(
+    node: &mut TestNode,
+    body: &[u8],
+    max_piece_length: usize,
+    mime_type: &str,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    let blob_pieces_view_ids = add_blob_pieces(node, body, max_piece_length, key_pair).await;
+
     let blob_view_id = add_document(
         node,
         &SchemaId::Blob(1),
         vec![
-            ("length", { blob_data.len() as i64 }.into()),
-            ("mime_type", "text/plain".into()),
-            (
-                "pieces",
-                vec![blob_piece_view_id_1, blob_piece_view_id_2].into(),
-            ),
+            ("length", { body.len() as i64 }.into()),
+            ("mime_type", mime_type.into()),
+            ("pieces", blob_pieces_view_ids.into()),
         ],
+        &key_pair,
+    )
+    .await;
+
+    blob_view_id
+}
+
+pub async fn update_blob(
+    node: &mut TestNode,
+    body: &[u8],
+    max_piece_length: usize,
+    previous: &DocumentViewId,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    let blob_pieces_view_ids = add_blob_pieces(node, body, max_piece_length, key_pair).await;
+
+    let blob_view_id = update_document(
+        node,
+        &SchemaId::Blob(1),
+        vec![
+            ("length", { body.len() as i64 }.into()),
+            ("pieces", blob_pieces_view_ids.into()),
+        ],
+        &previous,
         &key_pair,
     )
     .await;

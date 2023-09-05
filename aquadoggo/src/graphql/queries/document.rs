@@ -100,7 +100,7 @@ mod test {
     use rstest::rstest;
     use serde_json::json;
 
-    use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
+    use crate::test_utils::{add_document, add_schema, http_test_client, test_runner, TestNode};
 
     #[rstest]
     fn single_query(#[from(random_key_pair)] key_pair: KeyPair) {
@@ -137,7 +137,7 @@ mod test {
             let document_id = document.id();
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                 byViewId: {type_name}(viewId: "{view_id}") {{
@@ -213,7 +213,7 @@ mod test {
         // Test single query parameter variations.
         test_runner(move |node: TestNode| async move {
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                 view: schema_definition_v1{params} {{
@@ -269,7 +269,7 @@ mod test {
             .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                     single: {schema_id}(id: "{view_id}") {{

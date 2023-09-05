@@ -56,7 +56,7 @@ mod tests {
     use serde_json::{json, Value as JsonValue};
 
     use crate::test_utils::{
-        add_document, add_schema, add_schema_and_documents, graphql_test_client, test_runner,
+        add_document, add_schema, add_schema_and_documents, http_test_client, test_runner,
         TestClient, TestNode,
     };
 
@@ -594,7 +594,7 @@ mod tests {
             .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                 collection: all_{type_name}{query_args} {{
@@ -697,7 +697,7 @@ mod tests {
             .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                     collection: all_{type_name} {{
@@ -742,7 +742,7 @@ mod tests {
             add_document(&mut node, schema.id(), document_values, &key_pair).await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                     collection: all_{type_name} {{
@@ -852,7 +852,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Perform a paginated collection query for the songs.
             query_songs(&client, song_schema.id(), &song_args, &lyric_args).await;
@@ -870,7 +870,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Perform a paginated collection query for the songs on the node identified by the
             // schema id. We don't pass any arguments and so will get up to the default number of
@@ -1103,7 +1103,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             let data = query_songs(&client, song_schema.id(), "(first: 4)", "").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);
@@ -1144,7 +1144,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             let data = query_songs_meta_fields_only(&client, song_schema.id(), "(first: 4)").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);

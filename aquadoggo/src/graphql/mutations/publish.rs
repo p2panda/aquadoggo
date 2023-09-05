@@ -125,9 +125,9 @@ mod tests {
 
     use crate::bus::ServiceMessage;
     use crate::graphql::GraphQLSchemaManager;
-    use crate::http::{HttpServiceContext, BLOBS_ROUTE};
+    use crate::http::HttpServiceContext;
     use crate::test_utils::{
-        add_schema, doggo_fields, doggo_schema, graphql_test_client, populate_and_materialize,
+        add_schema, doggo_fields, doggo_schema, http_test_client, populate_and_materialize,
         populate_store_config, test_runner, TestNode,
     };
 
@@ -237,7 +237,11 @@ mod tests {
                 node.context.schema_provider.clone(),
             )
             .await;
-            let context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
+            let context = HttpServiceContext::new(
+                node.context.store.clone(),
+                manager,
+                node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+            );
 
             let response = context.schema.execute(publish_request).await;
 
@@ -298,7 +302,11 @@ mod tests {
                 node.context.schema_provider.clone(),
             )
             .await;
-            let context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
+            let context = HttpServiceContext::new(
+                node.context.store.clone(),
+                manager,
+                node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+            );
 
             let response = context
                 .schema
@@ -326,7 +334,11 @@ mod tests {
                 node.context.schema_provider.clone(),
             )
             .await;
-            let context = HttpServiceContext::new(manager, BLOBS_ROUTE.into());
+            let context = HttpServiceContext::new(
+                node.context.store.clone(),
+                manager,
+                node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+            );
 
             context.schema.execute(publish_request).await;
 
@@ -354,7 +366,7 @@ mod tests {
             populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             let response = client
                 .post("/graphql")
@@ -573,7 +585,7 @@ mod tests {
             populate_and_materialize(&mut node, &config).await;
 
             // Init the test client
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Prepare the GQL publish request
             let publish_request = publish_request(&entry_encoded, &encoded_operation);
@@ -701,7 +713,7 @@ mod tests {
             populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             let publish_request = publish_request(&entry_encoded, &encoded_operation);
 
@@ -736,7 +748,7 @@ mod tests {
             populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Two key pairs representing two different authors
             let key_pairs = vec![KeyPair::new(), KeyPair::new()];
@@ -828,7 +840,7 @@ mod tests {
             populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Get the one entry from the store.
             let entries = node
@@ -871,7 +883,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Init the test client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Prepare a publish entry request for the entry.
             let publish_entry = publish_request(
