@@ -167,6 +167,7 @@ dependencies = [
  "axum",
  "bamboo-rs-core-ed25519-yasmf",
  "bs58 0.4.0",
+ "bytes",
  "ciborium",
  "ctor",
  "deadqueue",
