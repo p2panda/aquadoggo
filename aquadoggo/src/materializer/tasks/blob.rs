@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use anyhow::anyhow;
 use futures::{pin_mut, StreamExt};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
@@ -70,18 +71,18 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .get_blob_by_view_id(blob_document.view_id())
             .await
             // We don't raise a critical error here, as it is possible that this method returns an
-            // error.
+            // error
             .map_err(|err| TaskError::Failure(err.to_string()))?
             .expect("Blob data exists at this point");
 
-        // Compose, and when needed create, the path for the blob file.
+        // Compose, and when needed create, the path for the blob file
         let base_path = match &context.config.blob_dir {
             Some(base_path) => base_path,
             None => return Err(TaskError::Critical("No base path configured".to_string())),
         };
         let blob_view_path = base_path.join(blob_document.view_id().to_string());
 
-        // Write the blob to the filesystem.
+        // Write the blob to the filesystem
         info!("Creating blob at path {}", blob_view_path.display());
 
         let mut file = File::create(&blob_view_path).await.map_err(|err| {
@@ -97,21 +98,16 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
         while let Some(value) = stream.next().await {
             match value {
-                Ok(buf) => {
-                    file.write(&buf).await.map_err(|err| {
-                        TaskError::Critical(format!(
-                            "Could not write blob file @ {}: {}",
-                            blob_view_path.display(),
-                            err
-                        ))
-                    })?;
-                }
-                Err(err) => Err(TaskError::Critical(format!(
-                    "Failed blob stream when writing @ {}: {}",
+                Ok(buf) => file.write(&buf).await.map_err(|err| anyhow!(err)),
+                Err(err) => Err(anyhow!(err)),
+            }
+            .map_err(|err| {
+                TaskError::Critical(format!(
+                    "Could not write blob file @ {}: {}",
                     blob_view_path.display(),
                     err
-                )))?,
-            }
+                ))
+            })?;
         }
     }
 
