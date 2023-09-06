@@ -97,9 +97,11 @@ fn show_warnings(config: &Configuration, is_temporary_blobs_path: bool) {
     }
 
     if config.database_url != "sqlite::memory:" && is_temporary_blobs_path {
-        warn!("Your database is persisted but blobs _are not_ which might result in unrecoverable
+        warn!(
+            "Your database is persisted but blobs _are not_ which might result in unrecoverable
         data inconsistency (blob operations are stored but the files themselves are _not_). It is
         recommended to either set both values (`database_url` and `blobs_base_path`) to an
-        temporary value or set both to persist all data.");
+        temporary value or set both to persist all data."
+        );
     }
 }
