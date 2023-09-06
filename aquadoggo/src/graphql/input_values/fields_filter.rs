@@ -10,7 +10,9 @@ use async_graphql::dynamic::{InputObject, InputValue, TypeRef};
 use dynamic_graphql::InputObject;
 use p2panda_rs::schema::{FieldType, Schema};
 
-use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar, PublicKeyScalar};
+use crate::graphql::scalars::{
+    DocumentIdScalar, DocumentViewIdScalar, HexBytesScalar, PublicKeyScalar,
+};
 use crate::graphql::utils::filter_name;
 
 /// Build a filter input object for a p2panda schema. It can be used to filter collection queries
@@ -42,6 +44,10 @@ pub fn build_filter_input_object(schema: &Schema) -> InputObject {
                 filter_input =
                     filter_input.field(InputValue::new(name, TypeRef::named("StringFilter")));
             }
+            FieldType::Bytes => {
+                filter_input =
+                    filter_input.field(InputValue::new(name, TypeRef::named("HexBytesFilter")));
+            }
             FieldType::Relation(_) => {
                 filter_input =
                     filter_input.field(InputValue::new(name, TypeRef::named("RelationFilter")));
@@ -62,7 +68,6 @@ pub fn build_filter_input_object(schema: &Schema) -> InputObject {
                     TypeRef::named("PinnedRelationListFilter"),
                 ));
             }
-            FieldType::Bytes => todo!(),
         };
     }
 
@@ -170,6 +175,19 @@ pub struct StringFilter {
     /// Filter for items which don't contain given value.
     #[graphql(name = "notContains")]
     not_contains: Option<String>,
+}
+
+/// A filter input type for bytes field values.
+#[derive(InputObject)]
+#[allow(dead_code)]
+pub struct HexBytesFilter {
+    /// Filter by equal to.
+    #[graphql(name = "eq")]
+    eq: Option<HexBytesScalar>,
+
+    /// Filter by not equal to.
+    #[graphql(name = "notEq")]
+    not_eq: Option<HexBytesScalar>,
 }
 
 /// A filter input type for integer field values.
