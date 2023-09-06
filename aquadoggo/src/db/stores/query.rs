@@ -1004,9 +1004,10 @@ fn select_fields_sql(fields: &ApplicationFields) -> Vec<Option<String>> {
     let mut select = Vec::new();
 
     if !fields.is_empty() {
-        // We get the application data by selecting the name, value and type
+        // We get the application data by selecting the name, value, data and type
         select.push(Some("operation_fields_v1.name".to_string()));
         select.push(Some("operation_fields_v1.value".to_string()));
+        select.push(Some("operation_fields_v1.data".to_string()));
         select.push(Some("operation_fields_v1.field_type".to_string()));
     }
 
