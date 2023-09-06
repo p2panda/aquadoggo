@@ -65,7 +65,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
     // Materialize all updated blobs to the filesystem.
     for blob_document in updated_blobs.iter() {
-        // Get the raw blob data
+        // Get a stream of raw blob data
         let mut blob_stream = context
             .store
             .get_blob_by_view_id(blob_document.view_id())
@@ -75,7 +75,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .map_err(|err| TaskError::Failure(err.to_string()))?
             .expect("Blob data exists at this point");
 
-        // Compose, and when needed create, the path for the blob file
+        // Determine a path for this blob file on the file system
         let blob_view_path = context
             .config
             .blobs_base_path
@@ -97,6 +97,8 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                 ))
             })?;
 
+        // Read from the stream, chunk by chunk, and write every part to the file. This should put
+        // less pressure on our systems memory and allow writing large blob files
         let stream = blob_stream.read_all();
         pin_mut!(stream);
 

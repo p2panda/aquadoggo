@@ -23,6 +23,15 @@ const BLOB_QUERY_PAGE_SIZE: u64 = 10;
 
 pub type BlobData = Vec<u8>;
 
+/// Gets blob data from the database in chunks (via pagination) and populates a stream with it.
+///
+/// This stream can then be further used to move data into a file etc. which helps dealing with
+/// large blobs which should not occupy the systems memory. We only move small chunks at a time and
+/// keep the memory-footprint managable.
+///
+/// Currently the BLOB_QUERY_PAGE_SIZE is set to 10 which would be the multiplier of the
+/// MAX_BLOB_PIECE_LENGTH. With 10 * 256kb we would occupy an approximate maximum of 2.56mb memory
+/// at a time.
 #[derive(Debug)]
 pub struct BlobStream {
     store: SqlStore,
@@ -102,6 +111,8 @@ impl BlobStream {
         Ok(buf.to_vec())
     }
 
+    /// This method is called _after_ the stream has ended. We compare the values with what we've
+    /// expected and find inconsistencies and invalid blobs.
     fn validate(&self) -> Result<(), BlobStoreError> {
         // No pieces were found
         if self.length == 0 {
@@ -121,6 +132,14 @@ impl BlobStream {
         Ok(())
     }
 
+    /// Establishes a data stream of blob data.
+    ///
+    /// The stream ends when all data has been written, at the end the blob data gets validated
+    /// against the expected blob length.
+    ///
+    /// To consume this stream in form of an iterator it is required to use the `pin_mut` macro.
+    // NOTE: Clippy does not understand that this macro generates code which asks for an explicit
+    // lifetime.
     #[allow(clippy::needless_lifetimes)]
     pub fn read_all<'a>(&'a mut self) -> impl Stream<Item = Result<BlobData, BlobStoreError>> + 'a {
         try_stream! {
@@ -139,7 +158,7 @@ impl BlobStream {
 }
 
 impl SqlStore {
-    /// Get the data for one blob from the store, identified by it's document id.
+    /// Get data stream for one blob from the store, identified by it's document id.
     pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobStream>, BlobStoreError> {
         if let Some(document) = self.get_document(id).await? {
             Ok(Some(BlobStream::new(self, document)?))
@@ -148,7 +167,7 @@ impl SqlStore {
         }
     }
 
-    /// Get the data for one blob from the store, identified by its document view id.
+    /// Get data stream for one blob from the store, identified by its document view id.
     pub async fn get_blob_by_view_id(
         &self,
         view_id: &DocumentViewId,
