@@ -3117,7 +3117,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 [[package]]
 name = "p2panda-rs"
 version = "0.7.1"
-source = "git+https://github.com/p2panda/p2panda?rev=8377056617b64e898e9980e8ad84d258ca0442a1#8377056617b64e898e9980e8ad84d258ca0442a1"
+source = "git+https://github.com/p2panda/p2panda?rev=a3267adb742fce6d1e149a6380d1cbe24b147aab#a3267adb742fce6d1e149a6380d1cbe24b147aab"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
@@ -4088,9 +4088,9 @@ dependencies = [
 
 [[package]]
 name = "serde-wasm-bindgen"
-version = "0.4.5"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3b4c031cd0d9014307d82b8abf653c0290fbdaeb4c02d00c63cf52f728628bf"
+checksum = "f3b143e2833c57ab9ad3ea280d21fd34e285a42837aeb0ee301f4f41890fa00e"
 dependencies = [
  "js-sys",
  "serde",
