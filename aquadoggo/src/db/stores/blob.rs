@@ -23,15 +23,16 @@ const BLOB_QUERY_PAGE_SIZE: u64 = 10;
 
 pub type BlobData = Vec<u8>;
 
-/// Gets blob data from the database in chunks (via pagination) and populates a stream with it.
+/// Gets blob data from the database in chunks (via pagination) and populates a readable stream
+/// with it.
 ///
-/// This stream can then be further used to move data into a file etc. which helps dealing with
-/// large blobs which should not occupy the systems memory. We only move small chunks at a time and
-/// keep the memory-footprint managable.
+/// This stream can further be used to write data into a file etc. This helps dealing with large
+/// blobs as only little system memory is occupied per reading and writing step. We only move small
+/// chunks at a time and keep the memory-footprint managable.
 ///
-/// Currently the BLOB_QUERY_PAGE_SIZE is set to 10 which would be the multiplier of the
-/// MAX_BLOB_PIECE_LENGTH. With 10 * 256kb we would occupy an approximate maximum of 2.56mb memory
-/// at a time.
+/// Currently the BLOB_QUERY_PAGE_SIZE is set to 10 which is the multiplier of the
+/// MAX_BLOB_PIECE_LENGTH. With 10 * 256kb we occupy an approximate maximum of 2.56mb memory at a
+/// time. If these values make sense needs to be re-visited, but it is a start!
 #[derive(Debug)]
 pub struct BlobStream {
     store: SqlStore,
