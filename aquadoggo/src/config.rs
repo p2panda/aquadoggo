@@ -6,9 +6,6 @@ use p2panda_rs::schema::SchemaId;
 
 use crate::network::NetworkConfiguration;
 
-/// Blobs directory name.
-pub const BLOBS_DIR_NAME: &str = "blobs";
-
 /// Configuration object holding all important variables throughout the application.
 #[derive(Debug, Clone)]
 pub struct Configuration {
@@ -26,9 +23,6 @@ pub struct Configuration {
     /// _not_ recommended for production settings.
     pub allow_schema_ids: AllowList<SchemaId>,
 
-    /// Path to blobs directory.
-    pub blob_dir: Option<PathBuf>,
-
     /// URL / connection string to PostgreSQL or SQLite database.
     pub database_url: String,
 
@@ -43,6 +37,12 @@ pub struct Configuration {
     /// http://localhost:2020/graphql). This API is used for client-node communication. Defaults to
     /// 2020.
     pub http_port: u16,
+
+    /// Path to folder where blobs (binary files) are kept and served from.
+    ///
+    /// **Warning**: When set to a temporary directory, make sure that also the database itself is
+    /// not persisted, otherwise you will run into data inconsistencies.
+    pub blobs_base_path: PathBuf,
 
     /// Number of concurrent workers which defines the maximum of materialization tasks which can
     /// be worked on simultaneously.
@@ -59,10 +59,10 @@ impl Default for Configuration {
     fn default() -> Self {
         Self {
             allow_schema_ids: AllowList::Wildcard,
-            blob_dir: None,
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
             http_port: 2020,
+            blobs_base_path: PathBuf::new(),
             worker_pool_size: 16,
             network: NetworkConfiguration::default(),
         }

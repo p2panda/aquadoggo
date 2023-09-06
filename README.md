@@ -213,7 +213,7 @@ If you are not working with Rust you can create FFI bindings from the `aquadoggo
 
 As an application developer the interface to `aquadoggo` you are likely to use the most is the GraphQL query API. For whichever schema your node supports a custom query api is generated, you use this to fetch data into your app. Results from a collection query can be paginated, filtered.
 
-Fetch one "mushroom" by it's id, returning values for only the selected fields:
+Fetch one "mushroom" by its id, returning values for only the selected fields:
 ```graphql
 {
   mushroom: mushroom_0020c3accb0b0c8822ecc0309190e23de5f7f6c82f660ce08023a1d74e055a3d7c4d(

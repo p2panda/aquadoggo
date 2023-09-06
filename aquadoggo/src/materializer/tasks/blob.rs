@@ -65,7 +65,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
     // Materialize all updated blobs to the filesystem.
     for blob_document in updated_blobs.iter() {
-        // Get the raw blob data as a stream
+        // Get the raw blob data
         let mut blob_stream = context
             .store
             .get_blob_by_view_id(blob_document.view_id())
@@ -76,11 +76,10 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .expect("Blob data exists at this point");
 
         // Compose, and when needed create, the path for the blob file
-        let base_path = match &context.config.blob_dir {
-            Some(base_path) => base_path,
-            None => return Err(TaskError::Critical("No base path configured".to_string())),
-        };
-        let blob_view_path = base_path.join(blob_document.view_id().to_string());
+        let blob_view_path = context
+            .config
+            .blobs_base_path
+            .join(blob_document.view_id().to_string());
 
         // Write the blob to the filesystem
         info!("Creating blob at path {}", blob_view_path.display());
@@ -186,7 +185,7 @@ mod tests {
             assert!(result.unwrap().is_none());
 
             // Construct the expected path to the blob view file
-            let base_path = node.context.config.blob_dir.as_ref().unwrap();
+            let base_path = &node.context.config.blobs_base_path;
             let blob_path = base_path.join(blob_view_id.to_string());
 
             // Read from this file

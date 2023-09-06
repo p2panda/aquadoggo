@@ -69,7 +69,6 @@ sqlx = { version = "0.6.1", features = [
     "sqlite",
     "runtime-tokio-rustls",
 ] }
-tempfile = "3.7.0"
 thiserror = "1.0.39"
 tokio = { version = "1.28.2", features = [
     "macros",
@@ -113,5 +112,6 @@ rstest = "0.15.0"
 rstest_reuse = "0.3.0"
 serde_bytes = "0.11.12"
 serde_json = "1.0.85"
+tempfile = "3.7.0"
 tower = "0.4.13"
 tower-service = "0.3.2"

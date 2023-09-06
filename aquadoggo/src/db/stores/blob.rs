@@ -148,7 +148,7 @@ impl SqlStore {
         }
     }
 
-    /// Get the data for one blob from the store, identified by it's document view id.
+    /// Get the data for one blob from the store, identified by its document view id.
     pub async fn get_blob_by_view_id(
         &self,
         view_id: &DocumentViewId,
@@ -168,7 +168,7 @@ impl SqlStore {
 
         // If there are no documents referring to the blob then we continue with the purge.
         if blob_reverse_relations.is_empty() {
-            // Collect the document view ids of all pieces this blob has ever referred to in it's
+            // Collect the document view ids of all pieces this blob has ever referred to in its
             // `pieces`
             let blob_piece_ids: Vec<String> = query_scalar(
                 "

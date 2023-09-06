@@ -743,7 +743,7 @@ mod tests {
                 .unwrap();
 
             // We expect Peer B to drop the incoming request from Peer A and simply wait for a
-            // response from it's original request.
+            // response from its original request
             assert_eq!(result.messages.len(), 0);
 
             // Peer A has two sessions running: The one initiated by Peer B and the one it
@@ -943,7 +943,7 @@ mod tests {
             let response = result.unwrap();
 
             // We expect Peer B to drop the incoming request from Peer A and simply wait
-            // for a response from it's original request.
+            // for a response from its original request
             assert_eq!(response.messages.len(), 0);
 
             // Both peers have exactly one session running.
