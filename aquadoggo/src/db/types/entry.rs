@@ -9,9 +9,9 @@ use p2panda_rs::operation::EncodedOperation;
 
 use crate::db::models::EntryRow;
 
-/// A signed entry and it's encoded operation. Entries are the lowest level data type on the
-/// p2panda network, they are signed by authors and form bamboo append only logs. The operation is
-/// an entries' payload, it contains the data mutations which authors publish.
+/// A signed entry and its encoded operation. Entries are the lowest level data type on the p2panda
+/// network, they are signed by authors and form bamboo append only logs. The operation is an
+/// entries' payload, it contains the data mutations which authors publish.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StorageEntry {
     /// PublicKey of this entry.

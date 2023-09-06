@@ -223,7 +223,7 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                     .map_err(|err| TaskError::Critical(err.to_string()))?;
             }
 
-            // Insert this document into storage. If it already existed, this will update it's
+            // Insert this document into storage. If it already existed, this will update its
             // current view
             context
                 .store
@@ -453,7 +453,7 @@ mod tests {
                 .unwrap()
                 .sorted();
 
-            // Reduce document to it's current view and insert into database
+            // Reduce document to its current view and insert into database
             let input = TaskInput::DocumentId(document_id.clone());
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
@@ -585,11 +585,11 @@ mod tests {
     ) {
         // Prepare empty database.
         test_runner(move |node: TestNode| async move {
-            // Dispatch a reduce task for a document which doesn't exist by it's document id.
+            // Dispatch a reduce task for a document which doesn't exist by its document id
             let input = TaskInput::DocumentId(document_id);
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
 
-            // Dispatch a reduce task for a document which doesn't exist by it's document view id.
+            // Dispatch a reduce task for a document which doesn't exist by its document view id
             let input = TaskInput::DocumentViewId(document_view_id);
             assert!(reduce_task(node.context.clone(), input).await.is_ok());
         });

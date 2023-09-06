@@ -38,7 +38,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             let mut all_effected_child_relations = vec![];
             let mut deleted_views_count = 0;
             for document_view_id in &all_document_view_ids {
-                // Check if this is the current view of it's document. This will still return true
+                // Check if this is the current view of its document. This will still return true
                 // if the document in question is deleted.
                 let is_current_view = context
                     .store
@@ -90,8 +90,8 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                     .expect("Operation exists in store");
 
                 if let SchemaId::Blob(_) = operation.schema_id() {
-                    // Purge the blob and all it's pieces. This only succeeds if no document
-                    // refers to the blob document by either a relation or pinned relation.
+                    // Purge the blob and all its pieces. This only succeeds if no document refers
+                    // to the blob document by either a relation or pinned relation.
                     context
                         .store
                         .purge_blob(&document_id)

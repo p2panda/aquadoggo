@@ -60,7 +60,7 @@ pub async fn handle_blob_document(
         return Err(BlobHttpError::NotFound);
     }
 
-    respond_with_blob(if_none_match, context.blob_dir_path, document).await
+    respond_with_blob(if_none_match, context.blobs_base_path, document).await
 }
 
 /// Handle requests for a blob document view served via HTTP.
@@ -87,7 +87,7 @@ pub async fn handle_blob_view(
         return Err(BlobHttpError::NotFound);
     }
 
-    respond_with_blob(if_none_match, context.blob_dir_path, document).await
+    respond_with_blob(if_none_match, context.blobs_base_path, document).await
 }
 
 /// Returns HTTP response with the contents, ETag and given MIME type of a blob.
@@ -95,7 +95,7 @@ pub async fn handle_blob_view(
 /// Supports basic caching by handling "IfNoneMatch" headers matching the latest ETag.
 async fn respond_with_blob(
     if_none_match: IfNoneMatch,
-    blob_dir_path: PathBuf,
+    blobs_base_path: PathBuf,
     document: impl AsDocument,
 ) -> Result<Response, BlobHttpError> {
     let view_id = document.view_id();
@@ -120,7 +120,7 @@ async fn respond_with_blob(
     }?;
 
     // Get body from read-stream of stored file on file system
-    let mut file_path = blob_dir_path;
+    let mut file_path = blobs_base_path;
     file_path.push(format!("{view_id}"));
     match File::open(&file_path).await {
         Ok(file) => {

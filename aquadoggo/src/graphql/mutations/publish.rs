@@ -240,7 +240,7 @@ mod tests {
             let context = HttpServiceContext::new(
                 node.context.store.clone(),
                 manager,
-                node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+                node.context.config.blobs_base_path.to_path_buf(),
             );
 
             let response = context.schema.execute(publish_request).await;
@@ -305,7 +305,7 @@ mod tests {
             let context = HttpServiceContext::new(
                 node.context.store.clone(),
                 manager,
-                node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+                node.context.config.blobs_base_path.to_path_buf(),
             );
 
             let response = context
@@ -337,7 +337,7 @@ mod tests {
             let context = HttpServiceContext::new(
                 node.context.store.clone(),
                 manager,
-                node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+                node.context.config.blobs_base_path.to_path_buf(),
             );
 
             context.schema.execute(publish_request).await;

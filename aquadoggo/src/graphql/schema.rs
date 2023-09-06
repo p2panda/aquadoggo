@@ -111,7 +111,7 @@ pub async fn build_root_schema(
             .register(filter_input);
 
         // Add a query for each schema. It offers an interface to retrieve a single document of
-        // this schema by it's document id or view id. Its resolver parses and validates the passed
+        // this schema by its document id or view id. Its resolver parses and validates the passed
         // parameters, then forwards them up to the children query fields
         root_query = build_document_query(root_query, &schema);
 

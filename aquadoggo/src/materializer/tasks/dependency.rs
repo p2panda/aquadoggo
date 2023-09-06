@@ -894,7 +894,7 @@ mod tests {
             assert_eq!(tasks[0].worker_name(), &String::from("dependency"));
 
             // 2. The "dependency" task will try to resolve the pinned document view pointing at
-            //    the "post" document in it's version 2
+            //    the "post" document in its version 2
             let tasks = dependency_task(node_b.context.clone(), tasks[0].input().clone())
                 .await
                 .unwrap();
