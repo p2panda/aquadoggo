@@ -8,7 +8,7 @@ use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
-use tokio::fs::File;
+use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
 use crate::context::Context;
@@ -84,13 +84,18 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         // Write the blob to the filesystem
         info!("Creating blob at path {}", blob_view_path.display());
 
-        let mut file = File::create(&blob_view_path).await.map_err(|err| {
-            TaskError::Critical(format!(
-                "Could not create blob file @ {}: {}",
-                blob_view_path.display(),
-                err
-            ))
-        })?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&blob_view_path)
+            .await
+            .map_err(|err| {
+                TaskError::Critical(format!(
+                    "Could not create blob file @ {}: {}",
+                    blob_view_path.display(),
+                    err
+                ))
+            })?;
 
         let stream = blob_stream.read_all();
         pin_mut!(stream);
