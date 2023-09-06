@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add method to store for pruning document views [#491](https://github.com/p2panda/aquadoggo/pull/491)
 - Introduce `BlobStore` [#484](https://github.com/p2panda/aquadoggo/pull/484)
 - Task for automatic garbage collection of unused documents and views [#500](https://github.com/p2panda/aquadoggo/pull/500)
+- Blobs directory configuration [#549](https://github.com/p2panda/aquadoggo/pull/549)
 
 ### Changed
 
