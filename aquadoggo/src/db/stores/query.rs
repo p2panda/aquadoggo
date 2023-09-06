@@ -300,6 +300,7 @@ fn bind_arg(value: &OperationValue) -> Vec<BindArgument> {
             .iter()
             .map(|view_id| BindArgument::String(view_id.to_string()))
             .collect(),
+        OperationValue::Bytes(_) => todo!(),
     }
 }
 
@@ -1448,6 +1449,7 @@ fn convert_rows(
             list_index: 0,
             field_type: row.field_type,
             value: row.value,
+            data: row.data,
         });
     }
 
@@ -2522,6 +2524,7 @@ mod tests {
                 value: Some("panda".to_string()),
                 field_type: "str".to_string(),
                 list_index: 0,
+                data: None,
             },
             QueryRow {
                 document_id: first_document_hash.clone(),
@@ -2536,6 +2539,7 @@ mod tests {
                 value: Some("false".to_string()),
                 field_type: "bool".to_string(),
                 list_index: 0,
+                data: None,
             },
             // Second document
             // ===============
@@ -2552,6 +2556,7 @@ mod tests {
                 value: Some("penguin".to_string()),
                 field_type: "str".to_string(),
                 list_index: 0,
+                data: None,
             },
             QueryRow {
                 document_id: second_document_hash.clone(),
@@ -2566,6 +2571,7 @@ mod tests {
                 value: Some("true".to_string()),
                 field_type: "bool".to_string(),
                 list_index: 0,
+                data: None,
             },
         ];
 

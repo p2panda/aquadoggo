@@ -62,6 +62,7 @@ pub fn build_filter_input_object(schema: &Schema) -> InputObject {
                     TypeRef::named("PinnedRelationListFilter"),
                 ));
             }
+            FieldType::Bytes => todo!(),
         };
     }
 

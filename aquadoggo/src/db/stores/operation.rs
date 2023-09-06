@@ -13,7 +13,7 @@ use p2panda_rs::storage_provider::error::OperationStorageError;
 use p2panda_rs::storage_provider::traits::OperationStore;
 use sqlx::{query, query_as, query_scalar, Any};
 
-use crate::db::models::utils::{parse_operation_rows, parse_value_to_string_vec};
+use crate::db::models::utils::{parse_operation_rows, parse_operation_value_to_db_value, DBValue};
 use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
 use crate::db::types::StorageOperation;
 use crate::db::SqlStore;
@@ -98,6 +98,7 @@ impl OperationStore for SqlStore {
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,
+                operation_fields_v1.data,
                 operation_fields_v1.list_index
             FROM
                 operations_v1
@@ -137,6 +138,7 @@ impl OperationStore for SqlStore {
                 operation_fields_v1.name,
                 operation_fields_v1.field_type,
                 operation_fields_v1.value,
+                operation_fields_v1.data,
                 operation_fields_v1.list_index
             FROM
                 operations_v1
@@ -181,6 +183,7 @@ impl OperationStore for SqlStore {
                     operation_fields_v1.name,
                     operation_fields_v1.field_type,
                     operation_fields_v1.value,
+                    operation_fields_v1.data,
                     operation_fields_v1.list_index
                 FROM
                     operations_v1
@@ -327,10 +330,24 @@ impl SqlStore {
                 // field row for every item in the list. Here we collect these items and return
                 // them in a vector. If this operation value is anything except for the above list
                 // types, we will return a vec containing a single item.
-                let db_values = parse_value_to_string_vec(value);
+                let db_values = parse_operation_value_to_db_value(value);
 
                 for (index, db_value) in db_values.into_iter().enumerate() {
                     let cursor = OperationCursor::new(index, name, id);
+                    
+                    // Separate out `Bytes` values as these go into their own column.
+                    let mut string_value = None;
+                    let mut data_value = None;
+                    if let Some(db_value) = db_value {
+                        match db_value {
+                            DBValue::String(value) => {
+                                string_value = Some(value);
+                            }
+                            DBValue::Blob(data) => {
+                                data_value = Some(data);
+                            }
+                        }
+                    }
 
                     let result = query(
                         "
@@ -340,17 +357,19 @@ impl SqlStore {
                                 name,
                                 field_type,
                                 value,
+                                data,
                                 list_index,
                                 cursor
                             )
                         VALUES
-                            ($1, $2, $3, $4, $5, $6)
+                            ($1, $2, $3, $4, $5, $6, $7)
                         ",
                     )
                     .bind(id.as_str().to_owned())
                     .bind(name.to_owned())
                     .bind(value.field_type().to_string())
-                    .bind(db_value)
+                    .bind(string_value)
+                    .bind(data_value)
                     .bind(index as i32)
                     .bind(cursor.to_string())
                     .execute(&mut tx)
@@ -465,7 +484,7 @@ mod tests {
                 .store
                 .insert_operation(&operation_id, &public_key, &operation, &document_id)
                 .await;
-            assert!(result.is_ok());
+            assert!(result.is_ok(), "{:#?}", result);
 
             // Request the previously inserted operation by its id.
             let returned_operation = node

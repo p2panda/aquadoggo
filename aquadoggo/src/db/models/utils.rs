@@ -56,6 +56,9 @@ pub fn parse_operation_rows(
             // Below we safely unwrap all values which are _not_ part of a relation list
             let field_value = row.value.as_ref();
 
+            // For `Bytes` type then the value is stored as binary data in the "data" field
+            let field_data = row.data.as_ref();
+
             match field_type {
                 "bool" => {
                     operation_fields.push((
@@ -79,6 +82,12 @@ pub fn parse_operation_rows(
                     operation_fields.push((
                         field_name.to_string(),
                         OperationValue::String(field_value.unwrap().clone()),
+                    ));
+                }
+                "bytes" => {
+                    operation_fields.push((
+                        field_name.to_string(),
+                        OperationValue::Bytes(field_data.unwrap().clone()),
                     ));
                 }
                 "relation" => {
@@ -195,20 +204,44 @@ pub fn parse_operation_rows(
     Some(operation)
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum DBValue {
+    String(String),
+    Blob(Vec<u8>),
+}
+
+impl<T: ToString> From<&T> for DBValue {
+    fn from(value: &T) -> Self {
+        DBValue::String(value.to_string())
+    }
+}
+
+impl From<&str> for DBValue {
+    fn from(value: &str) -> Self {
+        DBValue::String(value.to_string())
+    }
+}
+
+impl From<Vec<u8>> for DBValue {
+    fn from(value: Vec<u8>) -> Self {
+        DBValue::Blob(value.to_vec())
+    }
+}
+
 /// Takes a single `OperationValue` and parses it into a vector of string values.
 ///
 /// OperationValues are inserted into the database as strings. If a value is a list type
 /// (`RelationList` & `PinnedRelationList`) we insert one row for each value. This method
 /// transforms a single operation into a list of string values, if the is not a list, it will only
 /// contain a single item.
-pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<Option<String>> {
+pub fn parse_operation_value_to_db_value(value: &OperationValue) -> Vec<Option<DBValue>> {
     match value {
-        OperationValue::Boolean(bool) => vec![Some(bool.to_string())],
-        OperationValue::Integer(int) => vec![Some(int.to_string())],
-        OperationValue::Float(float) => vec![Some(float.to_string())],
-        OperationValue::String(str) => vec![Some(str.to_string())],
+        OperationValue::Boolean(bool) => vec![Some(bool.into())],
+        OperationValue::Integer(int) => vec![Some(int.into())],
+        OperationValue::Float(float) => vec![Some(float.into())],
+        OperationValue::String(str) => vec![Some(str.into())],
         OperationValue::Relation(relation) => {
-            vec![Some(relation.document_id().as_str().to_string())]
+            vec![Some(relation.document_id().into())]
         }
         OperationValue::RelationList(relation_list) => {
             let mut db_values = Vec::new();
@@ -216,13 +249,13 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<Option<String>> 
                 db_values.push(None);
             } else {
                 for document_id in relation_list.iter() {
-                    db_values.push(Some(document_id.to_string()))
+                    db_values.push(Some(document_id.into()))
                 }
             }
             db_values
         }
         OperationValue::PinnedRelation(pinned_relation) => {
-            vec![Some(pinned_relation.view_id().to_string())]
+            vec![Some(pinned_relation.view_id().into())]
         }
         OperationValue::PinnedRelationList(pinned_relation_list) => {
             let mut db_values = Vec::new();
@@ -230,10 +263,13 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<Option<String>> 
                 db_values.push(None);
             } else {
                 for document_view_id in pinned_relation_list.iter() {
-                    db_values.push(Some(document_view_id.to_string()))
+                    db_values.push(Some(document_view_id.into()))
                 }
             }
             db_values
+        }
+        OperationValue::Bytes(bytes) => {
+            vec![Some(bytes.to_owned().into())]
         }
     }
 }
@@ -297,6 +333,15 @@ pub fn parse_document_view_field_rows(
                     DocumentViewValue::new(
                         &row.operation_id.parse::<OperationId>().unwrap(),
                         &OperationValue::String(row.value.as_ref().unwrap().clone()),
+                    ),
+                );
+            }
+            "bytes" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Bytes(row.data.as_ref().unwrap().clone()),
                     ),
                 );
             }
@@ -408,10 +453,13 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{create_operation, schema_id};
     use rstest::rstest;
 
+    use crate::db::models::utils::DBValue;
     use crate::db::models::{DocumentViewFieldRow, OperationFieldsJoinedRow};
     use crate::test_utils::doggo_fields;
 
-    use super::{parse_document_view_field_rows, parse_operation_rows, parse_value_to_string_vec};
+    use super::{
+        parse_document_view_field_rows, parse_operation_rows, parse_operation_value_to_db_value,
+    };
 
     #[test]
     fn parses_operation_rows() {
@@ -432,6 +480,7 @@ mod tests {
                 name: Some("age".to_string()),
                 field_type: Some("int".to_string()),
                 value: Some("28".to_string()),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -451,6 +500,7 @@ mod tests {
                 name: Some("height".to_string()),
                 field_type: Some("float".to_string()),
                 value: Some("3.5".to_string()),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -470,6 +520,7 @@ mod tests {
                 name: Some("is_admin".to_string()),
                 field_type: Some("bool".to_string()),
                 value: Some("false".to_string()),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -492,6 +543,7 @@ mod tests {
                     "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -514,6 +566,7 @@ mod tests {
                     "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(1),
                 sorted_index: None,
             },
@@ -536,6 +589,7 @@ mod tests {
                     "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -558,6 +612,7 @@ mod tests {
                     "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(1),
                 sorted_index: None,
             },
@@ -580,6 +635,7 @@ mod tests {
                     "0020bcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbcbc"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -602,6 +658,7 @@ mod tests {
                     "0020abababababababababababababababababababababababababababababababab"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(1),
                 sorted_index: None,
             },
@@ -624,6 +681,7 @@ mod tests {
                     "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -646,6 +704,7 @@ mod tests {
                     "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                         .to_string(),
                 ),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -665,6 +724,7 @@ mod tests {
                 name: Some("username".to_string()),
                 field_type: Some("str".to_string()),
                 value: Some("bubu".to_string()),
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -684,6 +744,7 @@ mod tests {
                 name: Some("an_empty_relation_list".to_string()),
                 field_type: Some("pinned_relation_list".to_string()),
                 value: None,
+                data: None,
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -786,45 +847,29 @@ mod tests {
     #[rstest]
     fn operation_values_to_string_vec(schema_id: SchemaId) {
         let expected_list = vec![
-            Some("28".to_string()),
+            Some("28".into()),
             None,
-            Some(
-                "0020abababababababababababababababababababababababababababababababab".to_string(),
-            ),
-            Some(
-                "0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".to_string(),
-            ),
-            Some("3.5".to_string()),
-            Some("false".to_string()),
-            Some(
-                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-            ),
-            Some(
-                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
-            ),
-            Some(
-                "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string(),
-            ),
-            Some(
-                "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string(),
-            ),
-            Some(
-                "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
-            ),
-            Some(
-                "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
-            ),
-            Some("bubu".to_string()),
+            Some("0020abababababababababababababababababababababababababababababababab".into()),
+            Some("0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".into()),
+            Some("3.5".into()),
+            Some("false".into()),
+            Some("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
+            Some("0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into()),
+            Some("0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".into()),
+            Some("0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".into()),
+            Some("0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into()),
+            Some("0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".into()),
+            Some("bubu".into())
         ];
 
         let operation = create_operation(doggo_fields(), schema_id);
 
         let mut string_value_list = vec![];
         for (_, value) in operation.fields().unwrap().iter() {
-            string_value_list.push(parse_value_to_string_vec(value));
+            string_value_list.push(parse_operation_value_to_db_value(value));
         }
 
-        let string_value_list: Vec<Option<String>> =
+        let string_value_list: Vec<Option<DBValue>> =
             string_value_list.into_iter().flatten().collect();
         assert_eq!(expected_list, string_value_list)
     }
@@ -843,10 +888,10 @@ mod tests {
 
         let mut string_value_list = vec![];
         for (_, value) in operation.fields().unwrap().iter() {
-            string_value_list.push(parse_value_to_string_vec(value));
+            string_value_list.push(parse_operation_value_to_db_value(value));
         }
 
-        let string_value_list: Vec<Option<String>> =
+        let string_value_list: Vec<Option<DBValue>> =
             string_value_list.into_iter().flatten().collect();
         assert_eq!(expected_list, string_value_list)
     }
@@ -867,6 +912,7 @@ mod tests {
                 list_index: 0,
                 field_type: "int".to_string(),
                 value: Some("28".to_string()),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -881,6 +927,7 @@ mod tests {
                 list_index: 0,
                 field_type: "float".to_string(),
                 value: Some("3.5".to_string()),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -895,6 +942,7 @@ mod tests {
                 list_index: 0,
                 field_type: "bool".to_string(),
                 value: Some("false".to_string()),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -912,6 +960,7 @@ mod tests {
                     "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                         .to_string(),
                 ),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -929,6 +978,7 @@ mod tests {
                     "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                         .to_string(),
                 ),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -946,6 +996,7 @@ mod tests {
                     "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
                         .to_string(),
                 ),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -963,6 +1014,7 @@ mod tests {
                     "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                         .to_string(),
                 ),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -980,6 +1032,7 @@ mod tests {
                     "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                         .to_string(),
                 ),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -997,6 +1050,7 @@ mod tests {
                     "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
                         .to_string(),
                 ),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -1011,6 +1065,7 @@ mod tests {
                 list_index: 0,
                 field_type: "str".to_string(),
                 value: Some("bubu".to_string()),
+                data: None,
             },
             DocumentViewFieldRow {
                 document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
@@ -1025,6 +1080,7 @@ mod tests {
                 list_index: 0,
                 field_type: "pinned_relation_list".to_string(),
                 value: None,
+                data: None,
             },
         ];
 

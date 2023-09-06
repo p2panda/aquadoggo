@@ -54,6 +54,9 @@ pub struct OperationFieldRow {
     /// This is an Option as a DELETE operation contains no fields.
     pub value: Option<String>,
 
+    /// Data field used to store blob_piece_v1 bytes
+    pub data: Option<Vec<u8>>,
+
     /// Index of document id or view id in (pinned) relation lists.
     ///
     /// This numeric value is a simple list index to represent multiple values within one operation
@@ -99,6 +102,9 @@ pub struct OperationFieldsJoinedRow {
     ///
     /// This is an Option as a DELETE operation contains no fields.
     pub value: Option<String>,
+
+    /// Data field used to store blob_piece_v1 bytes
+    pub data: Option<Vec<u8>>,
 
     /// Index of document id or view id in (pinned) relation lists.
     ///

@@ -78,6 +78,7 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
         FieldType::RelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
         FieldType::PinnedRelation(schema_id) => TypeRef::named(schema_id.to_string()),
         FieldType::PinnedRelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
+        FieldType::Bytes => todo!(),
     }
 }
 
@@ -99,6 +100,7 @@ pub fn filter_to_operation_value(
             let document_view_id: DocumentViewId = filter_value.string()?.parse()?;
             document_view_id.into()
         }
+        FieldType::Bytes => todo!(),
     };
 
     Ok(value)

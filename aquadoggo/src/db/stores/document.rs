@@ -606,7 +606,8 @@ async fn get_document_view_field_rows(
             document_view_fields.name,
             operation_fields_v1.list_index,
             operation_fields_v1.field_type,
-            operation_fields_v1.value
+            operation_fields_v1.value,
+            operation_fields_v1.data
         FROM
             document_view_fields
         LEFT JOIN

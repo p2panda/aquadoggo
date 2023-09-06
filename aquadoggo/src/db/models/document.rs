@@ -26,6 +26,9 @@ pub struct DocumentViewFieldRow {
     /// Actual value contained in field.
     /// This is optional as row representing an empty relation list has no value.
     pub value: Option<String>,
+
+    /// Data field used to store blob_piece_v1 bytes
+    pub data: Option<Vec<u8>>,
 }
 
 /// A struct representing a single row of a document table.

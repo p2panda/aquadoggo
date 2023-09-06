@@ -45,6 +45,10 @@ pub struct QueryRow {
     #[sqlx(default)]
     pub value: Option<String>,
 
+    /// Data field used to store blob_piece_v1 bytes
+    #[sqlx(default)]
+    pub data: Option<Vec<u8>>,
+
     /// Type of the application field (string, boolean, float, int, relation etc.).
     #[sqlx(default)]
     pub field_type: String,

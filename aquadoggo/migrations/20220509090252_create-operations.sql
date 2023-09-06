@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS operation_fields_v1 (
     name                    TEXT             NOT NULL,
     field_type              TEXT             NOT NULL,
     value                   TEXT             NULL,
+    data                    BLOB             NULL,
     list_index              INT              NOT NULL,
     FOREIGN KEY(operation_id) REFERENCES operations_v1(operation_id) ON DELETE CASCADE
 );
