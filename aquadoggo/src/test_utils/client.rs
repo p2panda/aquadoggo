@@ -80,7 +80,7 @@ pub async fn http_test_client(node: &TestNode) -> TestClient {
     let http_context = HttpServiceContext::new(
         node.context.store.clone(),
         manager,
-        node.context.config.blob_dir.as_ref().unwrap().to_path_buf(),
+        node.context.config.blobs_base_path.to_path_buf(),
     );
 
     TestClient::new(build_server(http_context))

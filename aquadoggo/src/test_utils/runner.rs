@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::sync::Arc;
-use std::{fs, panic};
 
 use futures::Future;
 use p2panda_rs::identity::KeyPair;
@@ -101,14 +100,13 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
         let (_config, pool) = initialize_db().await;
         let store = SqlStore::new(pool);
 
-        // Construct temporary directory for the test runner
-        let tmp_dir = tempfile::TempDir::new().unwrap();
-        let blobs_base_path = tmp_dir.path().join("blobs");
-        fs::create_dir_all(&blobs_base_path).unwrap();
+        // Construct temporary blobs directory for the test runner
+        let temp_dir = tempfile::TempDir::new()
+            .expect("Could not create temporary test directory for blobs storage");
 
         // Construct node config supporting any schema
         let mut config = Configuration::default();
-        config.blobs_base_path = blobs_base_path;
+        config.blobs_base_path = temp_dir.path().to_path_buf();
 
         // Construct the actual test node
         let node = TestNode {
@@ -141,7 +139,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
         // there, we need to propagate it further to inform the test runtime about the result
         match result {
             Ok(_) => (),
-            Err(err) => panic::resume_unwind(err.into_panic()),
+            Err(err) => std::panic::resume_unwind(err.into_panic()),
         };
     });
 }
@@ -186,7 +184,7 @@ pub fn test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'stati
         // there, we need to propagate it further to inform the test runtime about the result
         match result {
             Ok(_) => (),
-            Err(err) => panic::resume_unwind(err.into_panic()),
+            Err(err) => std::panic::resume_unwind(err.into_panic()),
         };
     });
 }

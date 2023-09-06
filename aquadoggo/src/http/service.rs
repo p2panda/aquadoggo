@@ -123,7 +123,7 @@ mod tests {
             let context = HttpServiceContext::new(
                 node.context.store.clone(),
                 graphql_schema_manager,
-                node.context.config.blobs_base_path.into(),
+                node.context.config.blobs_base_path.clone(),
             );
             let client = TestClient::new(build_server(context));
 

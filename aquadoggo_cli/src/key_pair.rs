@@ -55,7 +55,7 @@ fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
 fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
     let private_key_hex = hex::encode(key_pair.private_key().as_bytes());
 
-    let mut file = File::create(&path)?;
+    let mut file = File::create(path)?;
     file.write_all(private_key_hex.as_bytes())?;
     file.sync_all()?;
 

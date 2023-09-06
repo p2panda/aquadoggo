@@ -174,7 +174,7 @@ mod tests {
             assert!(result.unwrap().is_none());
 
             // Construct the expected path to the blob view file
-            let base_path = node.context.config.blobs_base_path;
+            let base_path = &node.context.config.blobs_base_path;
             let blob_path = base_path.join(blob_view_id.to_string());
 
             // Read from this file
