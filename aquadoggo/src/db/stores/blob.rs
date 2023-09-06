@@ -434,22 +434,22 @@ mod tests {
             // These are the rows we expect to exist in each table.
             assert_query(&node, "SELECT entry_hash FROM entries", 4).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 4).await;
-            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 19).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 20).await;
             assert_query(&node, "SELECT log_id FROM logs", 4).await;
             assert_query(&node, "SELECT document_id FROM documents", 4).await;
             assert_query(&node, "SELECT document_id FROM document_views", 4).await;
-            assert_query(&node, "SELECT name FROM document_view_fields", 15).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 16).await;
 
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
             let result = node.context.store.purge_blob(&document_id).await;
             assert!(result.is_ok(), "{:#?}", result);
             assert_query(&node, "SELECT entry_hash FROM entries", 1).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 1).await;
-            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 13).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 14).await;
             assert_query(&node, "SELECT log_id FROM logs", 4).await;
             assert_query(&node, "SELECT document_id FROM documents", 1).await;
             assert_query(&node, "SELECT document_id FROM document_views", 1).await;
-            assert_query(&node, "SELECT name FROM document_view_fields", 10).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 11).await;
 
             let result = node.context.store.purge_blob(&document_id).await;
 
