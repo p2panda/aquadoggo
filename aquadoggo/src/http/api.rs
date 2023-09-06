@@ -181,15 +181,13 @@ mod tests {
     use http::{header, StatusCode};
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::schema::validate::MAX_BLOB_PIECE_LENGTH;
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
 
     use crate::materializer::tasks::blob_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{add_blob, http_test_client, test_runner, update_blob, TestNode};
-
-    // @TODO: Would be nice if this would come out of p2panda_rs
-    const MAX_BLOB_PIECE_LENGTH: usize = 256;
 
     #[rstest]
     fn responds_with_blob_in_http_body(key_pair: KeyPair) {
