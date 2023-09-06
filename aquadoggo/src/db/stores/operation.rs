@@ -334,7 +334,7 @@ impl SqlStore {
 
                 for (index, db_value) in db_values.into_iter().enumerate() {
                     let cursor = OperationCursor::new(index, name, id);
-                    
+
                     // Separate out `Bytes` values as these go into their own column.
                     let mut string_value = None;
                     let mut data_value = None;
