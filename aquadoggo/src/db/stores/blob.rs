@@ -208,9 +208,7 @@ async fn document_to_blob_data(
                 .get("data")
                 .expect("Blob piece document without \"data\" field")
             {
-                // @TODO: Use bytes here instead, see related issue:
-                // https://github.com/p2panda/aquadoggo/issues/543
-                OperationValue::String(data_str) => buf.put(data_str.as_bytes()),
+                OperationValue::Bytes(data_str) => buf.put(&data_str[..]),
                 _ => unreachable!(), // We only queried for blob piece documents
             }
         }
@@ -240,6 +238,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
+    use p2panda_rs::test_utils::generate_random_bytes;
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
@@ -279,7 +278,7 @@ mod tests {
     #[rstest]
     fn get_blob_errors(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
+            let blob_data = generate_random_bytes(100);
 
             // Publish a blob containing pieces which aren't in the store.
             let blob_view_id = add_document(
@@ -311,7 +310,7 @@ mod tests {
             let blob_piece_view_id_1 = add_document(
                 &mut node,
                 &SchemaId::BlobPiece(1),
-                vec![("data", blob_data[..5].into())],
+                vec![("data", blob_data[..50].into())],
                 &key_pair,
             )
             .await;
@@ -504,14 +503,14 @@ mod tests {
     #[rstest]
     fn purge_all_pieces_of_updated_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
+            let blob_data = generate_random_bytes(10);
+            let blob_view_id = add_blob(&mut node, &blob_data, 10, "text/plain", &key_pair).await;
 
             // Create a new blob piece.
             let new_blob_pieces = add_document(
                 &mut node,
                 &SchemaId::BlobPiece(1),
-                vec![("data", "more blob data".into())],
+                vec![("data", generate_random_bytes(10)[..].into())],
                 &key_pair,
             )
             .await;
@@ -529,13 +528,13 @@ mod tests {
             // There is one blob and three blob pieces in database.
             //
             // These are the rows we expect to exist in each table.
-            assert_query(&node, "SELECT entry_hash FROM entries", 5).await;
-            assert_query(&node, "SELECT operation_id FROM operations_v1", 5).await;
-            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 8).await;
-            assert_query(&node, "SELECT log_id FROM logs", 4).await;
-            assert_query(&node, "SELECT document_id FROM documents", 4).await;
-            assert_query(&node, "SELECT document_id FROM document_views", 5).await;
-            assert_query(&node, "SELECT name FROM document_view_fields", 9).await;
+            assert_query(&node, "SELECT entry_hash FROM entries", 4).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 4).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 6).await;
+            assert_query(&node, "SELECT log_id FROM logs", 3).await;
+            assert_query(&node, "SELECT document_id FROM documents", 3).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 4).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 8).await;
 
             // Purge this blob from the database, we now expect all tables to be empty (except the
             // logs table).
@@ -545,7 +544,7 @@ mod tests {
             assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
             assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 0).await;
-            assert_query(&node, "SELECT log_id FROM logs", 4).await;
+            assert_query(&node, "SELECT log_id FROM logs", 3).await;
             assert_query(&node, "SELECT document_id FROM documents", 0).await;
             assert_query(&node, "SELECT document_id FROM document_views", 0).await;
             assert_query(&node, "SELECT name FROM document_view_fields", 0).await;
