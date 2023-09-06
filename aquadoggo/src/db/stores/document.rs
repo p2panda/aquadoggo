@@ -1321,11 +1321,11 @@ mod tests {
             // expect for each table.
             assert_query(&node, "SELECT entry_hash FROM entries", 2).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 2).await;
-            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 26).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 28).await;
             assert_query(&node, "SELECT log_id FROM logs", 1).await;
             assert_query(&node, "SELECT document_id FROM documents", 1).await;
             assert_query(&node, "SELECT document_id FROM document_views", 1).await;
-            assert_query(&node, "SELECT name FROM document_view_fields", 10).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 11).await;
 
             // Purge this document from the database, we now expect all tables to be empty.
             let result = node.context.store.purge_document(&document_id).await;
@@ -1356,11 +1356,11 @@ mod tests {
             // for each table.
             assert_query(&node, "SELECT entry_hash FROM entries", 2).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 2).await;
-            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 26).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 28).await;
             assert_query(&node, "SELECT log_id FROM logs", 2).await;
             assert_query(&node, "SELECT document_id FROM documents", 2).await;
             assert_query(&node, "SELECT document_id FROM document_views", 2).await;
-            assert_query(&node, "SELECT name FROM document_view_fields", 20).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 22).await;
 
             // Purge one document from the database, we now expect half the rows to be remaining.
             let result = node.context.store.purge_document(&document_id).await;
@@ -1368,11 +1368,11 @@ mod tests {
 
             assert_query(&node, "SELECT entry_hash FROM entries", 1).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 1).await;
-            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 13).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 14).await;
             assert_query(&node, "SELECT log_id FROM logs", 2).await;
             assert_query(&node, "SELECT document_id FROM documents", 1).await;
             assert_query(&node, "SELECT document_id FROM document_views", 1).await;
-            assert_query(&node, "SELECT name FROM document_view_fields", 10).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 11).await;
         });
     }
 
