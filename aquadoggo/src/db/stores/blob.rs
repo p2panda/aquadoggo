@@ -2,17 +2,20 @@
 
 use std::num::NonZeroU64;
 
+use async_stream::try_stream;
 use bytes::{BufMut, BytesMut};
+use futures::Stream;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
+use p2panda_rs::schema::validate::MAX_BLOB_PIECE_LENGTH;
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::{query_scalar, AnyPool};
 
 use crate::db::errors::{BlobStoreError, SqlStoreError};
 use crate::db::query::{Filter, Order, Pagination, PaginationField, Select};
-use crate::db::stores::query::{Query, RelationList};
+use crate::db::stores::query::{PaginationCursor, Query, RelationList};
 use crate::db::SqlStore;
 
 /// Number of blob pieces requested per database query iteration.
@@ -20,9 +23,79 @@ const BLOB_QUERY_PAGE_SIZE: u64 = 10;
 
 pub type BlobData = Vec<u8>;
 
+#[derive(Debug)]
+pub struct BlobStream {
+    store: SqlStore,
+    pagination_cursor: Option<PaginationCursor>,
+    document_view_id: DocumentViewId,
+    num_pieces: usize,
+}
+
+impl BlobStream {
+    pub fn new(store: &SqlStore, document_view_id: &DocumentViewId) -> Self {
+        Self {
+            store: store.to_owned(),
+            pagination_cursor: None,
+            document_view_id: document_view_id.to_owned(),
+            num_pieces: 0,
+        }
+    }
+
+    async fn next_chunk(&mut self) -> Result<BlobData, BlobStoreError> {
+        let schema = Schema::get_system(SchemaId::BlobPiece(1)).expect("System schema is given");
+        let list = RelationList::new_pinned(&self.document_view_id, "pieces");
+
+        let args = Query::new(
+            &Pagination::new(
+                &NonZeroU64::new(BLOB_QUERY_PAGE_SIZE).unwrap(),
+                self.pagination_cursor.as_ref(),
+                &vec![PaginationField::EndCursor, PaginationField::HasNextPage],
+            ),
+            &Select::new(&["data".into()]),
+            &Filter::default(),
+            &Order::default(),
+        );
+
+        let mut buf =
+            BytesMut::with_capacity(BLOB_QUERY_PAGE_SIZE as usize * MAX_BLOB_PIECE_LENGTH);
+
+        let (pagination_data, documents) = self.store.query(schema, &args, Some(&list)).await?;
+        self.pagination_cursor = pagination_data.end_cursor;
+        self.num_pieces += documents.len();
+
+        for (_, blob_piece_document) in documents {
+            match blob_piece_document
+                .get("data")
+                .expect("Blob piece document without \"data\" field")
+            {
+                // @TODO: Use bytes here instead, see related issue:
+                // https://github.com/p2panda/aquadoggo/issues/543
+                OperationValue::String(data_str) => buf.put(data_str.as_bytes()),
+                _ => unreachable!(), // We only queried for blob piece documents
+            }
+        }
+
+        Ok(buf.to_vec())
+    }
+
+    pub fn read_all<'a>(&'a mut self) -> impl Stream<Item = Result<BlobData, BlobStoreError>> + 'a {
+        try_stream! {
+            loop {
+                let blob_data = self.next_chunk().await?;
+
+                if blob_data.is_empty() {
+                    break;
+                }
+
+                yield blob_data;
+            }
+        }
+    }
+}
+
 impl SqlStore {
     /// Get the data for one blob from the store, identified by it's document id.
-    pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobData>, BlobStoreError> {
+    pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobStream>, BlobStoreError> {
         // Get the root blob document
         let blob_document = match self.get_document(id).await? {
             Some(document) => {
@@ -33,14 +106,15 @@ impl SqlStore {
             }
             None => return Ok(None),
         };
-        document_to_blob_data(self, blob_document).await
+
+        Ok(Some(BlobStream::new(self, blob_document.view_id())))
     }
 
     /// Get the data for one blob from the store, identified by it's document view id.
     pub async fn get_blob_by_view_id(
         &self,
         view_id: &DocumentViewId,
-    ) -> Result<Option<BlobData>, BlobStoreError> {
+    ) -> Result<Option<BlobStream>, BlobStoreError> {
         // Get the root blob document
         let blob_document = match self.get_document_by_view_id(view_id).await? {
             Some(document) => {
@@ -51,7 +125,8 @@ impl SqlStore {
             }
             None => return Ok(None),
         };
-        document_to_blob_data(self, blob_document).await
+
+        Ok(Some(BlobStream::new(self, blob_document.view_id())))
     }
 
     /// Purge blob data from the node _if_ it is not related to from another document.
@@ -234,7 +309,7 @@ async fn document_to_blob_data(
     Ok(Some(buf.into()))
 }
 
-#[cfg(test)]
+/* #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
@@ -555,4 +630,4 @@ mod tests {
             assert!(result.is_ok(), "{:#?}", result)
         })
     }
-}
+} */

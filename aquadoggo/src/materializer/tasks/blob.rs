@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use futures::{pin_mut, StreamExt};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
@@ -63,8 +64,8 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
     // Materialize all updated blobs to the filesystem.
     for blob_document in updated_blobs.iter() {
-        // Get the raw blob data.
-        let blob_data = context
+        // Get the raw blob data as a stream
+        let mut blob_stream = context
             .store
             .get_blob_by_view_id(blob_document.view_id())
             .await
@@ -91,13 +92,27 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             ))
         })?;
 
-        file.write_all(&blob_data).await.map_err(|err| {
-            TaskError::Critical(format!(
-                "Could not write blob file @ {}: {}",
-                blob_view_path.display(),
-                err
-            ))
-        })?;
+        let stream = blob_stream.read_all();
+        pin_mut!(stream);
+
+        while let Some(value) = stream.next().await {
+            match value {
+                Ok(buf) => {
+                    file.write(&buf).await.map_err(|err| {
+                        TaskError::Critical(format!(
+                            "Could not write blob file @ {}: {}",
+                            blob_view_path.display(),
+                            err
+                        ))
+                    })?;
+                }
+                Err(err) => Err(TaskError::Critical(format!(
+                    "Failed blob stream when writing @ {}: {}",
+                    blob_view_path.display(),
+                    err
+                )))?,
+            }
+        }
     }
 
     Ok(None)
