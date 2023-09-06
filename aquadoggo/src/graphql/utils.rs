@@ -61,6 +61,7 @@ pub fn gql_scalar(operation_value: &OperationValue) -> Value {
         OperationValue::Float(value) => value.to_owned().into(),
         OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::String(value) => value.to_owned().into(),
+        OperationValue::Bytes(value) => value.to_owned().into(),
         _ => panic!("This method is not used for relation types"),
     }
 }
@@ -74,6 +75,7 @@ pub fn graphql_type(field_type: &FieldType) -> TypeRef {
         FieldType::Integer => TypeRef::named(TypeRef::INT),
         FieldType::Float => TypeRef::named(TypeRef::FLOAT),
         FieldType::String => TypeRef::named(TypeRef::STRING),
+        FieldType::Bytes => TypeRef::named("HexBytes"),
         FieldType::Relation(schema_id) => TypeRef::named(schema_id.to_string()),
         FieldType::RelationList(schema_id) => TypeRef::named(collection_name(schema_id)),
         FieldType::PinnedRelation(schema_id) => TypeRef::named(schema_id.to_string()),
@@ -98,6 +100,11 @@ pub fn filter_to_operation_value(
         FieldType::PinnedRelation(_) | FieldType::PinnedRelationList(_) => {
             let document_view_id: DocumentViewId = filter_value.string()?.parse()?;
             document_view_id.into()
+        }
+        FieldType::Bytes => {
+            let hex_string = filter_value.string()?;
+            let bytes = hex::decode(hex_string)?;
+            bytes[..].into()
         }
     };
 
