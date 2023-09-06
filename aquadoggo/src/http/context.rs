@@ -13,16 +13,16 @@ pub struct HttpServiceContext {
     /// Dynamic GraphQL schema manager.
     pub schema: GraphQLSchemaManager,
 
-    /// Path of the directory where blobs should be served from
-    pub blob_dir_path: PathBuf,
+    /// Path of the directory where blobs should be served from.
+    pub blobs_base_path: PathBuf,
 }
 
 impl HttpServiceContext {
-    pub fn new(store: SqlStore, schema: GraphQLSchemaManager, blob_dir_path: PathBuf) -> Self {
+    pub fn new(store: SqlStore, schema: GraphQLSchemaManager, blobs_base_path: PathBuf) -> Self {
         Self {
             store,
             schema,
-            blob_dir_path,
+            blobs_base_path,
         }
     }
 }

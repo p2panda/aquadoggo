@@ -61,13 +61,13 @@ pub async fn http_service(
     let graphql_schema_manager =
         GraphQLSchemaManager::new(context.store.clone(), tx, context.schema_provider.clone()).await;
 
-    let blob_dir_path = context.config.blob_dir.as_ref().expect("Base path not set");
+    let blobs_base_path = &context.config.blobs_base_path;
 
     // Introduce a new context for all HTTP routes
     let http_context = HttpServiceContext::new(
         context.store.clone(),
         graphql_schema_manager,
-        blob_dir_path.to_owned(),
+        blobs_base_path.to_owned(),
     );
 
     // Start HTTP server with given port and re-attempt with random port if it was taken already
@@ -105,7 +105,6 @@ mod tests {
     use serde_json::json;
     use tokio::sync::broadcast;
 
-    use crate::config::BLOBS_DIR_NAME;
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::context::HttpServiceContext;
     use crate::schema::SchemaProvider;
@@ -124,7 +123,7 @@ mod tests {
             let context = HttpServiceContext::new(
                 node.context.store.clone(),
                 graphql_schema_manager,
-                BLOBS_DIR_NAME.into(),
+                node.context.config.blobs_base_path.into(),
             );
             let client = TestClient::new(build_server(context));
 

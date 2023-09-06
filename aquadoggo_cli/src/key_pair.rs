@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{Read, Write};
 #[cfg(target_os = "unix")]
 use std::os::unix::fs::PermissionsExt;
@@ -39,8 +39,6 @@ pub fn generate_ephemeral_key_pair() -> KeyPair {
 fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
     let private_key_hex = hex::encode(key_pair.private_key().as_bytes());
 
-    // Make sure that directories exist and write file into it
-    fs::create_dir_all(path.parent().unwrap())?;
     let mut file = File::create(&path)?;
     file.write_all(private_key_hex.as_bytes())?;
     file.sync_all()?;
@@ -57,8 +55,6 @@ fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
 fn save_key_pair_to_file(key_pair: &KeyPair, path: PathBuf) -> Result<()> {
     let private_key_hex = hex::encode(key_pair.private_key().as_bytes());
 
-    // Make sure that directories exist and write file into it
-    fs::create_dir_all(path.parent().unwrap())?;
     let mut file = File::create(&path)?;
     file.write_all(private_key_hex.as_bytes())?;
     file.sync_all()?;

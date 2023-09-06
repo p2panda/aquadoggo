@@ -267,6 +267,7 @@ pub struct Configuration {
     pub database_max_connections: u32,
     pub http_port: u16,
     pub quic_port: u16,
+    pub blobs_base_path: Option<PathBuf>,
     pub private_key: Option<PathBuf>,
     pub mdns: bool,
     pub direct_node_addresses: Vec<SocketAddr>,
@@ -286,6 +287,7 @@ impl Default for Configuration {
             database_max_connections: 32,
             http_port: 2020,
             quic_port: 2022,
+            blobs_base_path: None,
             mdns: true,
             private_key: None,
             direct_node_addresses: vec![],
@@ -338,12 +340,22 @@ impl TryFrom<Configuration> for NodeConfiguration {
             }
         };
 
+        // Create a temporary blobs directory when none was given
+        let blobs_base_path = match value.blobs_base_path {
+            Some(path) => path,
+            None => {
+                let tmp_dir = tempfile::TempDir::new()
+                    .map_err(|_| anyhow!("Could not create temporary directory to store blobs"))?;
+                tmp_dir.path().to_path_buf()
+            }
+        };
+
         Ok(NodeConfiguration {
             allow_schema_ids,
-            blob_dir: None,
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
             http_port: value.http_port,
+            blobs_base_path,
             worker_pool_size: value.worker_pool_size,
             network: NetworkConfiguration {
                 quic_port: value.quic_port,

@@ -2,11 +2,9 @@
 
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
-use tempfile::TempDir;
-use tokio::fs;
 
 use crate::bus::ServiceMessage;
-use crate::config::{Configuration, BLOBS_DIR_NAME};
+use crate::config::Configuration;
 use crate::context::Context;
 use crate::db::SqlStore;
 use crate::db::{connection_pool, create_database, run_pending_migrations, Pool};
@@ -47,7 +45,7 @@ pub struct Node {
 impl Node {
     /// Start p2panda node with your configuration. This method can be used to run the node within
     /// other applications.
-    pub async fn start(key_pair: KeyPair, mut config: Configuration) -> Self {
+    pub async fn start(key_pair: KeyPair, config: Configuration) -> Self {
         // Initialize database and get connection pool
         let pool = initialize_db(&config)
             .await
@@ -63,15 +61,6 @@ impl Node {
         let application_schema = store.get_all_schema().await.unwrap();
         let schema_provider =
             SchemaProvider::new(application_schema, config.allow_schema_ids.clone());
-
-        // Create temporary dirs for blob storage.
-        //
-        // @TODO: Implement configuring this path for persistent storage, see related issue:
-        // https://github.com/p2panda/aquadoggo/issues/542
-        let tmp_dir = TempDir::new().unwrap();
-        let blob_dir_path = tmp_dir.path().join(BLOBS_DIR_NAME);
-        fs::create_dir_all(&blob_dir_path).await.unwrap();
-        config.blob_dir = Some(blob_dir_path);
 
         // Create service manager with shared data between services
         let context = Context::new(store, key_pair, config, schema_provider);

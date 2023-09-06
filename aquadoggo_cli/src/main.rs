@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
     // Load configuration from command line arguments, environment variables and .toml file
     let (config_file_path, config) = load_config().context("Could not load configuration")?;
 
-    // Set log verbosity based on config. By default scope it always to the "aquadoggo" module.
+    // Set log verbosity based on config. By default scope it always to the "aquadoggo" module
     let mut builder = env_logger::Builder::new();
     let builder = match LevelFilter::from_str(&config.log_level) {
         Ok(log_level) => builder.filter(Some("aquadoggo"), log_level),

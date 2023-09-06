@@ -8,7 +8,6 @@ use p2panda_rs::identity::KeyPair;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
-use crate::config::BLOBS_DIR_NAME;
 use crate::context::Context;
 use crate::db::Pool;
 use crate::db::SqlStore;
@@ -104,19 +103,19 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
 
         // Construct temporary directory for the test runner
         let tmp_dir = tempfile::TempDir::new().unwrap();
-        let blob_dir_path = tmp_dir.path().join(BLOBS_DIR_NAME);
-        fs::create_dir_all(&blob_dir_path).unwrap();
+        let blobs_base_path = tmp_dir.path().join("blobs");
+        fs::create_dir_all(&blobs_base_path).unwrap();
 
         // Construct node config supporting any schema
-        let mut cfg = Configuration::default();
-        cfg.blob_dir = Some(blob_dir_path);
+        let mut config = Configuration::default();
+        config.blobs_base_path = blobs_base_path;
 
         // Construct the actual test node
         let node = TestNode {
             context: Context::new(
                 store.clone(),
                 KeyPair::new(),
-                cfg,
+                config,
                 SchemaProvider::default(),
             ),
         };
