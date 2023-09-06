@@ -20,6 +20,10 @@ async fn main() -> anyhow::Result<()> {
     // Load configuration from command line arguments, environment variables and .toml file
     let (config_file_path, config) = load_config().context("Could not load configuration")?;
 
+    // Remember if user did not set a blobs directory path, which means that it will default to a
+    // temporary one
+    let is_temporary_blobs_path = config.blobs_base_path.is_none();
+
     // Set log verbosity based on config. By default scope it always to the "aquadoggo" module
     let mut builder = env_logger::Builder::new();
     let builder = match LevelFilter::from_str(&config.log_level) {
@@ -50,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
         "{}",
         print_config(key_pair_path, config_file_path, &node_config)
     );
-    show_warnings(&node_config);
+    show_warnings(&node_config, is_temporary_blobs_path);
 
     // Start p2panda node in async runtime
     let node = Node::start(key_pair, node_config).await;
@@ -68,19 +72,34 @@ async fn main() -> anyhow::Result<()> {
 }
 
 /// Show some hopefully helpful warnings around common configuration issues.
-fn show_warnings(config: &Configuration) {
+fn show_warnings(config: &Configuration, is_temporary_blobs_path: bool) {
     match &config.allow_schema_ids {
         AllowList::Set(values) => {
             if values.is_empty() && !config.network.relay_mode {
-                warn!("Your node was set to not allow any schema ids which is only useful in combination with enabling relay mode. With this setting you will not be able to interact with any client or node.");
+                warn!(
+                    "Your node was set to not allow any schema ids which is only useful in
+                    combination with enabling relay mode. With this setting you will not be able to
+                    interact with any client or node."
+                );
             }
         }
         AllowList::Wildcard => {
-            warn!("Allowed schema ids is set to wildcard. Your node will support _any_ schemas it will encounter on the network. This is useful for experimentation and local development but _not_ recommended for production settings.");
+            warn!(
+                "Allowed schema ids is set to wildcard. Your node will support _any_ schemas it
+                will encounter on the network. This is useful for experimentation and local
+                development but _not_ recommended for production settings."
+            );
         }
     }
 
     if !config.network.relay_addresses.is_empty() && config.network.relay_mode {
-        warn!("Will not connect to given relay addresses when relay mode is enabled");
+        warn!("Will not connect to given relay addresses when relay mode is enabled.");
+    }
+
+    if config.database_url != "sqlite::memory:" && is_temporary_blobs_path {
+        warn!("Your database is persisted but blobs _are not_ which might result in unrecoverable
+        data inconsistency (blob operations are stored but the files themselves are _not_). It is
+        recommended to either set both values (`database_url` and `blobs_base_path`) to an
+        temporary value or set both to persist all data.");
     }
 }

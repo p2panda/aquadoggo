@@ -39,6 +39,9 @@ pub struct Configuration {
     pub http_port: u16,
 
     /// Path to folder where blobs (binary files) are kept and served from.
+    ///
+    /// **Warning**: When set to a temporary directory, make sure that also the database itself is
+    /// not persisted, otherwise you will run into data inconsistencies.
     pub blobs_base_path: PathBuf,
 
     /// Number of concurrent workers which defines the maximum of materialization tasks which can
