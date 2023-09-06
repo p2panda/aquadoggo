@@ -25,8 +25,8 @@ use crate::db::SqlStore;
 /// the required `AsVerifiedOperation` trait.
 ///
 /// There are several intermediary structs defined in `db/models/` which represent rows from tables
-/// in the database where this entry, it's fields and opreation relations are stored. These are
-/// used in conjunction with the `sqlx` library to coerce raw values into structs when querying the
+/// in the database where this entry, its fields and opreation relations are stored. These are used
+/// in conjunction with the `sqlx` library to coerce raw values into structs when querying the
 /// database.
 #[async_trait]
 impl OperationStore for SqlStore {
@@ -77,7 +77,7 @@ impl OperationStore for SqlStore {
             .await
     }
 
-    /// Get an operation identified by it's `OperationId`.
+    /// Get an operation identified by its `OperationId`.
     ///
     /// Returns a result containing an `VerifiedOperation` wrapped in an option, if no operation
     /// with this id was found, returns none. Errors if a fatal storage error occured.
@@ -269,7 +269,7 @@ impl SqlStore {
         Ok(())
     }
 
-    /// Insert an operation as well as the index for it's position in the document after
+    /// Insert an operation as well as the index for its position in the document after
     /// materialization has occurred.
     async fn insert_operation_with_index(
         &self,
@@ -467,7 +467,7 @@ mod tests {
                 .await;
             assert!(result.is_ok());
 
-            // Request the previously inserted operation by it's id.
+            // Request the previously inserted operation by its id.
             let returned_operation = node
                 .context
                 .store

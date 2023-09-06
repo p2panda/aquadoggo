@@ -13,7 +13,7 @@ use crate::graphql::utils::{collection_item_name, fields_name};
 /// schema.
 ///
 /// Constructs resolvers for both `fields` and `meta` fields. The former simply passes up the query
-/// arguments to it's children query fields. The latter calls the `resolve` method defined on
+/// arguments to its children query fields. The latter calls the `resolve` method defined on
 /// `DocumentMeta` type.
 pub fn build_document_object(schema: &Schema) -> Object {
     let fields = Object::new(schema.id().to_string());
@@ -24,7 +24,7 @@ pub fn build_document_object(schema: &Schema) -> Object {
 /// schema and are contained in a paginated collection.
 ///
 /// Contains resolvers for `cursor`, `fields` and `meta`. `fields` simply passes up the query
-/// arguments to it's children query fields. `meta` calls the `resolve` method defined on
+/// arguments to its children query fields. `meta` calls the `resolve` method defined on
 /// `DocumentMeta` type.
 pub fn build_paginated_document_object(schema: &Schema) -> Object {
     let fields = Object::new(collection_item_name(schema.id()));
@@ -56,7 +56,7 @@ pub fn build_paginated_document_object(schema: &Schema) -> Object {
 /// Add application `fields` and `meta` fields to a GraphQL object.
 fn with_document_fields(fields: Object, schema: &Schema) -> Object {
     fields
-        // The `fields` field passes down the parent value to it's children
+        // The `fields` field passes down the parent value to its children
         .field(
             Field::new(
                 constants::FIELDS_FIELD,

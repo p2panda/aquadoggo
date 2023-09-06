@@ -74,7 +74,7 @@ impl EntryStore for SqlStore {
         Ok(())
     }
 
-    /// Get an entry from storage by it's hash id.
+    /// Get an entry from storage by its hash id.
     ///
     /// Returns a result containing the entry wrapped in an option if it was found successfully.
     /// Returns `None` if the entry was not found in storage. Errors when a fatal storage error
@@ -186,7 +186,7 @@ impl EntryStore for SqlStore {
     /// Get all entries of a given schema
     ///
     /// Returns a result containing a vector of all entries which follow the passed schema
-    /// (identified by it's `SchemaId`). If no entries exist, or the schema is not known by this
+    /// (identified by its `SchemaId`). If no entries exist, or the schema is not known by this
     /// node, then an empty vector is returned.
     async fn get_entries_by_schema(
         &self,
@@ -222,7 +222,7 @@ impl EntryStore for SqlStore {
     /// Get all entries of a given schema.
     ///
     /// Returns a result containing a vector of all entries which follow the passed schema
-    /// (identified by it's `SchemaId`). If no entries exist, or the schema is not known by this
+    /// (identified by its `SchemaId`). If no entries exist, or the schema is not known by this
     /// node, then an empty vector is returned.
     async fn get_paginated_log_entries(
         &self,
@@ -444,7 +444,7 @@ mod tests {
                 .await;
             assert!(result.is_ok());
 
-            // Retrieve the entry again by it's hash.
+            // Retrieve the entry again by its hash
             let retrieved_entry = node
                 .context
                 .store
@@ -622,7 +622,7 @@ mod tests {
                 .expect("At least one key pair")
                 .public_key();
 
-            // We should be able to get each entry by it's public_key, log_id and seq_num.
+            // We should be able to get each entry by its public_key, log_id and seq_num.
             for seq_num in 1..10 {
                 let seq_num = SeqNum::new(seq_num).unwrap();
 

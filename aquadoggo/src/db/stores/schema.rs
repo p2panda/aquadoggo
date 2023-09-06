@@ -14,7 +14,7 @@ use crate::db::errors::SchemaStoreError;
 use crate::db::SqlStore;
 
 impl SqlStore {
-    /// Get a Schema from the database by it's document view id.
+    /// Get a Schema from the database by its document view id.
     ///
     /// Internally, this method performs three steps:
     /// - fetch the document view for the schema definition
@@ -52,7 +52,7 @@ impl SqlStore {
 
         // We silently ignore errors as we are assuming views we retrieve from the database
         // themselves are valid, meaning any error in constructing the schema must be because some
-        // of it's fields are simply missing from our database.
+        // of its fields are simply missing from our database.
         let schema = Schema::from_views(schema_view, schema_fields).ok();
 
         Ok(schema)
@@ -205,7 +205,7 @@ mod tests {
             )
             .await;
 
-            // Retrieve the schema by it's document view id. We unwrap here as we expect an `Ok`
+            // Retrieve the schema by its document view id. We unwrap here as we expect an `Ok`
             // result for the succeeding db query, even though the schema could not be built.
             let schema = node
                 .context

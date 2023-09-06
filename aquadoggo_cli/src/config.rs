@@ -121,6 +121,15 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     quic_port: Option<u16>,
 
+    /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
+    /// directory.
+    ///
+    /// WARNING: By default your node will not persist any blobs after shutdown. Set a path for
+    /// production settings to not loose data.
+    #[arg(short = 'f', long, value_name = "PATH")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blobs_base_path: Option<PathBuf>,
+
     /// Path to persist your ed25519 private key file. Defaults to an ephemeral key only for this
     /// current session.
     ///

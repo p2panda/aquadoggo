@@ -15,7 +15,7 @@ const MAX_DOCUMENTS_PER_ROOT_SCHEMA: usize = 15;
 /// Same as above, this is a shrinking value.
 const MAX_DOCUMENTS_PER_RELATION_LIST: usize = 2;
 
-/// AST representing a document and it's relations.
+/// AST representing a document and its relations.
 #[derive(Debug, Clone)]
 pub struct DocumentAST {
     pub schema_id: SchemaId,

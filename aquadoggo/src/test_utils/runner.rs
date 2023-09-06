@@ -160,7 +160,7 @@ pub fn test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'stati
     // Instantiate the database manager
     let manager = TestNodeManager::new();
 
-    // Get a handle onto it's collection of pools
+    // Get a handle onto its collection of pools
     let pools = manager.pools.clone();
 
     runtime.block_on(async {

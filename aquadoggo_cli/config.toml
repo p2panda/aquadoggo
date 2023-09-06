@@ -88,6 +88,18 @@ http_port = 2020
 #
 quic_port = 2022
 
+# ﾟ･｡+☆
+# BLOBS
+# ﾟ･｡+☆
+
+# Path to folder where blobs (large binary files) are persisted. Defaults to a
+# temporary directory.
+#
+# WARNING: By default your node will not persist any blobs after shutdown. Set
+# a path for production settings to not loose data.
+#
+# blobs_base_path = "$HOME/.local/share/aquadoggo/blobs"
+
 # ﾟ･｡+☆+｡･
 # IDENTITY
 # ﾟ･｡+☆+｡･

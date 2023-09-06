@@ -9,7 +9,7 @@
 //! themselves. On completion, the resultant documents are stored and can be retrieved using the
 //! methods defined here.
 //!
-//! The whole document store can be seen as a live cache. All it's content is derived from
+//! The whole document store can be seen as a live cache. All its content is derived from
 //! operations already stored on the node. It allows easy and quick access to current or pinned
 //! values.
 //!
@@ -23,12 +23,11 @@
 //! state, we call these states document views. When a document is updated it gets a new state, or
 //! view, which can be referred to by a globally unique document view id.
 //!
-//! The getter methods allow retrieving a document by it's `DocumentId` or it's
-//! `DocumentViewId`. The former always returns the most current document state, the latter
-//! returns the specific document view if it has already been materialised and stored. Although it
-//! is possible to construct a document at any point in it's history if all operations are
-//! retained, we use a system of "pinned relations" to identify and materialise only views we
-//! explicitly wish to keep.
+//! The getter methods allow retrieving a document by its `DocumentId` or its `DocumentViewId`. The
+//! former always returns the most current document state, the latter returns the specific document
+//! view if it has already been materialised and stored. Although it is possible to construct a
+//! document at any point in its history if all operations are retained, we use a system of "pinned
+//! relations" to identify and materialise only views we explicitly wish to keep.
 use async_trait::async_trait;
 use log::debug;
 use p2panda_rs::document::traits::AsDocument;
@@ -49,9 +48,9 @@ use crate::db::SqlStore;
 impl DocumentStore for SqlStore {
     type Document = StorageDocument;
 
-    /// Get a document from the store by it's `DocumentId`.
+    /// Get a document from the store by its `DocumentId`.
     ///
-    /// Retrieves a document in it's most current state from the store. Ignores documents which
+    /// Retrieves a document in its most current state from the store. Ignores documents which
     /// contain a DELETE operation.
     ///
     /// An error is returned only if a fatal database error occurs.
@@ -113,7 +112,7 @@ impl DocumentStore for SqlStore {
 
     /// Get a document from the database by `DocumentViewId`.
     ///
-    /// Get's a document at a specific point in it's history. Only returns views that have already
+    /// Get's a document at a specific point in its history. Only returns views that have already
     /// been materialised and persisted in the store. These are likely to be "pinned views" which
     /// are relations from other documents, in which case the materialiser service will have
     /// identified and materialised them ready for querying.
@@ -276,7 +275,7 @@ impl SqlStore {
     /// current view and field values into the `document_views` and `document_view_fields` tables
     /// respectively.
     ///
-    /// If the document already existed in the store then it's current view and view id will be
+    /// If the document already existed in the store then its current view and view id will be
     /// updated with those contained on the passed document.
     ///
     /// If any of the operations fail all insertions are rolled back.
@@ -374,11 +373,11 @@ impl SqlStore {
     ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
         let document_view_ids: Vec<String> = query_scalar(
             "
-            SELECT 
+            SELECT
                 document_views.document_view_id
-            FROM 
+            FROM
                 document_views
-            WHERE 
+            WHERE
                 document_views.document_id = $1
             ",
         )
@@ -404,18 +403,18 @@ impl SqlStore {
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
         let document_view_ids: Vec<String> = query_scalar(
             "
-            SELECT DISTINCT 
+            SELECT DISTINCT
                 document_views.document_id
             FROM
                 document_views
-            WHERE 
-                document_views.document_view_id 
+            WHERE
+                document_views.document_view_id
             IN (
                 SELECT
                     operation_fields_v1.value
-                FROM 
+                FROM
                     document_view_fields
-                LEFT JOIN 
+                LEFT JOIN
                     operation_fields_v1
                 ON
                     document_view_fields.operation_id = operation_fields_v1.operation_id
@@ -423,7 +422,7 @@ impl SqlStore {
                     document_view_fields.name = operation_fields_v1.name
                 WHERE
                     operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
-                AND 
+                AND
                     document_view_fields.document_view_id = $1
             )
             ",
@@ -456,14 +455,14 @@ impl SqlStore {
         // view of a document, the deletion will not go ahead.
         let result = query(
                 "
-                DELETE FROM 
+                DELETE FROM
                     document_views
                 WHERE
                     document_views.document_view_id = $1
                 AND NOT EXISTS (
-                    SELECT 
-                        document_view_fields.document_view_id 
-                    FROM 
+                    SELECT
+                        document_view_fields.document_view_id
+                    FROM
                         document_view_fields
                     LEFT JOIN
                         operation_fields_v1
@@ -473,12 +472,12 @@ impl SqlStore {
                         document_view_fields.name = operation_fields_v1.name
                     WHERE
                         operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
-                    AND 
+                    AND
                         operation_fields_v1.value = $1
                 )
                 AND NOT EXISTS (
                     SELECT documents.document_id FROM documents
-                    WHERE documents.document_view_id = $1        
+                    WHERE documents.document_view_id = $1
                 )
                 "
             )
@@ -497,7 +496,7 @@ impl SqlStore {
         }
     }
 
-    /// Check if this view is the current view of it's document.
+    /// Check if this view is the current view of its document.
     pub async fn is_current_view(
         &self,
         document_view_id: &DocumentViewId,
@@ -516,7 +515,7 @@ impl SqlStore {
         Ok(document_view_id.is_some())
     }
 
-    /// Purge a document from the store by it's id.
+    /// Purge a document from the store by its id.
     ///
     /// This removes entries, operations and any materialized documents which exist.
     ///
@@ -550,7 +549,7 @@ impl SqlStore {
         // Delete rows from `entries` table.
         query(
             "
-                DELETE FROM entries 
+                DELETE FROM entries
                 WHERE entries.entry_hash IN (
                     SELECT operations_v1.operation_id FROM operations_v1
                     WHERE operations_v1.document_id = $1
@@ -593,7 +592,7 @@ async fn get_document_view_field_rows(
     //
     // This query performs a join against the `operation_fields_v1` table as this is where the
     // actual field values live. The `document_view_fields` table defines relations between a
-    // document view and the operation values which hold it's field values.
+    // document view and the operation values which hold its field values.
     //
     // Each field has one row, or in the case of list values (pinned relations, or relation lists)
     // then one row exists for every item in the list. The `list_index` column is used for
@@ -608,7 +607,7 @@ async fn get_document_view_field_rows(
             operation_fields_v1.list_index,
             operation_fields_v1.field_type,
             operation_fields_v1.value
-        FROM 
+        FROM
             document_view_fields
         LEFT JOIN
             operation_fields_v1
@@ -616,7 +615,7 @@ async fn get_document_view_field_rows(
             document_view_fields.operation_id = operation_fields_v1.operation_id
         AND
             document_view_fields.name = operation_fields_v1.name
-        LEFT JOIN 
+        LEFT JOIN
             document_views
         ON
             document_view_fields.document_view_id = document_views.document_view_id
@@ -724,7 +723,7 @@ async fn insert_document(
     .await
     .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-    // If the document is not deleted, then we also want to insert it's view and fields.
+    // If the document is not deleted, then we also want to insert its view and fields.
     if !document.is_deleted() && document.view().is_some() {
         // Construct the view, unwrapping the document view fields as we checked they exist above.
         let document_view =
@@ -800,7 +799,7 @@ mod tests {
             let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            // Find the "CREATE" operation and get it's id.
+            // Find the "CREATE" operation and get its id.
             let create_operation = WithId::<OperationId>::id(
                 operations
                     .iter()
@@ -826,9 +825,9 @@ mod tests {
                 .await;
             assert!(result.is_ok());
 
-            // We should be able to retrieve the document at either of it's views now.
+            // We should be able to retrieve the document at either of its views now.
 
-            // Here we request the document with it's initial state.
+            // Here we request the document with its initial state.
             let retrieved_document = node
                 .context
                 .store
@@ -842,7 +841,7 @@ mod tests {
             assert_eq!(retrieved_document.view_id(), document_at_view_1.view_id());
             assert_eq!(retrieved_document.fields(), document_at_view_1.fields());
 
-            // Here we request it at it's current state.
+            // Here we request it at its current state.
             let retrieved_document = node
                 .context
                 .store
@@ -856,7 +855,7 @@ mod tests {
             assert_eq!(retrieved_document.view_id(), document.view_id());
             assert_eq!(retrieved_document.fields(), document.fields());
 
-            // If we retrieve the document by it's id, we expect the current state.
+            // If we retrieve the document by its id, we expect the current state.
             let retrieved_document = node
                 .context
                 .store
@@ -875,8 +874,7 @@ mod tests {
     #[rstest]
     fn document_view_does_not_exist(random_document_view_id: DocumentViewId) {
         test_runner(|node: TestNode| async move {
-            // We try to retrieve a document view by it's id but no view
-            // with that id exists.
+            // We try to retrieve a document view by its id but no view with that id exists.
             let view_does_not_exist = node
                 .context
                 .store
@@ -925,20 +923,20 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents.
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids.get(0).expect("At least one document id");
 
             // Build the document.
             let document = build_document(&node.context.store, &document_id).await;
 
-            // The document is successfully inserted into the database, this
-            // relies on the operations already being present and would fail
-            // if they were not.
+            // The document is successfully inserted into the database, this relies on the
+            // operations already being present and would fail if they were not.
             let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            // We can retrieve the most recent document view for this document by it's id.
+            // We can retrieve the most recent document view for this document by its id.
             let retrieved_document = node
                 .context
                 .store
@@ -947,8 +945,8 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-            // We can retrieve a specific document view for this document by it's view_id.
-            // In this case, that should be the same as the view retrieved above.
+            // We can retrieve a specific document view for this document by its view_id. In this
+            // case, that should be the same as the view retrieved above.
             let specific_document = node
                 .context
                 .store
@@ -985,7 +983,8 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents.
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids.get(0).expect("At least one document id");
 
@@ -997,12 +996,12 @@ mod tests {
             // As it has been deleted, there should be no view.
             assert!(document.view().is_none());
 
-            // Here we insert the document. This action also sets it's most recent view.
+            // Here we insert the document. This action also sets its most recent view.
             let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            // We retrieve the most recent view for this document by it's document id,
-            // but as the document is deleted, we should get a none value back.
+            // We retrieve the most recent view for this document by its document id, but as the
+            // document is deleted, we should get a none value back.
             let document = node
                 .context
                 .store
@@ -1011,8 +1010,8 @@ mod tests {
                 .unwrap();
             assert!(document.is_none());
 
-            // We also try to retrieve the specific document view by it's view id.
-            // This should also return none as it is deleted.
+            // We also try to retrieve the specific document view by its view id. This should also
+            // return none as it is deleted.
             let document = node
                 .context
                 .store
@@ -1090,14 +1089,14 @@ mod tests {
                     .build()
                     .expect("Build document");
 
-                // Insert it to the database, this should also update it's view.
+                // Insert it to the database, this should also update its view.
                 node.context
                     .store
                     .insert_document(&document)
                     .await
                     .expect("Insert document");
 
-                // We can retrieve the document by it's document id.
+                // We can retrieve the document by its document id.
                 let retrieved_document = node
                     .context
                     .store
@@ -1106,7 +1105,7 @@ mod tests {
                     .expect("Get document")
                     .expect("Unwrap document");
 
-                // And also directly by it's document view id.
+                // And also directly by its document view id.
                 let specific_document = node
                     .context
                     .store
