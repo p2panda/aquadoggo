@@ -27,6 +27,7 @@ fn scalar_fields() {
                 ("float", FieldType::Float),
                 ("int", FieldType::Integer),
                 ("text", FieldType::String),
+                ("bytes", FieldType::Bytes),
             ],
             &key_pair,
         )
@@ -38,6 +39,7 @@ fn scalar_fields() {
             ("float", (1.0).into()),
             ("int", 1.into()),
             ("text", "yes".into()),
+            ("bytes", vec![0, 1, 2, 3][..].into()),
         ]
         .try_into()
         .unwrap();
@@ -52,7 +54,8 @@ fn scalar_fields() {
                         bool,
                         float,
                         int,
-                        text
+                        text,
+                        bytes
                     }}
                 }},
             }}"#,
@@ -77,6 +80,7 @@ fn scalar_fields() {
                     "float": 1.0,
                     "int": 1,
                     "text": "yes",
+                    "bytes": "00010203",
                 }
             },
         });
