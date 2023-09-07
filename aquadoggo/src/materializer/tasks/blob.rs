@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use anyhow::anyhow;
+use futures::{pin_mut, StreamExt};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
-use tokio::fs::File;
+use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
 use crate::context::Context;
@@ -63,17 +65,17 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
     // Materialize all updated blobs to the filesystem.
     for blob_document in updated_blobs.iter() {
-        // Get the raw blob data
-        let blob_data = context
+        // Get a stream of raw blob data
+        let mut blob_stream = context
             .store
             .get_blob_by_view_id(blob_document.view_id())
             .await
             // We don't raise a critical error here, as it is possible that this method returns an
-            // error.
+            // error
             .map_err(|err| TaskError::Failure(err.to_string()))?
             .expect("Blob data exists at this point");
 
-        // Compose, and when needed create, the path for the blob file
+        // Determine a path for this blob file on the file system
         let blob_view_path = context
             .config
             .blobs_base_path
@@ -82,21 +84,37 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         // Write the blob to the filesystem
         info!("Creating blob at path {}", blob_view_path.display());
 
-        let mut file = File::create(&blob_view_path).await.map_err(|err| {
-            TaskError::Critical(format!(
-                "Could not create blob file @ {}: {}",
-                blob_view_path.display(),
-                err
-            ))
-        })?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&blob_view_path)
+            .await
+            .map_err(|err| {
+                TaskError::Critical(format!(
+                    "Could not create blob file @ {}: {}",
+                    blob_view_path.display(),
+                    err
+                ))
+            })?;
 
-        file.write_all(&blob_data).await.map_err(|err| {
-            TaskError::Critical(format!(
-                "Could not write blob file @ {}: {}",
-                blob_view_path.display(),
-                err
-            ))
-        })?;
+        // Read from the stream, chunk by chunk, and write every part to the file. This should put
+        // less pressure on our systems memory and allow writing large blob files
+        let stream = blob_stream.read_all();
+        pin_mut!(stream);
+
+        while let Some(value) = stream.next().await {
+            match value {
+                Ok(buf) => file.write(&buf).await.map_err(|err| anyhow!(err)),
+                Err(err) => Err(anyhow!(err)),
+            }
+            .map_err(|err| {
+                TaskError::Critical(format!(
+                    "Could not write blob file @ {}: {}",
+                    blob_view_path.display(),
+                    err
+                ))
+            })?;
+        }
     }
 
     Ok(None)

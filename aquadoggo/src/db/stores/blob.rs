@@ -2,17 +2,20 @@
 
 use std::num::NonZeroU64;
 
+use async_stream::try_stream;
 use bytes::{BufMut, BytesMut};
+use futures::Stream;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
+use p2panda_rs::schema::validate::MAX_BLOB_PIECE_LENGTH;
 use p2panda_rs::schema::{Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use sqlx::{query_scalar, AnyPool};
 
 use crate::db::errors::{BlobStoreError, SqlStoreError};
 use crate::db::query::{Filter, Order, Pagination, PaginationField, Select};
-use crate::db::stores::query::{Query, RelationList};
+use crate::db::stores::query::{PaginationCursor, Query, RelationList};
 use crate::db::SqlStore;
 
 /// Number of blob pieces requested per database query iteration.
@@ -20,38 +23,159 @@ const BLOB_QUERY_PAGE_SIZE: u64 = 10;
 
 pub type BlobData = Vec<u8>;
 
-impl SqlStore {
-    /// Get the data for one blob from the store, identified by its document id.
-    pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobData>, BlobStoreError> {
-        // Get the root blob document
-        let blob_document = match self.get_document(id).await? {
-            Some(document) => {
-                if document.schema_id != SchemaId::Blob(1) {
-                    return Err(BlobStoreError::NotBlobDocument);
-                }
-                document
-            }
-            None => return Ok(None),
+/// Gets blob data from the database in chunks (via pagination) and populates a readable stream
+/// with it.
+///
+/// This stream can further be used to write data into a file etc. This helps dealing with large
+/// blobs as only little system memory is occupied per reading and writing step. We only move small
+/// chunks at a time and keep the memory-footprint managable.
+///
+/// Currently the BLOB_QUERY_PAGE_SIZE is set to 10 which is the multiplier of the
+/// MAX_BLOB_PIECE_LENGTH. With 10 * 256kb we occupy an approximate maximum of 2.56mb memory at a
+/// time. If these values make sense needs to be re-visited, but it is a start!
+#[derive(Debug)]
+pub struct BlobStream {
+    store: SqlStore,
+    pagination_cursor: Option<PaginationCursor>,
+    document_view_id: DocumentViewId,
+    num_pieces: usize,
+    length: usize,
+    expected_num_pieces: usize,
+    expected_length: usize,
+}
+
+impl BlobStream {
+    pub fn new(store: &SqlStore, document: impl AsDocument) -> Result<Self, BlobStoreError> {
+        if document.schema_id() != &SchemaId::Blob(1) {
+            return Err(BlobStoreError::NotBlobDocument);
+        }
+
+        // Get the length of the blob
+        let expected_length = match document.get("length").unwrap() {
+            OperationValue::Integer(length) => *length as usize,
+            _ => unreachable!(), // We already validated that this is a blob document
         };
-        document_to_blob_data(self, blob_document).await
+
+        // Get the number of pieces in the blob
+        let expected_num_pieces = match document.get("pieces").unwrap() {
+            OperationValue::PinnedRelationList(list) => list.len(),
+            _ => unreachable!(), // We already validated that this is a blob document
+        };
+
+        Ok(Self {
+            store: store.to_owned(),
+            pagination_cursor: None,
+            document_view_id: document.view_id().to_owned(),
+            num_pieces: 0,
+            length: 0,
+            expected_length,
+            expected_num_pieces,
+        })
     }
 
-    /// Get the data for one blob from the store, identified by its document view id.
+    async fn next_chunk(&mut self) -> Result<BlobData, BlobStoreError> {
+        let schema = Schema::get_system(SchemaId::BlobPiece(1)).expect("System schema is given");
+        let list = RelationList::new_pinned(&self.document_view_id, "pieces");
+
+        let args = Query::new(
+            &Pagination::new(
+                &NonZeroU64::new(BLOB_QUERY_PAGE_SIZE).unwrap(),
+                self.pagination_cursor.as_ref(),
+                &vec![PaginationField::EndCursor, PaginationField::HasNextPage],
+            ),
+            &Select::new(&["data".into()]),
+            &Filter::default(),
+            &Order::default(),
+        );
+
+        let mut buf =
+            BytesMut::with_capacity(BLOB_QUERY_PAGE_SIZE as usize * MAX_BLOB_PIECE_LENGTH);
+
+        let (pagination_data, documents) = self.store.query(schema, &args, Some(&list)).await?;
+        self.pagination_cursor = pagination_data.end_cursor;
+        self.num_pieces += documents.len();
+
+        for (_, blob_piece_document) in documents {
+            match blob_piece_document
+                .get("data")
+                .expect("Blob piece document without \"data\" field")
+            {
+                OperationValue::Bytes(data_str) => buf.put(&data_str[..]),
+                _ => unreachable!(), // We only queried for blob piece documents
+            }
+        }
+
+        self.length += buf.len();
+
+        Ok(buf.to_vec())
+    }
+
+    /// This method is called _after_ the stream has ended. We compare the values with what we've
+    /// expected and find inconsistencies and invalid blobs.
+    fn validate(&self) -> Result<(), BlobStoreError> {
+        // No pieces were found
+        if self.length == 0 {
+            return Err(BlobStoreError::NoBlobPiecesFound);
+        };
+
+        // Not all pieces were found
+        if self.expected_num_pieces != self.num_pieces {
+            return Err(BlobStoreError::MissingPieces);
+        }
+
+        // Combined blob data length doesn't match the claimed length
+        if self.expected_length != self.length {
+            return Err(BlobStoreError::IncorrectLength);
+        };
+
+        Ok(())
+    }
+
+    /// Establishes a data stream of blob data.
+    ///
+    /// The stream ends when all data has been written, at the end the blob data gets validated
+    /// against the expected blob length.
+    ///
+    /// To consume this stream in form of an iterator it is required to use the `pin_mut` macro.
+    // NOTE: Clippy does not understand that this macro generates code which asks for an explicit
+    // lifetime.
+    #[allow(clippy::needless_lifetimes)]
+    pub fn read_all<'a>(&'a mut self) -> impl Stream<Item = Result<BlobData, BlobStoreError>> + 'a {
+        try_stream! {
+            loop {
+                let blob_data = self.next_chunk().await?;
+
+                if blob_data.is_empty() {
+                    self.validate()?;
+                    break;
+                }
+
+                yield blob_data;
+            }
+        }
+    }
+}
+
+impl SqlStore {
+    /// Get data stream for one blob from the store, identified by it's document id.
+    pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobStream>, BlobStoreError> {
+        if let Some(document) = self.get_document(id).await? {
+            Ok(Some(BlobStream::new(self, document)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get data stream for one blob from the store, identified by its document view id.
     pub async fn get_blob_by_view_id(
         &self,
         view_id: &DocumentViewId,
-    ) -> Result<Option<BlobData>, BlobStoreError> {
-        // Get the root blob document
-        let blob_document = match self.get_document_by_view_id(view_id).await? {
-            Some(document) => {
-                if document.schema_id != SchemaId::Blob(1) {
-                    return Err(BlobStoreError::NotBlobDocument);
-                }
-                document
-            }
-            None => return Ok(None),
-        };
-        document_to_blob_data(self, blob_document).await
+    ) -> Result<Option<BlobStream>, BlobStoreError> {
+        if let Some(document) = self.get_document_by_view_id(view_id).await? {
+            Ok(Some(BlobStream::new(self, document)?))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Purge blob data from the node _if_ it is not related to from another document.
@@ -158,82 +282,10 @@ async fn reverse_relations(
     .map_err(|e| SqlStoreError::Transaction(e.to_string()))
 }
 
-/// Helper method for validation and parsing a document into blob data.
-async fn document_to_blob_data(
-    store: &SqlStore,
-    blob: impl AsDocument,
-) -> Result<Option<BlobData>, BlobStoreError> {
-    // Get the length of the blob
-    let expected_length = match blob.get("length").unwrap() {
-        OperationValue::Integer(length) => *length as usize,
-        _ => unreachable!(), // We already validated that this is a blob document
-    };
-
-    // Get the number of pieces in the blob
-    let expected_num_pieces = match blob.get("pieces").unwrap() {
-        OperationValue::PinnedRelationList(list) => list.len(),
-        _ => unreachable!(), // We already validated that this is a blob document
-    };
-
-    // Now collect all existing pieces for the blob.
-    //
-    // We do this using the stores' query method, targeting pieces which are in the relation list
-    // of the blob.
-    let schema = Schema::get_system(SchemaId::BlobPiece(1)).unwrap();
-    let list = RelationList::new_pinned(blob.view_id(), "pieces");
-
-    let mut has_next_page = true;
-    let mut args = Query::new(
-        &Pagination::new(
-            &NonZeroU64::new(BLOB_QUERY_PAGE_SIZE).unwrap(),
-            None,
-            &vec![PaginationField::EndCursor, PaginationField::HasNextPage],
-        ),
-        &Select::new(&["data".into()]),
-        &Filter::default(),
-        &Order::default(),
-    );
-
-    let mut buf = BytesMut::with_capacity(expected_length);
-    let mut num_pieces = 0;
-
-    while has_next_page {
-        let (pagination_data, documents) = store.query(schema, &args, Some(&list)).await?;
-        has_next_page = pagination_data.has_next_page;
-        args.pagination.after = pagination_data.end_cursor;
-        num_pieces += documents.len();
-
-        for (_, blob_piece_document) in documents {
-            match blob_piece_document
-                .get("data")
-                .expect("Blob piece document without \"data\" field")
-            {
-                OperationValue::Bytes(data_str) => buf.put(&data_str[..]),
-                _ => unreachable!(), // We only queried for blob piece documents
-            }
-        }
-    }
-
-    // No pieces were found
-    if buf.is_empty() {
-        return Err(BlobStoreError::NoBlobPiecesFound);
-    };
-
-    // Not all pieces were found
-    if expected_num_pieces != num_pieces {
-        return Err(BlobStoreError::MissingPieces);
-    }
-
-    // Combined blob data length doesn't match the claimed length
-    if expected_length != buf.len() {
-        return Err(BlobStoreError::IncorrectLength);
-    };
-
-    Ok(Some(buf.into()))
-}
-
 #[cfg(test)]
 mod tests {
+    use bytes::{BufMut, BytesMut};
+    use futures::{pin_mut, StreamExt};
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
@@ -248,30 +300,49 @@ mod tests {
         populate_store_config, test_runner, update_document, TestNode,
     };
 
+    use super::BlobStream;
+
+    async fn read_data_from_stream(mut blob_stream: BlobStream) -> Result<Vec<u8>, BlobStoreError> {
+        let stream = blob_stream.read_all();
+        pin_mut!(stream);
+
+        let mut buf = BytesMut::new();
+
+        while let Some(value) = stream.next().await {
+            match value {
+                Ok(blob_data) => {
+                    buf.put(blob_data.as_slice());
+                }
+                Err(err) => return Err(err),
+            }
+        }
+
+        Ok(buf.to_vec())
+    }
+
     #[rstest]
     fn get_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
             let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
-
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Get blob by document id
-            let blob = node.context.store.get_blob(&document_id).await.unwrap();
-
-            assert!(blob.is_some());
-            assert_eq!(blob.unwrap(), blob_data);
+            let blob_stream = node.context.store.get_blob(&document_id).await.unwrap();
+            assert!(blob_stream.is_some());
+            let collected_data = read_data_from_stream(blob_stream.unwrap()).await;
+            assert_eq!(blob_data, collected_data.unwrap());
 
             // Get blob by view id
-            let blob = node
+            let blob_stream_view = node
                 .context
                 .store
                 .get_blob_by_view_id(&blob_view_id)
                 .await
                 .unwrap();
-
-            assert!(blob.is_some());
-            assert_eq!(blob.unwrap(), blob_data)
+            assert!(blob_stream_view.is_some());
+            let collected_data = read_data_from_stream(blob_stream_view.unwrap()).await;
+            assert_eq!(blob_data, collected_data.unwrap());
         })
     }
 
@@ -299,12 +370,17 @@ mod tests {
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // We get the correct `NoBlobPiecesFound` error.
-            let result = node.context.store.get_blob(&blob_document_id).await;
-            assert!(
-                matches!(result, Err(BlobStoreError::NoBlobPiecesFound)),
-                "{:?}",
-                result
-            );
+            let stream = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+            let collected_data = read_data_from_stream(stream.unwrap()).await;
+            assert!(matches!(
+                collected_data,
+                Err(BlobStoreError::NoBlobPiecesFound)
+            ),);
 
             // Publish one blob piece.
             let blob_piece_view_id_1 = add_document(
@@ -334,12 +410,14 @@ mod tests {
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // We should get the correct `MissingBlobPieces` error.
-            let result = node.context.store.get_blob(&blob_document_id).await;
-            assert!(
-                matches!(result, Err(BlobStoreError::MissingPieces)),
-                "{:?}",
-                result
-            );
+            let stream = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+            let collected_data = read_data_from_stream(stream.unwrap()).await;
+            assert!(matches!(collected_data, Err(BlobStoreError::MissingPieces)),);
 
             // Publish one more blob piece, but it doesn't contain the correct number of bytes.
             let blob_piece_view_id_2 = add_document(
@@ -370,12 +448,17 @@ mod tests {
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // We get the correct `IncorrectLength` error.
-            let result = node.context.store.get_blob(&blob_document_id).await;
-            assert!(
-                matches!(result, Err(BlobStoreError::IncorrectLength)),
-                "{:?}",
-                result
-            );
+            let stream = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+            let collected_data = read_data_from_stream(stream.unwrap()).await;
+            assert!(matches!(
+                collected_data,
+                Err(BlobStoreError::IncorrectLength)
+            ),);
         })
     }
 
