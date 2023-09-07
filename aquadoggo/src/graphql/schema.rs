@@ -13,9 +13,9 @@ use tokio::sync::Mutex;
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::graphql::input_values::{
-    build_filter_input_object, build_order_enum_value, BooleanFilter, FloatFilter, IntegerFilter,
-    MetaFilterInputObject, OrderDirection, PinnedRelationFilter, PinnedRelationListFilter,
-    RelationFilter, RelationListFilter, StringFilter,
+    build_filter_input_object, build_order_enum_value, BooleanFilter, FloatFilter, HexBytesFilter,
+    IntegerFilter, MetaFilterInputObject, OrderDirection, PinnedRelationFilter,
+    PinnedRelationListFilter, RelationFilter, RelationListFilter, StringFilter,
 };
 use crate::graphql::mutations::{MutationRoot, Publish};
 use crate::graphql::objects::{
@@ -28,7 +28,8 @@ use crate::graphql::queries::{
 use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{
     CursorScalar, DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar,
-    EncodedOperationScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+    EncodedOperationScalar, EntryHashScalar, HexBytesScalar, LogIdScalar, PublicKeyScalar,
+    SeqNumScalar,
 };
 use crate::schema::SchemaProvider;
 
@@ -52,6 +53,7 @@ pub async fn build_root_schema(
         .register::<DocumentMeta>()
         // Register input values
         .register::<BooleanFilter>()
+        .register::<HexBytesFilter>()
         .register::<FloatFilter>()
         .register::<IntegerFilter>()
         .register::<MetaFilterInputObject>()
@@ -62,6 +64,7 @@ pub async fn build_root_schema(
         .register::<RelationListFilter>()
         .register::<StringFilter>()
         // Register scalars
+        .register::<HexBytesScalar>()
         .register::<CursorScalar>()
         .register::<DocumentIdScalar>()
         .register::<DocumentViewIdScalar>()

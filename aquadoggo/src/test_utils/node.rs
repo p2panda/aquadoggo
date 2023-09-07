@@ -346,14 +346,10 @@ pub async fn add_blob_pieces(
 
     let mut blob_pieces_view_ids = Vec::with_capacity(blob_pieces.len());
     for piece in blob_pieces {
-        // @TODO: No need to convert bytes into a string when we introduced our new bytes operation
-        // field type. Related issue: https://github.com/p2panda/aquadoggo/issues/543
-        let byte_str = std::str::from_utf8(piece).expect("Invalid UTF-8 sequence");
-
         let view_id = add_document(
             node,
             &SchemaId::BlobPiece(1),
-            vec![("data", byte_str.into())],
+            vec![("data", piece.into())],
             &key_pair,
         )
         .await;

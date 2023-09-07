@@ -29,7 +29,7 @@ figment = { version = "0.10.10", features = ["toml", "env"] }
 hex = "0.4.3"
 libp2p = "0.52.0"
 log = "0.4.20"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "8377056617b64e898e9980e8ad84d258ca0442a1" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "be84d7c4e39c1b67125d80468ccf412cf25ae1d7" }
 path-clean = "1.0.1"
 serde = { version = "1.0.185", features = ["serde_derive"] }
 tempfile = "3.7.0"

@@ -36,6 +36,7 @@ pub fn doggo_schema() -> Schema {
 pub fn doggo_fields() -> Vec<(&'static str, OperationValue)> {
     vec![
         ("username", OperationValue::String("bubu".to_owned())),
+        ("data", OperationValue::Bytes(vec![0, 1, 2, 3])),
         ("height", OperationValue::Float(3.5)),
         ("age", OperationValue::Integer(28)),
         ("is_admin", OperationValue::Boolean(false)),

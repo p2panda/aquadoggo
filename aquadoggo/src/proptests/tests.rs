@@ -187,7 +187,6 @@ prop_compose! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 100,
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
         .. Config::default()
     })]
