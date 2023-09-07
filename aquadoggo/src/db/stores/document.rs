@@ -961,6 +961,7 @@ mod tests {
                 "age",
                 "height",
                 "is_admin",
+                "data",
                 "profile_picture",
                 "many_profile_pictures",
                 "special_profile_picture",
@@ -1396,7 +1397,7 @@ mod tests {
                 Some(&document_id.as_str().parse().unwrap()),
             )
             .await;
-            println!("{:#?}", result);
+
             assert!(result.is_err());
 
             let result = next_args(&node.context.store, &public_key, None).await;
