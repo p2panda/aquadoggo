@@ -44,6 +44,9 @@ pub enum FieldValue {
     /// String value.
     String(String),
 
+    /// Hex encoded bytes value.
+    Bytes(Vec<u8>),
+
     /// Reference to a document.
     Relation(DocumentAST),
 
@@ -111,6 +114,15 @@ fn values_from_schema(schema: SchemaAST) -> impl Strategy<Value = Vec<DocumentFi
             SchemaFieldType::String => any::<String>()
                 .prop_map(move |value| {
                     let value = FieldValue::String(value);
+                    DocumentFieldValue {
+                        name: field_name.clone(),
+                        value,
+                    }
+                })
+                .boxed(),
+            SchemaFieldType::Bytes => any::<Vec<u8>>()
+                .prop_map(move |value| {
+                    let value = FieldValue::Bytes(value);
                     DocumentFieldValue {
                         name: field_name.clone(),
                         value,

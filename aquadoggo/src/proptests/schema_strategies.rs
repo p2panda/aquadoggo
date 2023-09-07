@@ -64,6 +64,7 @@ pub enum SchemaFieldType {
     Integer,
     Float,
     String,
+    Bytes,
     Relation,
     RelationList,
     PinnedRelation,
@@ -104,6 +105,13 @@ fn schema_field() -> impl Strategy<Value = SchemaField> {
             SchemaField {
                 name: field_name,
                 field_type: SchemaFieldType::String,
+                relation_schema: None,
+            }
+        }),
+        any::<FieldName>().prop_map(|field_name| {
+            SchemaField {
+                name: field_name,
+                field_type: SchemaFieldType::Bytes,
                 relation_schema: None,
             }
         }),
