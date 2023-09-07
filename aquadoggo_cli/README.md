@@ -31,7 +31,7 @@ application on any computer, single-board or server.
 
 ### Pre-compiled binaries
 
-Check out our [Releases](/releases) section where we publish binaries for
+Check out our [Releases](https://github.com/p2panda/aquadoggo/releases/) section where we publish binaries for
 Linux, RaspberryPi, MacOS and Windows.
 
 ### Compile it yourself
