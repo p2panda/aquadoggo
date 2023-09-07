@@ -157,7 +157,7 @@ We're excited to hear about your ideas! Join our [official chat](https://wald.li
 
 ### Command line application
 
-Check out our [Releases](/releases) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
+Check out our [Releases](https://github.com/p2panda/aquadoggo/releases/) section where we publish binaries for Linux, RaspberryPi, MacOS and Windows or read [how you can compile](/aquadoggo_cli/README.md#Installation) `aquadoggo` yourself.
 
 ### Rust Crate
 
