@@ -81,6 +81,14 @@ pub fn parse_operation_rows(
                         OperationValue::String(field_value.unwrap().clone()),
                     ));
                 }
+                "bytes" => {
+                    operation_fields.push((
+                        field_name.to_string(),
+                        OperationValue::Bytes(hex::decode(field_value.unwrap()).expect(
+                            "bytes coming from the store are encoded in valid hex strings",
+                        )),
+                    ));
+                }
                 "relation" => {
                     operation_fields.push((
                         field_name.to_string(),
@@ -235,6 +243,10 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<Option<String>> 
             }
             db_values
         }
+        OperationValue::Bytes(bytes) => {
+            // bytes are stored in the db as hex strings
+            vec![Some(hex::encode(&bytes))]
+        }
     }
 }
 
@@ -297,6 +309,18 @@ pub fn parse_document_view_field_rows(
                     DocumentViewValue::new(
                         &row.operation_id.parse::<OperationId>().unwrap(),
                         &OperationValue::String(row.value.as_ref().unwrap().clone()),
+                    ),
+                );
+            }
+            "bytes" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Bytes(
+                            hex::decode(row.value.as_ref().unwrap())
+                                .expect("bytes coming from the db to be hex encoded"),
+                        ),
                     ),
                 );
             }
@@ -450,8 +474,7 @@ mod tests {
                 previous: None,
                 name: Some("data".to_string()),
                 field_type: Some("bytes".to_string()),
-                value: None,
-                data: Some(vec![0, 1, 2, 3]),
+                value: Some("00010203".to_string()),
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -814,7 +837,7 @@ mod tests {
             None, // This is an empty relation list
             Some("0020abababababababababababababababababababababababababababababababab".into()),
             Some("0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".into()),
-            Some(vec![0, 1, 2, 3].into()),
+            Some("00010203".into()),
             Some("3.5".into()),
             Some("false".into()),
             Some("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
@@ -984,8 +1007,7 @@ mod tests {
                 name: "data".to_string(),
                 list_index: 0,
                 field_type: "bytes".to_string(),
-                value: None,
-                data: Some(vec![0, 1, 2, 3]),
+                value: Some("00010203".to_string()),
             },
             DocumentViewFieldRow {
                 document_id: document_id.clone(),

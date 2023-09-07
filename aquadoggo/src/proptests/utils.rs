@@ -257,7 +257,7 @@ pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Fi
                 filter_args.push(format!("{name}: {{ eq: {} }}", escape_string_value(value)))
             }
             FilterValue::Bytes(value) => {
-                filter_args.push(format!("{name}: {{ eq: {} }}", value.0))
+                filter_args.push(format!("{name}: {{ eq: \"{}\" }}", value.0))
             }
             FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
             FilterValue::Float(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
@@ -274,7 +274,7 @@ pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Fi
                 escape_string_value(value)
             )),
             FilterValue::Bytes(value) => {
-                filter_args.push(format!("{name}: {{ notEq: {} }}", value.0))
+                filter_args.push(format!("{name}: {{ notEq: \"{}\" }}", value.0))
             }
             FilterValue::Integer(value) => {
                 filter_args.push(format!("{name}: {{ notEq: {value} }}"))

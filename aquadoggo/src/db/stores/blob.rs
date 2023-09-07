@@ -208,9 +208,7 @@ async fn document_to_blob_data(
                 .get("data")
                 .expect("Blob piece document without \"data\" field")
             {
-                // @TODO: Use bytes here instead, see related issue:
-                // https://github.com/p2panda/aquadoggo/issues/543
-                OperationValue::String(data_str) => buf.put(data_str.as_bytes()),
+                OperationValue::Bytes(data_str) => buf.put(&data_str[..]),
                 _ => unreachable!(), // We only queried for blob piece documents
             }
         }
@@ -240,6 +238,7 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
+    use p2panda_rs::test_utils::generate_random_bytes;
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
@@ -279,7 +278,7 @@ mod tests {
     #[rstest]
     fn get_blob_errors(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            let blob_data = "Hello, World!".to_string();
+            let blob_data = generate_random_bytes(12);
 
             // Publish a blob containing pieces which aren't in the store.
             let blob_view_id = add_document(
@@ -511,7 +510,7 @@ mod tests {
             let new_blob_pieces = add_document(
                 &mut node,
                 &SchemaId::BlobPiece(1),
-                vec![("data", "more blob data".into())],
+                vec![("data", "more blob data".as_bytes().into())],
                 &key_pair,
             )
             .await;
