@@ -228,16 +228,10 @@ fn generate_simple_field_filter(field: SchemaField) -> BoxedStrategy<(FieldName,
             prop_oneof![
                 any::<HexString>()
                     .prop_map(FilterValue::Bytes)
-                    .prop_map(move |value| (
-                        field.name.clone(),
-                        Filter::Equal(value)
-                    )),
+                    .prop_map(move |value| (field.name.clone(), Filter::Equal(value))),
                 any::<HexString>()
                     .prop_map(FilterValue::Bytes)
-                    .prop_map(move |value| (
-                        field_clone.name.clone(),
-                        Filter::NotEqual(value)
-                    ))
+                    .prop_map(move |value| (field_clone.name.clone(), Filter::NotEqual(value)))
             ]
             .boxed()
         }

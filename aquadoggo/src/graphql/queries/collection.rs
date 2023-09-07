@@ -629,7 +629,10 @@ mod tests {
             add_document(
                 &mut node,
                 schema.id(),
-                vec![("bool", false.into()), ("data", vec![4, 5, 6, 7][..].into())],
+                vec![
+                    ("bool", false.into()),
+                    ("data", vec![4, 5, 6, 7][..].into()),
+                ],
                 &key_pair,
             )
             .await;

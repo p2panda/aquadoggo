@@ -245,7 +245,7 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<Option<String>> 
         }
         OperationValue::Bytes(bytes) => {
             // bytes are stored in the db as hex strings
-            vec![Some(hex::encode(&bytes))]
+            vec![Some(hex::encode(bytes))]
         }
     }
 }
