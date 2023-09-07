@@ -187,9 +187,7 @@ prop_compose! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 100,
-        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("query-regressions"))),
-        max_shrink_iters: 1000,
+        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
         .. Config::default()
     })]
     #[test]
@@ -228,15 +226,7 @@ proptest! {
             };
         });
     }
-}
 
-proptest! {
-    #![proptest_config(Config {
-        cases: 100,
-        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("filtering-regressions"))),
-        max_shrink_iters: 100,
-        .. Config::default()
-    })]
     #[test]
     /// Test passing different combinations of filter arguments to the root collection query and
     /// also to fields which contain relation lists. Filter arguments are generated randomly via

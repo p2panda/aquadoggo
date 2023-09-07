@@ -19,7 +19,7 @@ use super::filter_strategies::{Filter, FilterValue};
 #[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] pub String);
 
-/// A fieldname which will follow the expected regex rules.
+/// A hexadecimal string.
 #[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct HexString(#[proptest(regex = "([a-fA-F0-9]{2}){0,64}")] pub String);
 
