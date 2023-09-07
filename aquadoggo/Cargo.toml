@@ -22,6 +22,7 @@ proptests = []
 anyhow = "1.0.62"
 async-graphql = { version = "5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "5.0.6"
+async-stream = "0.3.5"
 async-trait = "0.1.64"
 asynchronous-codec = { version = "0.6.2", features = ["cbor"] }
 axum = { version = "0.6.10", features = ["headers"] }
