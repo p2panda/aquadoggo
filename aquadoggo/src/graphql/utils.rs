@@ -61,7 +61,10 @@ pub fn gql_scalar(operation_value: &OperationValue) -> Value {
         OperationValue::Float(value) => value.to_owned().into(),
         OperationValue::Integer(value) => value.to_owned().into(),
         OperationValue::String(value) => value.to_owned().into(),
-        OperationValue::Bytes(value) => value.to_owned().into(),
+        OperationValue::Bytes(value) => {
+            let hex_string = hex::encode(value);
+            hex_string.into()
+        }
         _ => panic!("This method is not used for relation types"),
     }
 }
@@ -93,6 +96,11 @@ pub fn filter_to_operation_value(
         FieldType::Integer => filter_value.i64()?.into(),
         FieldType::Float => filter_value.f64()?.into(),
         FieldType::String => filter_value.string()?.into(),
+        FieldType::Bytes => {
+            let hex_string = filter_value.string()?;
+            let bytes = hex::decode(hex_string)?;
+            bytes[..].into()
+        }
         // We are only ever dealing with list items here
         FieldType::Relation(_) | FieldType::RelationList(_) => {
             DocumentId::new(&filter_value.string()?.parse()?).into()
@@ -100,11 +108,6 @@ pub fn filter_to_operation_value(
         FieldType::PinnedRelation(_) | FieldType::PinnedRelationList(_) => {
             let document_view_id: DocumentViewId = filter_value.string()?.parse()?;
             document_view_id.into()
-        }
-        FieldType::Bytes => {
-            let hex_string = filter_value.string()?;
-            let bytes = hex::decode(hex_string)?;
-            bytes[..].into()
         }
     };
 
