@@ -19,6 +19,10 @@ use super::filter_strategies::{Filter, FilterValue};
 #[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] pub String);
 
+/// A fieldname which will follow the expected regex rules.
+#[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HexString(#[proptest(regex = "([a-fA-F0-9]{2}){0,64}")] pub String);
+
 /// Add schemas from a schema AST to a test node.
 #[async_recursion]
 pub async fn add_schemas_from_ast(
@@ -41,6 +45,9 @@ pub async fn add_schemas_from_ast(
             }
             SchemaFieldType::String => {
                 schema_fields.push((field.name, FieldType::String));
+            }
+            SchemaFieldType::Bytes => {
+                schema_fields.push((field.name, FieldType::Bytes));
             }
             SchemaFieldType::Relation => {
                 let schema_ast = field.relation_schema.unwrap();
@@ -115,6 +122,9 @@ pub async fn add_documents_from_ast(
             }
             FieldValue::String(value) => {
                 operation_fields.push((&field.name.0, value.to_owned().into()));
+            }
+            FieldValue::Bytes(value) => {
+                operation_fields.push((&field.name.0, value[..].into()));
             }
             FieldValue::Relation(document_ast) => {
                 let document_view_id = add_documents_from_ast(node, &document_ast, documents).await;
@@ -246,6 +256,9 @@ pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Fi
             FilterValue::String(value) => {
                 filter_args.push(format!("{name}: {{ eq: {} }}", escape_string_value(value)))
             }
+            FilterValue::Bytes(value) => {
+                filter_args.push(format!("{name}: {{ eq: {} }}", value.0))
+            }
             FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
             FilterValue::Float(value) => filter_args.push(format!("{name}: {{ eq: {value} }}")),
         },
@@ -260,6 +273,9 @@ pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Fi
                 "{name}: {{ notEq: {} }}",
                 escape_string_value(value)
             )),
+            FilterValue::Bytes(value) => {
+                filter_args.push(format!("{name}: {{ notEq: {} }}", value.0))
+            }
             FilterValue::Integer(value) => {
                 filter_args.push(format!("{name}: {{ notEq: {value} }}"))
             }
@@ -276,6 +292,7 @@ pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Fi
             )),
             FilterValue::Integer(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
             FilterValue::Float(value) => filter_args.push(format!("{name}: {{ in: [{value}] }}")),
+            _ => panic!(),
         },
         Filter::NotIn(value) => match value {
             FilterValue::UniqueIdentifier => {
@@ -294,6 +311,7 @@ pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Fi
             FilterValue::Float(value) => {
                 filter_args.push(format!("{name}: {{ notIn: [{value}] }}"))
             }
+            _ => panic!(),
         },
         Filter::GreaterThan(value) => match value {
             FilterValue::String(value) => {
