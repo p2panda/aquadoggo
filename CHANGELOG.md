@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Fixed
 
 - Make sure temporary directory does not run out of scope [#557](https://github.com/p2panda/aquadoggo/pull/557)
+- Deduplicate generated schema field by key in proptests [#558](https://github.com/p2panda/aquadoggo/pull/558)
 
 ## [0.5.0]
 

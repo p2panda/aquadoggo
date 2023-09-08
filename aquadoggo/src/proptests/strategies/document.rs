@@ -3,9 +3,9 @@
 use p2panda_rs::schema::SchemaId;
 use proptest::collection::vec;
 use proptest::prelude::{any, Strategy};
+use proptest_derive::Arbitrary;
 
-use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
-use crate::proptests::utils::FieldName;
+use crate::proptests::strategies::schema::{FieldName, SchemaAST, SchemaFieldType};
 
 /// The maximum number of documents which will be generated per schema.
 /// This is one value which will be shrunk if a failure occurs.
@@ -14,6 +14,10 @@ const MAX_DOCUMENTS_PER_ROOT_SCHEMA: usize = 15;
 /// The maximum number of document relations which will be generated in a relation list.
 /// Same as above, this is a shrinking value.
 const MAX_DOCUMENTS_PER_RELATION_LIST: usize = 2;
+
+/// A hexadecimal string.
+#[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct HexString(#[proptest(regex = "([a-fA-F0-9]{2}){0,64}")] pub String);
 
 /// AST representing a document and its relations.
 #[derive(Debug, Clone)]
