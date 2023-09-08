@@ -7,8 +7,6 @@ use proptest::prelude::{any, Strategy};
 use proptest::prop_oneof;
 use proptest_derive::Arbitrary;
 
-use crate::proptests::utils::FieldName;
-
 /// Name used of each generated schema.
 const SCHEMA_NAME: &str = "test_schema";
 
@@ -56,6 +54,10 @@ pub struct SchemaField {
     pub field_type: SchemaFieldType,
     pub relation_schema: Option<Box<SchemaAST>>,
 }
+
+/// A fieldname which will follow the expected regex rules.
+#[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] pub String);
 
 /// Types of field present on a schema.
 #[derive(Arbitrary, Debug, Clone)]

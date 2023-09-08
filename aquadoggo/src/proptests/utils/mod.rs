@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+pub mod queries;
+
 use std::collections::HashMap;
 
 use async_recursion::async_recursion;
 use p2panda_rs::document::{DocumentId, DocumentViewId};
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
+use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::test_utils::fixtures::{random_document_id, random_key_pair};
 use proptest_derive::Arbitrary;
 
-use crate::proptests::document_strategies::{DocumentAST, FieldValue};
-use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
+use crate::proptests::strategies::{
+    DocumentAST, FieldValue, Filter, FilterValue, SchemaAST, SchemaFieldType, FieldName
+};
 use crate::test_utils::{add_document, TestNode};
 
 use super::filter_strategies::{Filter, FilterValue};
@@ -351,4 +355,30 @@ pub fn parse_filter(filter_args: &mut Vec<String>, name: &FieldName, filter: &Fi
 /// Escape unsafe chars in a string literal.
 fn escape_string_value(value: &str) -> String {
     format!("\"{}\"", value.replace("\"", "").replace("\\", ""))
+}
+
+/// Check the node is in the expected state.
+pub async fn sanity_checks(
+    node: &TestNode,
+    documents_by_schema: &HashMap<SchemaId, Vec<DocumentViewId>>,
+    schemas: &Vec<SchemaId>,
+) {
+    let node_schemas = node.context.schema_provider.all().await;
+    assert_eq!(schemas.len(), node_schemas.len() - 2); // minus 2 for system schema
+    for schema_id in schemas {
+        let result = node
+            .context
+            .store
+            .get_documents_by_schema(schema_id)
+            .await
+            .expect("Documents of this schema expected on node");
+        assert_eq!(
+            result.len(),
+            documents_by_schema
+                .get(&schema_id)
+                .cloned()
+                .unwrap_or_default()
+                .len()
+        );
+    }
 }

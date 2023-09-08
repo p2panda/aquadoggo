@@ -4,8 +4,7 @@ use p2panda_rs::schema::SchemaId;
 use proptest::collection::vec;
 use proptest::prelude::{any, Strategy};
 
-use crate::proptests::schema_strategies::{SchemaAST, SchemaFieldType};
-use crate::proptests::utils::FieldName;
+use crate::proptests::strategies::schema::{FieldName, SchemaAST, SchemaFieldType};
 
 /// The maximum number of documents which will be generated per schema.
 /// This is one value which will be shrunk if a failure occurs.
