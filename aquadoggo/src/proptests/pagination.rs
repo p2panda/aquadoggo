@@ -2,18 +2,15 @@
 
 use std::collections::HashMap;
 
-use proptest::test_runner::{Config, FileFailurePersistence};
+use proptest::test_runner::Config;
 use proptest::{prop_compose, proptest, strategy::Just};
 
 use crate::proptests::queries::{
     paginated_query, paginated_query_application_fields, paginated_query_meta_fields_only,
 };
-use crate::proptests::strategies::{
-    documents_strategy, schema_strategy, DocumentAST, SchemaAST,
-};
+use crate::proptests::strategies::{documents_strategy, schema_strategy, DocumentAST, SchemaAST};
 use crate::proptests::utils::{
-    add_documents_from_ast, add_schemas_from_ast, parse_selected_fields,
-    sanity_checks, 
+    add_documents_from_ast, add_schemas_from_ast, parse_selected_fields, sanity_checks,
 };
 use crate::test_utils::{graphql_test_client, test_runner, TestNode};
 
@@ -28,11 +25,7 @@ prop_compose! {
 }
 
 proptest! {
-    #![proptest_config(Config {
-        cases: 100,
-        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
-        .. Config::default()
-    })]
+    #![proptest_config(Config::with_cases(100))]
     #[test]
     /// Test pagination for collection queries. Schemas and documents are generated via proptest
     /// strategies. Tests expected behavior and return values based on the number of documents

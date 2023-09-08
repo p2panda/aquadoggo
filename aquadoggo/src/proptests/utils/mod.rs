@@ -10,10 +10,9 @@ use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema, SchemaId};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::test_utils::fixtures::{random_document_id, random_key_pair};
-use proptest_derive::Arbitrary;
 
 use crate::proptests::strategies::{
-    DocumentAST, FieldValue, Filter, FilterValue, SchemaAST, SchemaFieldType, FieldName
+    DocumentAST, FieldName, FieldValue, Filter, FilterValue, SchemaAST, SchemaFieldType,
 };
 use crate::test_utils::{add_document, TestNode};
 

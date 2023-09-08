@@ -2,17 +2,17 @@
 
 use std::collections::HashMap;
 
-use proptest::test_runner::{Config, FileFailurePersistence};
+use proptest::test_runner::Config;
 use proptest::{prop_compose, proptest, strategy::Just};
 
 use crate::proptests::queries::{make_query, paginated_query_application_fields};
 use crate::proptests::strategies::{
     application_filters_strategy, documents_strategy, meta_field_filter_strategy, schema_strategy,
-    DocumentAST, Filter, MetaField, SchemaAST, FieldName,
+    DocumentAST, FieldName, Filter, MetaField, SchemaAST,
 };
 use crate::proptests::utils::{
     add_documents_from_ast, add_schemas_from_ast, parse_filter, parse_selected_fields,
-    sanity_checks, 
+    sanity_checks,
 };
 use crate::test_utils::{graphql_test_client, test_runner, TestNode};
 
@@ -27,11 +27,7 @@ prop_compose! {
 }
 
 proptest! {
-    #![proptest_config(Config {
-        cases: 100,
-        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
-        .. Config::default()
-    })]
+    #![proptest_config(Config::with_cases(100))]
     #[test]
     /// Test passing different combinations of filter arguments to the root collection query and
     /// also to fields which contain relation lists. Filter arguments are generated randomly via
