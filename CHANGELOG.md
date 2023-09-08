@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Build a byte buffer over paginated pieces when assembling blobs [#547](https://github.com/p2panda/aquadoggo/pull/547)
 - Stream blob data in chunks to files to not occupy too much memory [#551](https://github.com/p2panda/aquadoggo/pull/551)
 
+## Fixed
+
+- Make sure temporary directory does not run out of scope [#557](https://github.com/p2panda/aquadoggo/pull/557)
+
 ## [0.5.0]
 
 ### Added
