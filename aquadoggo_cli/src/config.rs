@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 use anyhow::{anyhow, bail, Result};
 use aquadoggo::{AllowList, Configuration as NodeConfiguration, NetworkConfiguration};
@@ -16,12 +17,15 @@ use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tempfile::TempDir;
 
 use crate::utils::absolute_path;
 
 const WILDCARD: &str = "*";
 
 const CONFIG_FILE_NAME: &str = "config.toml";
+
+static TMP_DIR: OnceLock<TempDir> = OnceLock::new();
 
 type ConfigFilePath = Option<PathBuf>;
 
@@ -352,11 +356,15 @@ impl TryFrom<Configuration> for NodeConfiguration {
         // Create a temporary blobs directory when none was given
         let blobs_base_path = match value.blobs_base_path {
             Some(path) => path,
-            None => {
-                let tmp_dir = tempfile::TempDir::new()
-                    .map_err(|_| anyhow!("Could not create temporary directory to store blobs"))?;
-                tmp_dir.path().to_path_buf()
-            }
+            None => TMP_DIR
+                .get_or_init(|| {
+                    // Initialise a `TempDir` instance globally to make sure it does not run out of
+                    // scope and gets deleted before the end of the application runtime
+                    tempfile::TempDir::new()
+                        .expect("Could not create temporary directory to store blobs")
+                })
+                .path()
+                .to_path_buf(),
         };
 
         Ok(NodeConfiguration {
