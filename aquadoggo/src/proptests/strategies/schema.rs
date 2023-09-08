@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+
 use p2panda_rs::schema::{SchemaDescription, SchemaId, SchemaName};
 use p2panda_rs::test_utils::fixtures::random_document_view_id;
 use proptest::collection::vec;
@@ -25,7 +27,7 @@ const DESIRED_SCHEMA_NODES: u32 = 15;
 const SCHEMA_DEPTH: u32 = 1;
 
 /// Root of a schema AST.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SchemaAST {
     pub name: SchemaName,
     pub description: SchemaDescription,
@@ -48,7 +50,7 @@ impl SchemaAST {
 }
 
 /// Field on a schema.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SchemaField {
     pub name: FieldName,
     pub field_type: SchemaFieldType,
@@ -60,7 +62,7 @@ pub struct SchemaField {
 pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] pub String);
 
 /// Types of field present on a schema.
-#[derive(Arbitrary, Debug, Clone)]
+#[derive(Arbitrary, Debug, Clone, Eq, PartialEq)]
 pub enum SchemaFieldType {
     Boolean,
     Integer,
@@ -75,7 +77,14 @@ pub enum SchemaFieldType {
 
 /// Strategy for generating a collection of schema.
 pub fn schema_strategy() -> impl Strategy<Value = SchemaAST> {
-    vec(schema_field(), 1..=FIELDS_PER_SCHEMA).prop_map(|schema| SchemaAST::new(schema))
+    vec(schema_field(), 1..=FIELDS_PER_SCHEMA).prop_map(|schema_fields| {
+        // Remove any fields with duplicate keys.
+        let schema_fields_dedup_keys: HashMap<FieldName, SchemaField> = schema_fields
+            .iter()
+            .map(|field| (field.name.clone(), field.clone()))
+            .collect();
+        SchemaAST::new(schema_fields_dedup_keys.values().cloned().collect())
+    })
 }
 
 /// Generate a collection of schema fields and recurse into relation fields.
