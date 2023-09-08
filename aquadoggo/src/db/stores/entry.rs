@@ -189,6 +189,13 @@ impl SqlStore {
         &self,
         document_ids: &[DocumentId],
     ) -> Result<Vec<(PublicKey, Vec<(LogId, SeqNum)>)>, EntryStorageError> {
+        
+        // If no document ids were passed then don't query the database. Instead return an empty
+        // vec now already.
+        if document_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
         let document_ids_str: String = document_ids
             .iter()
             .map(|document_id| format!("'{}'", document_id.as_str()))
