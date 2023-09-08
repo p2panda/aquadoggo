@@ -313,6 +313,7 @@ mod tests {
     };
     use p2panda_rs::schema::{Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::key_pair;
+    use p2panda_rs::test_utils::generate_random_bytes;
     use p2panda_rs::test_utils::memory_store::helpers::{send_to_store, PopulateStoreConfig};
     use rstest::rstest;
     use tokio::sync::broadcast;
@@ -605,7 +606,14 @@ mod tests {
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let mut node_a = manager.create().await;
-            let document_view_id = add_blob(&mut node_a, "Hello World!", &key_pair).await;
+            let document_view_id = add_blob(
+                &mut node_a,
+                &generate_random_bytes(10),
+                5,
+                "text/plain".into(),
+                &key_pair,
+            )
+            .await;
 
             let (schema, _) = add_schema_and_documents(
                 &mut node_a,
@@ -654,7 +662,14 @@ mod tests {
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let mut node_a = manager.create().await;
-            let document_view_id = add_blob(&mut node_a, "Hello World!", &key_pair).await;
+            let document_view_id = add_blob(
+                &mut node_a,
+                &generate_random_bytes(10),
+                2,
+                "text/plain".into(),
+                &key_pair,
+            )
+            .await;
 
             let (schema, _) = add_schema_and_documents(
                 &mut node_a,
