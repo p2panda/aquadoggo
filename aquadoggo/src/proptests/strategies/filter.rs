@@ -9,7 +9,7 @@ use proptest_derive::Arbitrary;
 
 use crate::proptests::schema_strategies::{SchemaField, SchemaFieldType};
 use crate::proptests::utils::{FieldName, HexString};
-use crate::proptests::strategies::schema::{SchemaField, SchemaFieldType, FieldName};
+use crate::proptests::strategies::schema::{FieldName, SchemaField, SchemaFieldType};
 
 /// Possible values used in filter arguments. `UniqueIdentifier` is a placeholder for values which
 /// can be derived at runtime in order to use identifiers which exist in on the node, these include
