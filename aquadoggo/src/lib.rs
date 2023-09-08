@@ -22,7 +22,7 @@ mod manager;
 mod materializer;
 mod network;
 mod node;
-#[cfg(all(test))]
+#[cfg(all(test, feature = "proptests"))]
 mod proptests;
 mod replication;
 mod schema;
