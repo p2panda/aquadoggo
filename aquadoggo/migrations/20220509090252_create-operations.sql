@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS operation_fields_v1 (
     field_type              TEXT             NOT NULL,
     value                   TEXT             NULL,
     list_index              INT              NOT NULL,
-    FOREIGN KEY(operation_id) REFERENCES operations_v1(operation_id)
+    FOREIGN KEY(operation_id) REFERENCES operations_v1(operation_id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_operation_fields_v1 ON operation_fields_v1 (operation_id, name);

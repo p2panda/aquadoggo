@@ -200,7 +200,7 @@ pub async fn connect_to_relay(
     // our local public address and (b) enable a freshly started relay to learn its public address.
     swarm.dial(relay_address.clone())?;
 
-    // Wait to get confirmation that we told the relay node it's public address and that they told
+    // Wait to get confirmation that we told the relay node its public address and that they told
     // us ours.
     let mut learned_observed_addr = false;
     let mut told_relay_observed_addr = false;

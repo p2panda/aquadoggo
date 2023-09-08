@@ -56,7 +56,7 @@ mod tests {
     use serde_json::{json, Value as JsonValue};
 
     use crate::test_utils::{
-        add_document, add_schema, add_schema_and_documents, graphql_test_client, test_runner,
+        add_document, add_schema, add_schema_and_documents, http_test_client, test_runner,
         TestClient, TestNode,
     };
 
@@ -284,6 +284,7 @@ mod tests {
                     ("artist", "X-ray Spex".into(), None),
                     ("title", "Oh Bondage Up Yours!".into(), None),
                     ("release_year", 1977.into(), None),
+                    ("audio", vec![0, 1, 2, 3][..].into(), None),
                     (
                         "lyrics",
                         vec![
@@ -328,6 +329,7 @@ mod tests {
                     ("artist", "Gang Of Four".into(), None),
                     ("title", "Natural's Not In".into(), None),
                     ("release_year", 1979.into(), None),
+                    ("audio", vec![4, 5, 6, 7][..].into(), None),
                     (
                         "lyrics",
                         vec![
@@ -385,6 +387,7 @@ mod tests {
                     ("artist", "David Bowie".into(), None),
                     ("title", "Speed Of Life".into(), None),
                     ("release_year", 1977.into(), None),
+                    ("audio", vec![8, 9, 10, 11][..].into(), None),
                     (
                         "lyrics",
                         OperationValue::RelationList(RelationList::new(vec![])),
@@ -404,24 +407,30 @@ mod tests {
             "collection": value!({
                 "hasNextPage": false,
                 "totalCount": 2,
-                "endCursor": "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
+                "endCursor": "24gc7iHafVKTcfRZfVVV8etkSoJMJVsqs1iYJAuHb8oNp32Vi1PcYw6S5GJ8hNhPmHHbP1weVbACYRctHVz4jXjQ",
                 "documents": [
                     {
-                        "cursor": "273AmFQTk7w6134GhzKUS5tY8qDuaMYBPgbaftZ43G7saiKa73MPapFvjNDixbNjCr5ucNqzNsx2fYdRqRod9U2W",
-                        "fields": { "bool": true, },
+                        "cursor": "24gZVnL75RPvxMVAiuGT2SgCrHneGZgsvEaiCh5g8qgxGBhcunAffueCUTiyuLDamP1G48KYPmRDBBFG43dh3XJ2",
+                        "fields": { 
+                            "bool": true,
+                            "data": "00010203",
+                        },
                         "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
-                            "documentId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
-                            "viewId": "00200436216389856afb3f3a7d8cb2d2981be85787aebed02031c72eb9c216406c57",
+                            "documentId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
+                            "viewId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
                         }
                     },
                     {
-                        "cursor": "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
-                        "fields": { "bool": false, },
+                        "cursor": "24gc7iHafVKTcfRZfVVV8etkSoJMJVsqs1iYJAuHb8oNp32Vi1PcYw6S5GJ8hNhPmHHbP1weVbACYRctHVz4jXjQ",
+                        "fields": { 
+                            "bool": false,
+                            "data": "04050607"
+                        },
                         "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
-                            "documentId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
-                            "viewId": "0020de552d81948f220d09127dc42963071d086a142c9547e701674d4cac83f29872",
+                            "documentId": "0020c7dbed85159bbea8f1c44f1d4d7dfbdded6cd43c09ab1a292089e9530964cab9",
+                            "viewId": "0020c7dbed85159bbea8f1c44f1d4d7dfbdded6cd43c09ab1a292089e9530964cab9",
                         }
                     }
                 ]
@@ -433,7 +442,7 @@ mod tests {
         r#"
             (
                 first: 1,
-                after: "31Ch6qa4mdKcxpWJG4X9Wf5iMvSSxmSGg8cyg9teNR6yKmLncZCmyVUaPFjRNoWcxpeASGqrRiJGR8HSqjWBz5HE",
+                after: "24gc7iHafVKTcfRZfVVV8etkSoJMJVsqs1iYJAuHb8oNp32Vi1PcYw6S5GJ8hNhPmHHbP1weVbACYRctHVz4jXjQ",
                 orderBy: DOCUMENT_ID,
                 orderDirection: ASC,
                 filter: {
@@ -454,6 +463,38 @@ mod tests {
         vec![]
     )]
     #[case(
+        r#"(
+            first: 2,
+            filter: {
+                data: {
+                    eq: "00010203"
+                }
+            }
+        )"#.to_string(),
+        value!({
+            "collection": value!({
+                "hasNextPage": false,
+                "totalCount": 1,
+                "endCursor": "24gZVnL75RPvxMVAiuGT2SgCrHneGZgsvEaiCh5g8qgxGBhcunAffueCUTiyuLDamP1G48KYPmRDBBFG43dh3XJ2",
+                "documents": [
+                    {
+                        "cursor": "24gZVnL75RPvxMVAiuGT2SgCrHneGZgsvEaiCh5g8qgxGBhcunAffueCUTiyuLDamP1G48KYPmRDBBFG43dh3XJ2",
+                        "fields": { 
+                            "bool": true,
+                            "data": "00010203",
+                        },
+                        "meta": {
+                            "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
+                            "documentId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
+                            "viewId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
+                        }
+                    }
+                ]
+            }),
+        }),
+        vec![]
+    )]
+    #[case(
         r#"(first: 0)"#.to_string(),
         Value::Null,
         vec!["out of range integral type conversion attempted".to_string()]
@@ -469,7 +510,7 @@ mod tests {
         vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
     #[case(
-        r#"(after: "00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331")"#.to_string(),
+        r#"(after: "0020d384b69386867b61acebe6b23d4fac8c1425d5dce339bb3ef7c2218c155b3f9a")"#.to_string(),
         Value::Null,
         vec!["Invalid value for argument \"after\", expected type \"Cursor\"".to_string()]
     )]
@@ -481,12 +522,12 @@ mod tests {
     #[case(
         r#"(orderBy: HELLO)"#.to_string(),
         Value::Null,
-        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"HELLO\"".to_string()]
+        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_0020d384b69386867b61acebe6b23d4fac8c1425d5dce339bb3ef7c2218c155b3f9aOrderBy\" does not contain the value \"HELLO\"".to_string()]
     )]
     #[case(
         r#"(orderBy: "hello")"#.to_string(),
         Value::Null,
-        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331OrderBy\" does not contain the value \"hello\"".to_string()]
+        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_0020d384b69386867b61acebe6b23d4fac8c1425d5dce339bb3ef7c2218c155b3f9aOrderBy\" does not contain the value \"hello\"".to_string()]
     )]
     #[case(
         r#"(orderDirection: HELLO)"#.to_string(),
@@ -511,7 +552,7 @@ mod tests {
     #[case(
         r#"(filter: { hello: { eq: true }})"#.to_string(),
         Value::Null,
-        vec!["Invalid value for argument \"filter\", unknown field \"hello\" of type \"schema_name_00205406410aefce40c5cbbb04488f50714b7d5657b9f17eed7358da35379bc20331Filter\"".to_string()]
+        vec!["Invalid value for argument \"filter\", unknown field \"hello\" of type \"schema_name_0020d384b69386867b61acebe6b23d4fac8c1425d5dce339bb3ef7c2218c155b3f9aFilter\"".to_string()]
     )]
     #[case(
         r#"(filter: { bool: { contains: "hello" }})"#.to_string(),
@@ -570,7 +611,7 @@ mod tests {
             let schema = add_schema(
                 &mut node,
                 "schema_name",
-                vec![("bool", FieldType::Boolean)],
+                vec![("bool", FieldType::Boolean), ("data", FieldType::Bytes)],
                 &key_pair,
             )
             .await;
@@ -579,7 +620,7 @@ mod tests {
             add_document(
                 &mut node,
                 schema.id(),
-                vec![("bool", true.into())],
+                vec![("bool", true.into()), ("data", vec![0, 1, 2, 3][..].into())],
                 &key_pair,
             )
             .await;
@@ -588,13 +629,16 @@ mod tests {
             add_document(
                 &mut node,
                 schema.id(),
-                vec![("bool", false.into())],
+                vec![
+                    ("bool", false.into()),
+                    ("data", vec![4, 5, 6, 7][..].into()),
+                ],
                 &key_pair,
             )
             .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                 collection: all_{type_name}{query_args} {{
@@ -605,6 +649,7 @@ mod tests {
                         cursor
                         fields {{
                             bool
+                            data
                         }}
                         meta {{
                             owner
@@ -697,7 +742,7 @@ mod tests {
             .await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                     collection: all_{type_name} {{
@@ -742,7 +787,7 @@ mod tests {
             add_document(&mut node, schema.id(), document_values, &key_pair).await;
 
             // Configure and send test query.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let query = format!(
                 r#"{{
                     collection: all_{type_name} {{
@@ -813,6 +858,9 @@ mod tests {
     #[case("(filter: { title: { eq: \"Natural's Not In\" } })", "")]
     #[case("(filter: { title: { notEq: \"Natural's Not In\", in: [ \"Oh Bondage Up Yours!\", \"Speed Of Life\" ] } })", "")]
     #[case("(filter: { title: { notEq: \"Natural's Not In\" }, release_year: { gt: 1978 }, artist: { in: [ \"X-ray Spex\"] } })", "")]
+    #[case("(filter: { audio: { notEq: \"aa\" } })", "")]
+    #[case("(filter: { audio: { eq: \"E8\" } })", "")]
+    #[case("(filter: { audio: { eq: \"\" } })", "")]
     #[case(
         "(orderDirection: DESC, orderBy: title)",
         "(orderDirection: ASC, orderBy: line)"
@@ -852,7 +900,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Perform a paginated collection query for the songs.
             query_songs(&client, song_schema.id(), &song_args, &lyric_args).await;
@@ -870,7 +918,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Perform a paginated collection query for the songs on the node identified by the
             // schema id. We don't pass any arguments and so will get up to the default number of
@@ -921,7 +969,7 @@ mod tests {
             // That's more my style, so let's get the lyrics for this song. But there are a lot,
             // so I'll just get the first 2 lines.
 
-            // We can identify the song by it's id and then paginate the lyrics field which is a
+            // We can identify the song by its id and then paginate the lyrics field which is a
             // relation list of song lyric lines.
             let oh_bondage_up_yours_id =
                 oh_bondage_up_yours["meta"]["documentId"].as_str().unwrap();
@@ -1103,7 +1151,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             let data = query_songs(&client, song_schema.id(), "(first: 4)", "").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);
@@ -1144,7 +1192,7 @@ mod tests {
                 here_be_some_karaoke_hits(&mut node, &view_ids, &lyric_schema, &key_pair).await;
 
             // Init a GraphQL client we'll use to query the node.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             let data = query_songs_meta_fields_only(&client, song_schema.id(), "(first: 4)").await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 3);

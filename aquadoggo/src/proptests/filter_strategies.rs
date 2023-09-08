@@ -8,7 +8,7 @@ use proptest::strategy::{BoxedStrategy, Just, Strategy};
 use proptest_derive::Arbitrary;
 
 use crate::proptests::schema_strategies::{SchemaField, SchemaFieldType};
-use crate::proptests::utils::FieldName;
+use crate::proptests::utils::{FieldName, HexString};
 
 /// Possible values used in filter arguments. `UniqueIdentifier` is a placeholder for values which
 /// can be derived at runtime in order to use identifiers which exist in on the node, these include
@@ -17,6 +17,7 @@ use crate::proptests::utils::FieldName;
 pub enum FilterValue {
     Boolean(bool),
     String(String),
+    Bytes(HexString),
     Integer(i64),
     Float(f64),
     UniqueIdentifier, // This is a placeholder for a document id, document view id or public key which is selected at testing time
@@ -87,6 +88,7 @@ fn application_field_filter_strategy(
         | SchemaFieldType::Integer
         | SchemaFieldType::Float
         | SchemaFieldType::String
+        | SchemaFieldType::Bytes
         | SchemaFieldType::Relation
         | SchemaFieldType::PinnedRelation => generate_simple_field_filter(field.clone())
             .prop_map(|(name, filter)| ((name, filter), Vec::new()))
@@ -218,6 +220,18 @@ fn generate_simple_field_filter(field: SchemaField) -> BoxedStrategy<(FieldName,
                     .prop_map(|(name, value)| (name, Filter::LessThan(value))),
                 value_and_name_strategy
                     .prop_map(|(name, value)| (name, Filter::LessThanOrEqual(value))),
+            ]
+            .boxed()
+        }
+        SchemaFieldType::Bytes => {
+            let field_clone = field.clone();
+            prop_oneof![
+                any::<HexString>()
+                    .prop_map(FilterValue::Bytes)
+                    .prop_map(move |value| (field.name.clone(), Filter::Equal(value))),
+                any::<HexString>()
+                    .prop_map(FilterValue::Bytes)
+                    .prop_map(move |value| (field_clone.name.clone(), Filter::NotEqual(value)))
             ]
             .boxed()
         }

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::panic;
 use std::sync::Arc;
 
 use futures::Future;
@@ -101,15 +100,20 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
         let (_config, pool) = initialize_db().await;
         let store = SqlStore::new(pool);
 
-        // Construct node config supporting any schema.
-        let cfg = Configuration::default();
+        // Construct temporary blobs directory for the test runner
+        let temp_dir = tempfile::TempDir::new()
+            .expect("Could not create temporary test directory for blobs storage");
+
+        // Construct node config supporting any schema
+        let mut config = Configuration::default();
+        config.blobs_base_path = temp_dir.path().to_path_buf();
 
         // Construct the actual test node
         let node = TestNode {
             context: Context::new(
                 store.clone(),
                 KeyPair::new(),
-                cfg,
+                config,
                 SchemaProvider::default(),
             ),
         };
@@ -135,7 +139,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
         // there, we need to propagate it further to inform the test runtime about the result
         match result {
             Ok(_) => (),
-            Err(err) => panic::resume_unwind(err.into_panic()),
+            Err(err) => std::panic::resume_unwind(err.into_panic()),
         };
     });
 }
@@ -156,7 +160,7 @@ pub fn test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'stati
     // Instantiate the database manager
     let manager = TestNodeManager::new();
 
-    // Get a handle onto it's collection of pools
+    // Get a handle onto its collection of pools
     let pools = manager.pools.clone();
 
     runtime.block_on(async {
@@ -180,7 +184,7 @@ pub fn test_runner_with_manager<F: AsyncTestFnWithManager + Send + Sync + 'stati
         // there, we need to propagate it further to inform the test runtime about the result
         match result {
             Ok(_) => (),
-            Err(err) => panic::resume_unwind(err.into_panic()),
+            Err(err) => std::panic::resume_unwind(err.into_panic()),
         };
     });
 }

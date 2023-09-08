@@ -13,9 +13,9 @@ use tokio::sync::Mutex;
 use crate::bus::ServiceSender;
 use crate::db::SqlStore;
 use crate::graphql::input_values::{
-    build_filter_input_object, build_order_enum_value, BooleanFilter, FloatFilter, IntegerFilter,
-    MetaFilterInputObject, OrderDirection, PinnedRelationFilter, PinnedRelationListFilter,
-    RelationFilter, RelationListFilter, StringFilter,
+    build_filter_input_object, build_order_enum_value, BooleanFilter, FloatFilter, HexBytesFilter,
+    IntegerFilter, MetaFilterInputObject, OrderDirection, PinnedRelationFilter,
+    PinnedRelationListFilter, RelationFilter, RelationListFilter, StringFilter,
 };
 use crate::graphql::mutations::{MutationRoot, Publish};
 use crate::graphql::objects::{
@@ -28,7 +28,8 @@ use crate::graphql::queries::{
 use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{
     CursorScalar, DocumentIdScalar, DocumentViewIdScalar, EncodedEntryScalar,
-    EncodedOperationScalar, EntryHashScalar, LogIdScalar, PublicKeyScalar, SeqNumScalar,
+    EncodedOperationScalar, EntryHashScalar, HexBytesScalar, LogIdScalar, PublicKeyScalar,
+    SeqNumScalar,
 };
 use crate::schema::SchemaProvider;
 
@@ -52,6 +53,7 @@ pub async fn build_root_schema(
         .register::<DocumentMeta>()
         // Register input values
         .register::<BooleanFilter>()
+        .register::<HexBytesFilter>()
         .register::<FloatFilter>()
         .register::<IntegerFilter>()
         .register::<MetaFilterInputObject>()
@@ -62,6 +64,7 @@ pub async fn build_root_schema(
         .register::<RelationListFilter>()
         .register::<StringFilter>()
         // Register scalars
+        .register::<HexBytesScalar>()
         .register::<CursorScalar>()
         .register::<DocumentIdScalar>()
         .register::<DocumentViewIdScalar>()
@@ -111,7 +114,7 @@ pub async fn build_root_schema(
             .register(filter_input);
 
         // Add a query for each schema. It offers an interface to retrieve a single document of
-        // this schema by it's document id or view id. Its resolver parses and validates the passed
+        // this schema by its document id or view id. Its resolver parses and validates the passed
         // parameters, then forwards them up to the children query fields
         root_query = build_document_query(root_query, &schema);
 
@@ -271,15 +274,15 @@ mod test {
     use rstest::rstest;
     use serde_json::{json, Value};
 
-    use crate::test_utils::{add_schema, graphql_test_client, test_runner, TestNode};
+    use crate::test_utils::{add_schema, http_test_client, test_runner, TestNode};
 
     #[rstest]
     fn schema_updates() {
         test_runner(|mut node: TestNode| async move {
             // Create test client in the beginning so it is initialised with just the system
-            // schemas. Then we create a new application schema to test that the graphql schema
-            // is updated and we can query the changed schema.
-            let client = graphql_test_client(&node).await;
+            // schemas. Then we create a new application schema to test that the graphql schema is
+            // updated and we can query the changed schema.
+            let client = http_test_client(&node).await;
 
             // This test uses a fixed private key to allow us to anticipate the schema typename.
             let key_pair = key_pair(PRIVATE_KEY);

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::path::PathBuf;
+
 use p2panda_rs::schema::SchemaId;
 
 use crate::network::NetworkConfiguration;
@@ -36,6 +38,12 @@ pub struct Configuration {
     /// 2020.
     pub http_port: u16,
 
+    /// Path to folder where blobs (binary files) are kept and served from.
+    ///
+    /// **Warning**: When set to a temporary directory, make sure that also the database itself is
+    /// not persisted, otherwise you will run into data inconsistencies.
+    pub blobs_base_path: PathBuf,
+
     /// Number of concurrent workers which defines the maximum of materialization tasks which can
     /// be worked on simultaneously.
     ///
@@ -54,6 +62,7 @@ impl Default for Configuration {
             database_url: "sqlite::memory:".into(),
             database_max_connections: 32,
             http_port: 2020,
+            blobs_base_path: PathBuf::new(),
             worker_pool_size: 16,
             network: NetworkConfiguration::default(),
         }

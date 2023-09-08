@@ -14,10 +14,13 @@ use tower_http::cors::{Any, CorsLayer};
 use crate::bus::ServiceSender;
 use crate::context::Context;
 use crate::graphql::GraphQLSchemaManager;
-use crate::http::api::{handle_graphql_playground, handle_graphql_query};
+use crate::http::api::{
+    handle_blob_document, handle_blob_view, handle_graphql_playground, handle_graphql_query,
+};
 use crate::http::context::HttpServiceContext;
 use crate::manager::{ServiceReadySender, Shutdown};
 
+/// Route to the GraphQL playground
 const GRAPHQL_ROUTE: &str = "/graphql";
 
 /// Build HTTP server with GraphQL API.
@@ -35,6 +38,9 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
             GRAPHQL_ROUTE,
             get(|| handle_graphql_playground(GRAPHQL_ROUTE)).post(handle_graphql_query),
         )
+        // Add blob routes
+        .route("/blobs/:document_id", get(handle_blob_document))
+        .route("/blobs/:document_id/:view_hash", get(handle_blob_view))
         // Add middlewares
         .layer(cors)
         // Add shared context
@@ -55,8 +61,14 @@ pub async fn http_service(
     let graphql_schema_manager =
         GraphQLSchemaManager::new(context.store.clone(), tx, context.schema_provider.clone()).await;
 
+    let blobs_base_path = &context.config.blobs_base_path;
+
     // Introduce a new context for all HTTP routes
-    let http_context = HttpServiceContext::new(graphql_schema_manager);
+    let http_context = HttpServiceContext::new(
+        context.store.clone(),
+        graphql_schema_manager,
+        blobs_base_path.to_owned(),
+    );
 
     // Start HTTP server with given port and re-attempt with random port if it was taken already
     let builder = if let Ok(builder) = axum::Server::try_bind(&http_address) {
@@ -108,7 +120,11 @@ mod tests {
             let schema_provider = SchemaProvider::default();
             let graphql_schema_manager =
                 GraphQLSchemaManager::new(node.context.store.clone(), tx, schema_provider).await;
-            let context = HttpServiceContext::new(graphql_schema_manager);
+            let context = HttpServiceContext::new(
+                node.context.store.clone(),
+                graphql_schema_manager,
+                node.context.config.blobs_base_path.clone(),
+            );
             let client = TestClient::new(build_server(context));
 
             let response = client

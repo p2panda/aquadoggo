@@ -81,7 +81,7 @@ impl SchemaProvider {
 
     /// Inserts or updates the given schema in this provider.
     ///
-    /// Returns `true` if a schema was updated or it already existed in it's current state, and
+    /// Returns `true` if a schema was updated or it already existed in its current state, and
     /// `false` if it was inserted.
     pub async fn update(&self, schema: Schema) -> Result<bool> {
         if let AllowList::Set(allow_schema_ids) = &self.allow_schema_ids {
@@ -94,7 +94,7 @@ impl SchemaProvider {
         let schema_exists = schemas.get(schema.id()).is_some();
 
         if schema_exists {
-            // Return true here as the schema already exists in it's current state so we don't need
+            // Return true here as the schema already exists in its current state so we don't need
             // to mutate the schema store or announce any change.
             return Ok(true);
         }
@@ -154,7 +154,7 @@ mod test {
     async fn get_all_schemas() {
         let provider = SchemaProvider::default();
         let result = provider.all().await;
-        assert_eq!(result.len(), 2);
+        assert_eq!(result.len(), 4);
     }
 
     #[tokio::test]

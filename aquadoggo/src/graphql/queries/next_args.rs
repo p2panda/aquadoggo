@@ -97,13 +97,13 @@ mod tests {
     use serde_json::json;
 
     use crate::test_utils::{
-        graphql_test_client, populate_and_materialize, populate_store_config, test_runner, TestNode,
+        http_test_client, populate_and_materialize, populate_store_config, test_runner, TestNode,
     };
 
     #[rstest]
     fn next_args_valid_query() {
         test_runner(|node: TestNode| async move {
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.
             let received_entry_args = client
@@ -149,7 +149,7 @@ mod tests {
             // Populates the store and materialises documents and schema.
             let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
 
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let document_id = document_ids.get(0).expect("There should be a document id");
             let public_key = key_pairs
                 .get(0)
@@ -190,7 +190,7 @@ mod tests {
                     "nextArgs": {
                         "logId": "0",
                         "seqNum": "2",
-                        "backlink": "0020597040e2b85b4eaf3955f7aaca8f8fd60f00f77549a5554c8dd4081657f0d231",
+                        "backlink": "002098e61a9d946a1f046bd68414bfcc8fec09ddb3954dccaf184eaf7a7f4eb9cd26",
                         "skiplink": null,
                     }
                 })
@@ -201,7 +201,7 @@ mod tests {
     #[rstest]
     fn next_args_error_response() {
         test_runner(|node: TestNode| async move {
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
             let response = client
                 .post("/graphql")
                 .json(&json!({

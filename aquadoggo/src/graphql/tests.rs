@@ -9,7 +9,7 @@ use p2panda_rs::{document::DocumentId, schema::FieldType};
 use rstest::rstest;
 use serde_json::json;
 
-use crate::test_utils::{add_document, add_schema, graphql_test_client, test_runner, TestNode};
+use crate::test_utils::{add_document, add_schema, http_test_client, test_runner, TestNode};
 
 // Test querying application documents with scalar fields (no relations) by document id and by view
 // id.
@@ -27,6 +27,7 @@ fn scalar_fields() {
                 ("float", FieldType::Float),
                 ("int", FieldType::Integer),
                 ("text", FieldType::String),
+                ("bytes", FieldType::Bytes),
             ],
             &key_pair,
         )
@@ -38,13 +39,14 @@ fn scalar_fields() {
             ("float", (1.0).into()),
             ("int", 1.into()),
             ("text", "yes".into()),
+            ("bytes", vec![0, 1, 2, 3][..].into()),
         ]
         .try_into()
         .unwrap();
         let view_id = add_document(&mut node, schema.id(), doc_fields, &key_pair).await;
 
         // Configure and send test query
-        let client = graphql_test_client(&node).await;
+        let client = http_test_client(&node).await;
         let query = format!(
             r#"{{
                 scalarDoc: {type_name}(viewId: "{view_id}") {{
@@ -52,7 +54,8 @@ fn scalar_fields() {
                         bool,
                         float,
                         int,
-                        text
+                        text,
+                        bytes
                     }}
                 }},
             }}"#,
@@ -77,6 +80,7 @@ fn scalar_fields() {
                     "float": 1.0,
                     "int": 1,
                     "text": "yes",
+                    "bytes": "00010203",
                 }
             },
         });
@@ -149,7 +153,7 @@ fn relation_fields() {
             add_document(&mut node, parent_schema.id(), parent_fields, &key_pair).await;
 
         // Configure and send test query
-        let client = graphql_test_client(&node).await;
+        let client = http_test_client(&node).await;
         let query = format!(
             r#"{{
                 result: {}(viewId: "{}") {{

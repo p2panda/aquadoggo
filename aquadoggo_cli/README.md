@@ -85,7 +85,7 @@ depending on your needs.
 #### Support only certain schemas
 
 > "I want to run a node which only replicates and serves data from a limited
-> set of schemas. In this case it's schemas required by a mushroom sighting
+> set of schemas. In this case its schemas required by a mushroom sighting
 > app."
 
 ```toml
@@ -156,8 +156,8 @@ direct_node_addresses = [
 
 #### Persist node identity and database
 
-> "I want my node to persist it's identity and database on the filesystem and
-> retreive them whenever it runs again."
+> "I want my node to persist its identity, uploaded files and database on the
+> filesystem and retreive them whenever it runs again."
 
 ```toml
 # Persist node private key at given location (using Linux XDG paths as an example)
@@ -165,6 +165,9 @@ private_key = "$HOME/.local/share/aquadoggo/private-key.txt"
 
 # Persist SQLite database at given location
 database_url = "sqlite:$HOME/.local/share/aquadoggo/db.sqlite3"
+
+# Persist blobs (large binary files) at given location
+blobs_base_path = "$HOME/.local/share/aquadoggo/blobs"
 ```
 
 ### Configuration
@@ -218,6 +221,13 @@ Options:
   -q, --quic-port <PORT>
           QUIC port for node-node communication and data replication. Defaults
           to 2022
+
+  -f, --blobs-base-path <PATH>
+          Path to folder where blobs (large binary files) are persisted.
+          Defaults to a temporary directory.
+
+          WARNING: By default your node will not persist any blobs after
+          shutdown. Set a path for production settings to not loose data.
 
   -k, --private-key <PATH>
           Path to persist your ed25519 private key file. Defaults to an

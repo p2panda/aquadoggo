@@ -81,6 +81,14 @@ pub fn parse_operation_rows(
                         OperationValue::String(field_value.unwrap().clone()),
                     ));
                 }
+                "bytes" => {
+                    operation_fields.push((
+                        field_name.to_string(),
+                        OperationValue::Bytes(hex::decode(field_value.unwrap()).expect(
+                            "bytes coming from the store are encoded in valid hex strings",
+                        )),
+                    ));
+                }
                 "relation" => {
                     operation_fields.push((
                         field_name.to_string(),
@@ -235,6 +243,10 @@ pub fn parse_value_to_string_vec(value: &OperationValue) -> Vec<Option<String>> 
             }
             db_values
         }
+        OperationValue::Bytes(bytes) => {
+            // bytes are stored in the db as hex strings
+            vec![Some(hex::encode(bytes))]
+        }
     }
 }
 
@@ -297,6 +309,18 @@ pub fn parse_document_view_field_rows(
                     DocumentViewValue::new(
                         &row.operation_id.parse::<OperationId>().unwrap(),
                         &OperationValue::String(row.value.as_ref().unwrap().clone()),
+                    ),
+                );
+            }
+            "bytes" => {
+                document_view_fields.insert(
+                    &row.name,
+                    DocumentViewValue::new(
+                        &row.operation_id.parse::<OperationId>().unwrap(),
+                        &OperationValue::Bytes(
+                            hex::decode(row.value.as_ref().unwrap())
+                                .expect("bytes coming from the db to be hex encoded"),
+                        ),
                     ),
                 );
             }
@@ -432,6 +456,25 @@ mod tests {
                 name: Some("age".to_string()),
                 field_type: Some("int".to_string()),
                 value: Some("28".to_string()),
+                list_index: Some(0),
+                sorted_index: None,
+            },
+            OperationFieldsJoinedRow {
+                public_key: "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96"
+                    .to_string(),
+                document_id: "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                    .to_string(),
+                operation_id:
+                    "0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543"
+                        .to_string(),
+                action: "create".to_string(),
+                schema_id:
+                    "venue_0020c65567ae37efea293e34a9c7d13f8f2bf23dbdc3b5c7b9ab46293111c48fc78b"
+                        .to_string(),
+                previous: None,
+                name: Some("data".to_string()),
+                field_type: Some("bytes".to_string()),
+                value: Some("00010203".to_string()),
                 list_index: Some(0),
                 sorted_index: None,
             },
@@ -696,6 +739,10 @@ mod tests {
             &OperationValue::String("bubu".to_string())
         );
         assert_eq!(
+            operation.fields().unwrap().get("data").unwrap(),
+            &OperationValue::Bytes(vec![0, 1, 2, 3])
+        );
+        assert_eq!(
             operation.fields().unwrap().get("age").unwrap(),
             &OperationValue::Integer(28)
         );
@@ -786,35 +833,20 @@ mod tests {
     #[rstest]
     fn operation_values_to_string_vec(schema_id: SchemaId) {
         let expected_list = vec![
-            Some("28".to_string()),
-            None,
-            Some(
-                "0020abababababababababababababababababababababababababababababababab".to_string(),
-            ),
-            Some(
-                "0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".to_string(),
-            ),
-            Some("3.5".to_string()),
-            Some("false".to_string()),
-            Some(
-                "0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-            ),
-            Some(
-                "0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
-            ),
-            Some(
-                "0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string(),
-            ),
-            Some(
-                "0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".to_string(),
-            ),
-            Some(
-                "0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_string(),
-            ),
-            Some(
-                "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
-            ),
-            Some("bubu".to_string()),
+            Some("28".into()),
+            None, // This is an empty relation list
+            Some("0020abababababababababababababababababababababababababababababababab".into()),
+            Some("0020cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd".into()),
+            Some("00010203".into()),
+            Some("3.5".into()),
+            Some("false".into()),
+            Some("0020aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
+            Some("0020bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into()),
+            Some("0020cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".into()),
+            Some("0020dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".into()),
+            Some("0020eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".into()),
+            Some("0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".into()),
+            Some("bubu".into()),
         ];
 
         let operation = create_operation(doggo_fields(), schema_id);
@@ -853,58 +885,44 @@ mod tests {
 
     #[test]
     fn parses_document_field_rows() {
+        let document_id =
+            "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0".to_string();
+        let operation_id =
+            "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770".to_string();
+        let document_view_id = operation_id.clone();
+
         let document_field_rows = vec![
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "age".to_string(),
                 list_index: 0,
                 field_type: "int".to_string(),
                 value: Some("28".to_string()),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "height".to_string(),
                 list_index: 0,
                 field_type: "float".to_string(),
                 value: Some("3.5".to_string()),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "is_admin".to_string(),
                 list_index: 0,
                 field_type: "bool".to_string(),
                 value: Some("false".to_string()),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "many_profile_pictures".to_string(),
                 list_index: 0,
                 field_type: "relation_list".to_string(),
@@ -914,14 +932,9 @@ mod tests {
                 ),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "many_profile_pictures".to_string(),
                 list_index: 1,
                 field_type: "relation_list".to_string(),
@@ -931,14 +944,9 @@ mod tests {
                 ),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "many_special_profile_pictures".to_string(),
                 list_index: 0,
                 field_type: "pinned_relation_list".to_string(),
@@ -948,14 +956,9 @@ mod tests {
                 ),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "many_special_profile_pictures".to_string(),
                 list_index: 1,
                 field_type: "pinned_relation_list".to_string(),
@@ -965,14 +968,9 @@ mod tests {
                 ),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "profile_picture".to_string(),
                 list_index: 0,
                 field_type: "relation".to_string(),
@@ -982,14 +980,9 @@ mod tests {
                 ),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "special_profile_picture".to_string(),
                 list_index: 0,
                 field_type: "pinned_relation".to_string(),
@@ -999,28 +992,27 @@ mod tests {
                 ),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "username".to_string(),
                 list_index: 0,
                 field_type: "str".to_string(),
                 value: Some("bubu".to_string()),
             },
             DocumentViewFieldRow {
-                document_id: "0020713b2777f1222660291cb528d220c358920b4beddc1aea9df88a69cec45a10c0"
-                    .to_string(),
-                document_view_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
-                operation_id:
-                    "0020dc8fe1cbacac4d411ae25ea264369a7b2dabdfb617129dec03b6661edd963770"
-                        .to_string(),
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
+                name: "data".to_string(),
+                list_index: 0,
+                field_type: "bytes".to_string(),
+                value: Some("00010203".to_string()),
+            },
+            DocumentViewFieldRow {
+                document_id: document_id.clone(),
+                document_view_id: document_view_id.clone(),
+                operation_id: operation_id.clone(),
                 name: "an_empty_relation_list".to_string(),
                 list_index: 0,
                 field_type: "pinned_relation_list".to_string(),
@@ -1037,6 +1029,10 @@ mod tests {
         assert_eq!(
             document_fields.get("username").unwrap(),
             &DocumentViewValue::new(&operation_id, &OperationValue::String("bubu".to_string()))
+        );
+        assert_eq!(
+            document_fields.get("data").unwrap(),
+            &DocumentViewValue::new(&operation_id, &OperationValue::Bytes(vec![0, 1, 2, 3]))
         );
         assert_eq!(
             document_fields.get("age").unwrap(),

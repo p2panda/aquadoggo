@@ -15,7 +15,7 @@ use crate::proptests::schema_strategies::{schema_strategy, SchemaAST};
 use crate::proptests::utils::{
     add_documents_from_ast, add_schemas_from_ast, parse_filter, parse_selected_fields, FieldName,
 };
-use crate::test_utils::{graphql_test_client, test_runner, TestClient, TestNode};
+use crate::test_utils::{http_test_client, test_runner, TestClient, TestNode};
 
 use super::filter_strategies::{
     application_filters_strategy, meta_field_filter_strategy, Filter, MetaField,
@@ -28,7 +28,7 @@ async fn sanity_checks(
     schemas: &Vec<SchemaId>,
 ) {
     let node_schemas = node.context.schema_provider.all().await;
-    assert_eq!(schemas.len(), node_schemas.len() - 2); // minus 2 for system schema
+    assert_eq!(schemas.len(), node_schemas.len() - 4); // minus 4 for system schema
     for schema_id in schemas {
         let result = node
             .context
@@ -187,7 +187,6 @@ prop_compose! {
 
 proptest! {
     #![proptest_config(Config {
-        cases: 100,
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
         .. Config::default()
     })]
@@ -212,7 +211,7 @@ proptest! {
             sanity_checks(&node, &documents, &schemas).await;
 
             // Create a GraphQL client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Run the test for each schema and related documents that have been generated.
             for schema_id in schemas {
@@ -249,7 +248,7 @@ proptest! {
             sanity_checks(&node, &documents, &schemas).await;
 
             // Create a GraphQL client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Get the root schema from the provider.
             let schema = node.context.schema_provider.get(&schema_ast.id).await.expect("Schema should exist on node");

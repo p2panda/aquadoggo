@@ -9,7 +9,7 @@
 //! themselves. On completion, the resultant documents are stored and can be retrieved using the
 //! methods defined here.
 //!
-//! The whole document store can be seen as a live cache. All it's content is derived from
+//! The whole document store can be seen as a live cache. All its content is derived from
 //! operations already stored on the node. It allows easy and quick access to current or pinned
 //! values.
 //!
@@ -23,13 +23,13 @@
 //! state, we call these states document views. When a document is updated it gets a new state, or
 //! view, which can be referred to by a globally unique document view id.
 //!
-//! The getter methods allow retrieving a document by it's `DocumentId` or it's
-//! `DocumentViewId`. The former always returns the most current document state, the latter
-//! returns the specific document view if it has already been materialised and stored. Although it
-//! is possible to construct a document at any point in it's history if all operations are
-//! retained, we use a system of "pinned relations" to identify and materialise only views we
-//! explicitly wish to keep.
+//! The getter methods allow retrieving a document by its `DocumentId` or its `DocumentViewId`. The
+//! former always returns the most current document state, the latter returns the specific document
+//! view if it has already been materialised and stored. Although it is possible to construct a
+//! document at any point in its history if all operations are retained, we use a system of "pinned
+//! relations" to identify and materialise only views we explicitly wish to keep.
 use async_trait::async_trait;
+use log::debug;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentId, DocumentView, DocumentViewId};
 use p2panda_rs::schema::SchemaId;
@@ -48,9 +48,9 @@ use crate::db::SqlStore;
 impl DocumentStore for SqlStore {
     type Document = StorageDocument;
 
-    /// Get a document from the store by it's `DocumentId`.
+    /// Get a document from the store by its `DocumentId`.
     ///
-    /// Retrieves a document in it's most current state from the store. Ignores documents which
+    /// Retrieves a document in its most current state from the store. Ignores documents which
     /// contain a DELETE operation.
     ///
     /// An error is returned only if a fatal database error occurs.
@@ -112,7 +112,7 @@ impl DocumentStore for SqlStore {
 
     /// Get a document from the database by `DocumentViewId`.
     ///
-    /// Get's a document at a specific point in it's history. Only returns views that have already
+    /// Get's a document at a specific point in its history. Only returns views that have already
     /// been materialised and persisted in the store. These are likely to be "pinned views" which
     /// are relations from other documents, in which case the materialiser service will have
     /// identified and materialised them ready for querying.
@@ -275,7 +275,7 @@ impl SqlStore {
     /// current view and field values into the `document_views` and `document_view_fields` tables
     /// respectively.
     ///
-    /// If the document already existed in the store then it's current view and view id will be
+    /// If the document already existed in the store then its current view and view id will be
     /// updated with those contained on the passed document.
     ///
     /// If any of the operations fail all insertions are rolled back.
@@ -365,6 +365,222 @@ impl SqlStore {
             .await
             .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))
     }
+
+    /// Get the ids for all document views for a document which are currently materialized to the store.
+    pub async fn get_all_document_view_ids(
+        &self,
+        document_id: &DocumentId,
+    ) -> Result<Vec<DocumentViewId>, DocumentStorageError> {
+        let document_view_ids: Vec<String> = query_scalar(
+            "
+            SELECT
+                document_views.document_view_id
+            FROM
+                document_views
+            WHERE
+                document_views.document_id = $1
+            ",
+        )
+        .bind(document_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        Ok(document_view_ids
+            .iter()
+            .map(|document_id_str| {
+                document_id_str
+                    .parse::<DocumentViewId>()
+                    .expect("Document Id's coming from the store should be valid")
+            })
+            .collect())
+    }
+
+    /// Get the ids of all documents which are related to from another document view.
+    pub async fn get_child_document_ids(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> Result<Vec<DocumentId>, DocumentStorageError> {
+        let document_view_ids: Vec<String> = query_scalar(
+            "
+            SELECT DISTINCT
+                document_views.document_id
+            FROM
+                document_views
+            WHERE
+                document_views.document_view_id
+            IN (
+                SELECT
+                    operation_fields_v1.value
+                FROM
+                    document_view_fields
+                LEFT JOIN
+                    operation_fields_v1
+                ON
+                    document_view_fields.operation_id = operation_fields_v1.operation_id
+                AND
+                    document_view_fields.name = operation_fields_v1.name
+                WHERE
+                    operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+                AND
+                    document_view_fields.document_view_id = $1
+            )
+            ",
+        )
+        .bind(document_view_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        Ok(document_view_ids
+            .iter()
+            .map(|document_id_str| {
+                document_id_str
+                    .parse::<DocumentId>()
+                    .expect("Document Id's coming from the store should be valid")
+            })
+            .collect())
+    }
+
+    /// Attempt to remove a document view from the store. Returns a boolean which indicates if the
+    /// removal took place.
+    ///
+    /// This operations only succeeds if the view is "dangling", meaning no other document view
+    /// exists which relates to this view, AND it is not the current view of any document.
+    pub async fn prune_document_view(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> Result<bool, DocumentStorageError> {
+        // Attempt to delete the view. If it is pinned from an existing view, or it is the current
+        // view of a document, the deletion will not go ahead.
+        let result = query(
+                "
+                DELETE FROM
+                    document_views
+                WHERE
+                    document_views.document_view_id = $1
+                AND NOT EXISTS (
+                    SELECT
+                        document_view_fields.document_view_id
+                    FROM
+                        document_view_fields
+                    LEFT JOIN
+                        operation_fields_v1
+                    ON
+                        document_view_fields.operation_id = operation_fields_v1.operation_id
+                    AND
+                        document_view_fields.name = operation_fields_v1.name
+                    WHERE
+                        operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
+                    AND
+                        operation_fields_v1.value = $1
+                )
+                AND NOT EXISTS (
+                    SELECT documents.document_id FROM documents
+                    WHERE documents.document_view_id = $1
+                )
+                "
+            )
+            .bind(document_view_id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        // If any rows were affected the deletion went ahead.
+        if result.rows_affected() > 0 {
+            debug!("Deleted view: {}", document_view_id);
+            Ok(true)
+        } else {
+            debug!("Did not delete view: {}", document_view_id);
+            Ok(false)
+        }
+    }
+
+    /// Check if this view is the current view of its document.
+    pub async fn is_current_view(
+        &self,
+        document_view_id: &DocumentViewId,
+    ) -> Result<bool, DocumentStorageError> {
+        let document_view_id: Option<String> = query_scalar(
+            "
+            SELECT documents.document_view_id FROM documents
+            WHERE documents.document_view_id = $1
+            ",
+        )
+        .bind(document_view_id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        Ok(document_view_id.is_some())
+    }
+
+    /// Purge a document from the store by its id.
+    ///
+    /// This removes entries, operations and any materialized documents which exist.
+    ///
+    /// The only unaffected table after deletion is the `logs` table as we still want to remember
+    /// which log ids an author has already used so we can continue to avoid collisions.
+    pub async fn purge_document(
+        &self,
+        document_id: &DocumentId,
+    ) -> Result<(), DocumentStorageError> {
+        // Start a transaction, any db insertions after this point, and before the `commit()`
+        // will be rolled back in the event of an error.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Delete rows from `documents` table, this cascades up to `document_views` and
+        // `document_view_fields` tables.
+        query(
+            "
+                DELETE FROM documents
+                WHERE documents.document_id = $1
+                ",
+        )
+        .bind(document_id.to_string())
+        .fetch_all(&mut tx)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Delete rows from `entries` table.
+        query(
+            "
+                DELETE FROM entries
+                WHERE entries.entry_hash IN (
+                    SELECT operations_v1.operation_id FROM operations_v1
+                    WHERE operations_v1.document_id = $1
+                )
+                ",
+        )
+        .bind(document_id.to_string())
+        .fetch_all(&mut tx)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Delete rows from `operations_v1` table, this cascades up to `operation_fields_v1` table
+        // as well.
+        query(
+            "
+                DELETE FROM operations_v1
+                WHERE operations_v1.document_id = $1
+                ",
+        )
+        .bind(document_id.to_string())
+        .fetch_all(&mut tx)
+        .await
+        .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        // Commit the transaction if all queries succeeded.
+        tx.commit()
+            .await
+            .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(())
+    }
 }
 
 // Helper method for getting rows from the `document_view_fields` table.
@@ -376,7 +592,7 @@ async fn get_document_view_field_rows(
     //
     // This query performs a join against the `operation_fields_v1` table as this is where the
     // actual field values live. The `document_view_fields` table defines relations between a
-    // document view and the operation values which hold it's field values.
+    // document view and the operation values which hold its field values.
     //
     // Each field has one row, or in the case of list values (pinned relations, or relation lists)
     // then one row exists for every item in the list. The `list_index` column is used for
@@ -393,14 +609,16 @@ async fn get_document_view_field_rows(
             operation_fields_v1.value
         FROM
             document_view_fields
-        LEFT JOIN document_views
-            ON
-                document_view_fields.document_view_id = document_views.document_view_id
-        LEFT JOIN operation_fields_v1
-            ON
-                document_view_fields.operation_id = operation_fields_v1.operation_id
-            AND
-                document_view_fields.name = operation_fields_v1.name
+        LEFT JOIN
+            operation_fields_v1
+        ON
+            document_view_fields.operation_id = operation_fields_v1.operation_id
+        AND
+            document_view_fields.name = operation_fields_v1.name
+        LEFT JOIN
+            document_views
+        ON
+            document_view_fields.document_view_id = document_views.document_view_id
         WHERE
             document_view_fields.document_view_id = $1
         ORDER BY
@@ -505,7 +723,7 @@ async fn insert_document(
     .await
     .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-    // If the document is not deleted, then we also want to insert it's view and fields.
+    // If the document is not deleted, then we also want to insert its view and fields.
     if !document.is_deleted() && document.view().is_some() {
         // Construct the view, unwrapping the document view fields as we checked they exist above.
         let document_view =
@@ -529,23 +747,29 @@ async fn insert_document(
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::api::next_args;
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
+    use p2panda_rs::entry::{LogId, SeqNum};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::{Operation, OperationId};
     use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
     use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{
-        operation, random_document_id, random_document_view_id, random_operation_id,
+        key_pair, operation, random_document_id, random_document_view_id, random_operation_id,
     };
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::db::stores::document::DocumentView;
+    use crate::materializer::tasks::reduce_task;
+    use crate::materializer::TaskInput;
     use crate::test_utils::{
-        build_document, populate_and_materialize, populate_store_config, test_runner, TestNode,
+        add_schema_and_documents, assert_query, build_document, populate_and_materialize,
+        populate_store_config, test_runner, TestNode,
     };
 
     #[rstest]
@@ -575,7 +799,7 @@ mod tests {
             let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            // Find the "CREATE" operation and get it's id.
+            // Find the "CREATE" operation and get its id.
             let create_operation = WithId::<OperationId>::id(
                 operations
                     .iter()
@@ -601,9 +825,9 @@ mod tests {
                 .await;
             assert!(result.is_ok());
 
-            // We should be able to retrieve the document at either of it's views now.
+            // We should be able to retrieve the document at either of its views now.
 
-            // Here we request the document with it's initial state.
+            // Here we request the document with its initial state.
             let retrieved_document = node
                 .context
                 .store
@@ -617,7 +841,7 @@ mod tests {
             assert_eq!(retrieved_document.view_id(), document_at_view_1.view_id());
             assert_eq!(retrieved_document.fields(), document_at_view_1.fields());
 
-            // Here we request it at it's current state.
+            // Here we request it at its current state.
             let retrieved_document = node
                 .context
                 .store
@@ -631,7 +855,7 @@ mod tests {
             assert_eq!(retrieved_document.view_id(), document.view_id());
             assert_eq!(retrieved_document.fields(), document.fields());
 
-            // If we retrieve the document by it's id, we expect the current state.
+            // If we retrieve the document by its id, we expect the current state.
             let retrieved_document = node
                 .context
                 .store
@@ -650,8 +874,7 @@ mod tests {
     #[rstest]
     fn document_view_does_not_exist(random_document_view_id: DocumentViewId) {
         test_runner(|node: TestNode| async move {
-            // We try to retrieve a document view by it's id but no view
-            // with that id exists.
+            // We try to retrieve a document view by its id but no view with that id exists.
             let view_does_not_exist = node
                 .context
                 .store
@@ -700,20 +923,20 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents.
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids.get(0).expect("At least one document id");
 
             // Build the document.
             let document = build_document(&node.context.store, &document_id).await;
 
-            // The document is successfully inserted into the database, this
-            // relies on the operations already being present and would fail
-            // if they were not.
+            // The document is successfully inserted into the database, this relies on the
+            // operations already being present and would fail if they were not.
             let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            // We can retrieve the most recent document view for this document by it's id.
+            // We can retrieve the most recent document view for this document by its id.
             let retrieved_document = node
                 .context
                 .store
@@ -722,8 +945,8 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-            // We can retrieve a specific document view for this document by it's view_id.
-            // In this case, that should be the same as the view retrieved above.
+            // We can retrieve a specific document view for this document by its view_id. In this
+            // case, that should be the same as the view retrieved above.
             let specific_document = node
                 .context
                 .store
@@ -737,6 +960,7 @@ mod tests {
                 "age",
                 "height",
                 "is_admin",
+                "data",
                 "profile_picture",
                 "many_profile_pictures",
                 "special_profile_picture",
@@ -760,7 +984,8 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
+            // Populate the store with some entries and operations but DON'T materialise any
+            // resulting documents.
             let (_, document_ids) = populate_store(&node.context.store, &config).await;
             let document_id = document_ids.get(0).expect("At least one document id");
 
@@ -772,12 +997,12 @@ mod tests {
             // As it has been deleted, there should be no view.
             assert!(document.view().is_none());
 
-            // Here we insert the document. This action also sets it's most recent view.
+            // Here we insert the document. This action also sets its most recent view.
             let result = node.context.store.insert_document(&document).await;
             assert!(result.is_ok());
 
-            // We retrieve the most recent view for this document by it's document id,
-            // but as the document is deleted, we should get a none value back.
+            // We retrieve the most recent view for this document by its document id, but as the
+            // document is deleted, we should get a none value back.
             let document = node
                 .context
                 .store
@@ -786,8 +1011,8 @@ mod tests {
                 .unwrap();
             assert!(document.is_none());
 
-            // We also try to retrieve the specific document view by it's view id.
-            // This should also return none as it is deleted.
+            // We also try to retrieve the specific document view by its view id. This should also
+            // return none as it is deleted.
             let document = node
                 .context
                 .store
@@ -865,14 +1090,14 @@ mod tests {
                     .build()
                     .expect("Build document");
 
-                // Insert it to the database, this should also update it's view.
+                // Insert it to the database, this should also update its view.
                 node.context
                     .store
                     .insert_document(&document)
                     .await
                     .expect("Insert document");
 
-                // We can retrieve the document by it's document id.
+                // We can retrieve the document by its document id.
                 let retrieved_document = node
                     .context
                     .store
@@ -881,7 +1106,7 @@ mod tests {
                     .expect("Get document")
                     .expect("Unwrap document");
 
-                // And also directly by it's document view id.
+                // And also directly by its document view id.
                 let specific_document = node
                     .context
                     .store
@@ -926,6 +1151,259 @@ mod tests {
 
             // There should be ten.
             assert_eq!(schema_documents.len(), 10);
+        });
+    }
+
+    #[rstest]
+    fn prunes_document_view(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let first_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+
+            // Get the current document from the store.
+            let current_document = node.context.store.get_document(&document_id).await.unwrap();
+
+            // Get the current view id.
+            let current_document_view_id = current_document.unwrap().view_id().to_owned();
+
+            // Reduce a historic view of an existing document.
+            let _ = reduce_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(first_document_view_id.clone()),
+            )
+            .await;
+
+            // Get that view again to check it's in the db.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&first_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_some());
+
+            // Prune the first document view.
+            let result = node
+                .context
+                .store
+                .prune_document_view(&first_document_view_id)
+                .await;
+            assert!(result.is_ok());
+            // Returns `true` when pruning succeeded.
+            assert!(result.unwrap());
+
+            // Get the first document view again, it should no longer be there.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&first_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_none());
+
+            // Get the current view of the document to make sure that wasn't deleted too.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&current_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_some());
+        });
+    }
+
+    #[rstest]
+    fn does_not_prune_pinned_views(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+        key_pair: KeyPair,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let first_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+
+            // Reduce a historic view of an existing document.
+            let _ = reduce_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(first_document_view_id.clone()),
+            )
+            .await;
+
+            // Add a new document to the store which pins the first view of the above document.
+            add_schema_and_documents(
+                &mut node,
+                "new_schema",
+                vec![vec![(
+                    "pin_document",
+                    first_document_view_id.clone().into(),
+                    Some(config.schema.id().to_owned()),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            // Attempt to prune the first document view.
+            let result = node
+                .context
+                .store
+                .prune_document_view(&first_document_view_id)
+                .await;
+            assert!(result.is_ok());
+            // Returns `false` when pruning failed.
+            assert!(!result.unwrap());
+
+            // Get the first document view, it should still be in the store as it was pinned.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&first_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_some());
+        });
+    }
+
+    #[rstest]
+    fn does_not_prune_current_view(
+        #[from(populate_store_config)]
+        #[with(1, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let current_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+
+            // Attempt to prune the current document view.
+            let result = node
+                .context
+                .store
+                .prune_document_view(&current_document_view_id)
+                .await;
+            assert!(result.is_ok());
+            // Returns `false` when pruning failed.
+            assert!(!result.unwrap());
+
+            // Get the current document view, it should still be in the store.
+            let document = node
+                .context
+                .store
+                .get_document_by_view_id(&current_document_view_id)
+                .await
+                .unwrap();
+            assert!(document.is_some());
+        });
+    }
+
+    #[rstest]
+    fn purge_document(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+
+            // There is one document in the database which contains an CREATE and UPDATE operation
+            // which were both published by the same author. These are the number of rows we
+            // expect for each table.
+            assert_query(&node, "SELECT entry_hash FROM entries", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 28).await;
+            assert_query(&node, "SELECT log_id FROM logs", 1).await;
+            assert_query(&node, "SELECT document_id FROM documents", 1).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 1).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 11).await;
+
+            // Purge this document from the database, we now expect all tables to be empty.
+            let result = node.context.store.purge_document(&document_id).await;
+            assert!(result.is_ok(), "{:#?}", result);
+            assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 0).await;
+            assert_query(&node, "SELECT log_id FROM logs", 1).await;
+            assert_query(&node, "SELECT document_id FROM documents", 0).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 0).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 0).await;
+        });
+    }
+
+    #[rstest]
+    fn purging_only_effects_target_document(
+        #[from(populate_store_config)]
+        #[with(1, 2, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+
+            // There are two documents in the database which each contain a single CREATE operation
+            // and they were published by the same author. These are the number of rows we expect
+            // for each table.
+            assert_query(&node, "SELECT entry_hash FROM entries", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 2).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 28).await;
+            assert_query(&node, "SELECT log_id FROM logs", 2).await;
+            assert_query(&node, "SELECT document_id FROM documents", 2).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 2).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 22).await;
+
+            // Purge one document from the database, we now expect half the rows to be remaining.
+            let result = node.context.store.purge_document(&document_id).await;
+            assert!(result.is_ok(), "{:#?}", result);
+
+            assert_query(&node, "SELECT entry_hash FROM entries", 1).await;
+            assert_query(&node, "SELECT operation_id FROM operations_v1", 1).await;
+            assert_query(&node, "SELECT operation_id FROM operation_fields_v1", 14).await;
+            assert_query(&node, "SELECT log_id FROM logs", 2).await;
+            assert_query(&node, "SELECT document_id FROM documents", 1).await;
+            assert_query(&node, "SELECT document_id FROM document_views", 1).await;
+            assert_query(&node, "SELECT name FROM document_view_fields", 11).await;
+        });
+    }
+
+    #[rstest]
+    fn next_args_after_purge(
+        #[from(populate_store_config)]
+        #[with(2, 1, 1)]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let document_id = document_ids[0].clone();
+            let public_key = key_pairs[0].public_key();
+
+            let _ = node.context.store.purge_document(&document_id).await;
+
+            let result = next_args(
+                &node.context.store,
+                &public_key,
+                Some(&document_id.as_str().parse().unwrap()),
+            )
+            .await;
+
+            assert!(result.is_err());
+
+            let result = next_args(&node.context.store, &public_key, None).await;
+
+            assert!(result.is_ok());
+            let next_args = result.unwrap();
+            assert_eq!(next_args, (None, None, SeqNum::default(), LogId::new(1)));
         });
     }
 }

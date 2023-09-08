@@ -58,10 +58,10 @@ pub const ORDER_DIRECTION_ARG: &str = "orderDirection";
 /// Name of field where a collection of documents can be accessed.
 pub const DOCUMENTS_FIELD: &str = "documents";
 
-/// Name of field on a document where it's fields can be accessed.
+/// Name of field on a document where its fields can be accessed.
 pub const FIELDS_FIELD: &str = "fields";
 
-/// Name of field on a document where it's meta data can be accessed.
+/// Name of field on a document where its meta data can be accessed.
 pub const META_FIELD: &str = "meta";
 
 /// Name of field on a document where pagination cursor can be accessed.

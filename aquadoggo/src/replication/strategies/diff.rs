@@ -16,7 +16,7 @@ fn remote_requires_entries(
     remote_log_heights: &HashMap<LogId, SeqNum>,
 ) -> Option<(LogId, SeqNum)> {
     trace!("Local log height: {:?} {:?}", log_id, local_seq_num);
-    // Get height of the remote log by it's id.
+    // Get height of the remote log by its id
     let remote_log_height = remote_log_heights.get(log_id);
 
     match remote_log_height {
@@ -30,7 +30,7 @@ fn remote_requires_entries(
                 // We increment the seq num as we want it to represent an inclusive lower
                 // bound.
                 //
-                // We can unwrap as we are incrementing the lower remote seq num which means it's
+                // We can unwrap as we are incrementing the lower remote seq num which means it
                 // will not reach max seq number.
                 let from_seq_num = remote_seq_num.clone().next().unwrap();
 

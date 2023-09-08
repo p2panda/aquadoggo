@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::OnceLock;
 
 use anyhow::{anyhow, bail, Result};
 use aquadoggo::{AllowList, Configuration as NodeConfiguration, NetworkConfiguration};
@@ -16,12 +17,15 @@ use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use tempfile::TempDir;
 
 use crate::utils::absolute_path;
 
 const WILDCARD: &str = "*";
 
 const CONFIG_FILE_NAME: &str = "config.toml";
+
+static TMP_DIR: OnceLock<TempDir> = OnceLock::new();
 
 type ConfigFilePath = Option<PathBuf>;
 
@@ -120,6 +124,15 @@ struct Cli {
     #[arg(short = 'q', long, value_name = "PORT")]
     #[serde(skip_serializing_if = "Option::is_none")]
     quic_port: Option<u16>,
+
+    /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
+    /// directory.
+    ///
+    /// WARNING: By default your node will not persist any blobs after shutdown. Set a path for
+    /// production settings to not loose data.
+    #[arg(short = 'f', long, value_name = "PATH")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blobs_base_path: Option<PathBuf>,
 
     /// Path to persist your ed25519 private key file. Defaults to an ephemeral key only for this
     /// current session.
@@ -267,6 +280,7 @@ pub struct Configuration {
     pub database_max_connections: u32,
     pub http_port: u16,
     pub quic_port: u16,
+    pub blobs_base_path: Option<PathBuf>,
     pub private_key: Option<PathBuf>,
     pub mdns: bool,
     pub direct_node_addresses: Vec<SocketAddr>,
@@ -286,6 +300,7 @@ impl Default for Configuration {
             database_max_connections: 32,
             http_port: 2020,
             quic_port: 2022,
+            blobs_base_path: None,
             mdns: true,
             private_key: None,
             direct_node_addresses: vec![],
@@ -338,11 +353,26 @@ impl TryFrom<Configuration> for NodeConfiguration {
             }
         };
 
+        // Create a temporary blobs directory when none was given
+        let blobs_base_path = match value.blobs_base_path {
+            Some(path) => path,
+            None => TMP_DIR
+                .get_or_init(|| {
+                    // Initialise a `TempDir` instance globally to make sure it does not run out of
+                    // scope and gets deleted before the end of the application runtime
+                    tempfile::TempDir::new()
+                        .expect("Could not create temporary directory to store blobs")
+                })
+                .path()
+                .to_path_buf(),
+        };
+
         Ok(NodeConfiguration {
             allow_schema_ids,
             database_url: value.database_url,
             database_max_connections: value.database_max_connections,
             http_port: value.http_port,
+            blobs_base_path,
             worker_pool_size: value.worker_pool_size,
             network: NetworkConfiguration {
                 quic_port: value.quic_port,

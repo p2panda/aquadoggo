@@ -156,7 +156,7 @@ async fn e2e() {
     // Query a document.
     //
     // Now that the cafe has been created and updated we can query it from the client. We do can do
-    // this using it's schema id and document or view id.
+    // this using its schema id and document or view id.
 
     let panda_cafe = query(&client, &panda_cafe_view_id, &cafe_schema_id).await;
 
@@ -175,7 +175,7 @@ async fn e2e() {
     aquadoggo.shutdown().await;
 }
 
-/// Publish an entry and it's operation to a node.
+/// Publish an entry and its operation to a node.
 async fn publish(client: &Client, key_pair: &KeyPair, operation: &Operation) -> DocumentViewId {
     // Publishing operations.
     //

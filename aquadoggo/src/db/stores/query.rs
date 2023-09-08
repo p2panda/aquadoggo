@@ -300,6 +300,7 @@ fn bind_arg(value: &OperationValue) -> Vec<BindArgument> {
             .iter()
             .map(|view_id| BindArgument::String(view_id.to_string()))
             .collect(),
+        OperationValue::Bytes(value) => vec![BindArgument::String(hex::encode(value))],
     }
 }
 
