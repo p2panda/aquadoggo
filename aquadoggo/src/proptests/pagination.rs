@@ -12,7 +12,7 @@ use crate::proptests::strategies::{documents_strategy, schema_strategy, Document
 use crate::proptests::utils::{
     add_documents_from_ast, add_schemas_from_ast, parse_selected_fields, sanity_checks,
 };
-use crate::test_utils::{graphql_test_client, test_runner, TestNode};
+use crate::test_utils::{http_test_client, test_runner, TestNode};
 
 prop_compose! {
     /// Strategy for generating schemas, and documents from these schema.
@@ -47,7 +47,7 @@ proptest! {
             sanity_checks(&node, &documents, &schemas).await;
 
             // Create a GraphQL client.
-            let client = graphql_test_client(&node).await;
+            let client = http_test_client(&node).await;
 
             // Run the test for each schema and related documents that have been generated.
             for schema_id in schemas {

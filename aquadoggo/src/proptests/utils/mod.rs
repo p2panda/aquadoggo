@@ -16,16 +16,6 @@ use crate::proptests::strategies::{
 };
 use crate::test_utils::{add_document, TestNode};
 
-use super::filter_strategies::{Filter, FilterValue};
-
-/// A fieldname which will follow the expected regex rules.
-#[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FieldName(#[proptest(regex = "[A-Za-z]{1}[A-Za-z0-9_]{0,63}")] pub String);
-
-/// A hexadecimal string.
-#[derive(Arbitrary, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct HexString(#[proptest(regex = "([a-fA-F0-9]{2}){0,64}")] pub String);
-
 /// Add schemas from a schema AST to a test node.
 #[async_recursion]
 pub async fn add_schemas_from_ast(
@@ -363,7 +353,7 @@ pub async fn sanity_checks(
     schemas: &Vec<SchemaId>,
 ) {
     let node_schemas = node.context.schema_provider.all().await;
-    assert_eq!(schemas.len(), node_schemas.len() - 2); // minus 2 for system schema
+    assert_eq!(schemas.len(), node_schemas.len() - 4); // minus 4 for system schema
     for schema_id in schemas {
         let result = node
             .context

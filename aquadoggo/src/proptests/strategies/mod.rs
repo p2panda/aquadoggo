@@ -4,7 +4,7 @@ pub mod document;
 pub mod filter;
 pub mod schema;
 
-pub use document::{documents_strategy, DocumentAST, FieldValue};
+pub use document::{documents_strategy, DocumentAST, FieldValue, HexString};
 pub use filter::{
     application_filters_strategy, meta_field_filter_strategy, Filter, FilterValue, MetaField,
 };
