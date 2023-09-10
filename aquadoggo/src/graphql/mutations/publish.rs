@@ -102,7 +102,7 @@ mod tests {
     use p2panda_rs::document::{DocumentId, DocumentViewId};
     use p2panda_rs::entry::encode::{encode_entry, sign_and_encode_entry};
     use p2panda_rs::entry::traits::AsEncodedEntry;
-    use p2panda_rs::entry::{EncodedEntry, EntryBuilder};
+    use p2panda_rs::entry::{EncodedEntry, EntryBuilder, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::{KeyPair, PublicKey};
     use p2panda_rs::operation::encode::encode_operation;
@@ -837,19 +837,20 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populates the node with entries, operations and schemas.
-            populate_and_materialize(&mut node, &config).await;
+            let (key_pairs, _) = populate_and_materialize(&mut node, &config).await;
+            let public_key = key_pairs[0].public_key();
 
             // Init the test client.
             let client = http_test_client(&node).await;
 
             // Get the one entry from the store.
-            let entries = node
+            let entry = node
                 .context
                 .store
-                .get_entries_by_schema(doggo_schema().id())
+                .get_entry_at_seq_num(&public_key, &LogId::default(), &SeqNum::default())
                 .await
+                .unwrap()
                 .unwrap();
-            let entry = entries.first().unwrap();
 
             // Prepare a publish entry request for the entry.
             let publish_request = publish_request(
