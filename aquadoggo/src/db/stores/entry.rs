@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::vec;
 
 use async_trait::async_trait;
-use lipmaa_link::get_lipmaa_links_back_to;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
@@ -182,139 +181,6 @@ impl EntryStore for SqlStore {
 
         Ok(entry_row.map(|row| row.into()))
     }
-
-    /// Get all entries of a given schema
-    ///
-    /// Returns a result containing a vector of all entries which follow the passed schema
-    /// (identified by its `SchemaId`). If no entries exist, or the schema is not known by this
-    /// node, then an empty vector is returned.
-    async fn get_entries_by_schema(
-        &self,
-        schema: &SchemaId,
-    ) -> Result<Vec<StorageEntry>, EntryStorageError> {
-        let entries = query_as::<_, EntryRow>(
-            "
-            SELECT
-                entries.public_key,
-                entries.entry_bytes,
-                entries.entry_hash,
-                entries.log_id,
-                entries.payload_bytes,
-                entries.payload_hash,
-                entries.seq_num
-            FROM
-                entries
-            INNER JOIN logs
-                ON (entries.log_id = logs.log_id
-                    AND entries.public_key = logs.public_key)
-            WHERE
-                logs.schema = $1
-            ",
-        )
-        .bind(schema.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
-
-        Ok(entries.into_iter().map(|row| row.into()).collect())
-    }
-
-    /// Get all entries of a given schema.
-    ///
-    /// Returns a result containing a vector of all entries which follow the passed schema
-    /// (identified by its `SchemaId`). If no entries exist, or the schema is not known by this
-    /// node, then an empty vector is returned.
-    async fn get_paginated_log_entries(
-        &self,
-        public_key: &PublicKey,
-        log_id: &LogId,
-        seq_num: &SeqNum,
-        max_number_of_entries: usize,
-    ) -> Result<Vec<StorageEntry>, EntryStorageError> {
-        let max_seq_num = seq_num.as_u64() as usize + max_number_of_entries - 1;
-        let entries = query_as::<_, EntryRow>(
-            "
-            SELECT
-                public_key,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
-            FROM
-                entries
-            WHERE
-                public_key = $1
-                AND log_id = $2
-                AND CAST(seq_num AS NUMERIC) BETWEEN CAST($3 AS NUMERIC) and CAST($4 AS NUMERIC)
-            ORDER BY
-                CAST(seq_num AS NUMERIC)
-            ",
-        )
-        .bind(public_key.to_string())
-        .bind(log_id.as_u64().to_string())
-        .bind(seq_num.as_u64().to_string())
-        .bind((max_seq_num as u64).to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
-
-        Ok(entries.into_iter().map(|row| row.into()).collect())
-    }
-
-    /// Get all entries which make up the certificate pool for a specified entry.
-    ///
-    /// Returns a result containing a vector of all stored entries which are part the passed
-    /// entries' certificate pool. Errors if a fatal storage error occurs.
-    ///
-    /// It is worth noting that this method doesn't check if the certificate pool is complete, it
-    /// only returns entries which are part of the pool and found in storage. If an entry was not
-    /// stored, then the pool may be incomplete.
-    async fn get_certificate_pool(
-        &self,
-        public_key: &PublicKey,
-        log_id: &LogId,
-        initial_seq_num: &SeqNum,
-    ) -> Result<Vec<StorageEntry>, EntryStorageError> {
-        // Formatting query string in this way as `sqlx` currently doesn't support binding list
-        // arguments for IN queries.
-        let cert_pool_seq_nums = get_lipmaa_links_back_to(initial_seq_num.as_u64(), 1)
-            .iter()
-            .map(|seq_num| format!("'{seq_num}'"))
-            .collect::<Vec<String>>()
-            .join(",");
-
-        let sql_str = format!(
-            "SELECT
-                public_key,
-                entry_bytes,
-                entry_hash,
-                log_id,
-                payload_bytes,
-                payload_hash,
-                seq_num
-            FROM
-                entries
-            WHERE
-                public_key = $1
-                AND log_id = $2
-                AND seq_num IN ({})
-            ORDER BY
-                CAST(seq_num AS NUMERIC) DESC
-            ",
-            cert_pool_seq_nums
-        );
-
-        let entries = query_as::<_, EntryRow>(sql_str.as_str())
-            .bind(public_key.to_string())
-            .bind(log_id.as_u64().to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
-
-        Ok(entries.into_iter().map(|row| row.into()).collect())
-    }
 }
 
 impl SqlStore {
@@ -418,10 +284,8 @@ impl SqlStore {
 mod tests {
     use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
     use p2panda_rs::entry::{EncodedEntry, Entry, EntryBuilder, LogId, SeqNum};
-    use p2panda_rs::hash::Hash;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::EncodedOperation;
-    use p2panda_rs::schema::{SchemaId, SchemaName};
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
     use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
@@ -565,49 +429,6 @@ mod tests {
     }
 
     #[rstest]
-    fn entries_by_schema(
-        #[from(random_hash)] hash: Hash,
-        #[from(populate_store_config)]
-        #[with(2, 2, 2)]
-        config: PopulateStoreConfig,
-    ) {
-        test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            populate_store(&node.context.store, &config).await;
-
-            // This schema was used when publishing the test entries.
-            let schema_in_the_db = config.schema.id();
-
-            // No entries were published containing an operation which follows this schema.
-            let schema_not_in_the_db =
-                SchemaId::new_application(&SchemaName::new("venue").unwrap(), &hash.into());
-
-            // Get entries by schema not in db.
-            let entries = node
-                .context
-                .store
-                .get_entries_by_schema(&schema_not_in_the_db)
-                .await
-                .expect("Get entries by schema");
-
-            // We expect no entries when the schema has not been used.
-            assert!(entries.is_empty());
-
-            // Get entries by schema which is in the db.
-            let entries = node
-                .context
-                .store
-                .get_entries_by_schema(schema_in_the_db)
-                .await
-                .expect("Get entries by schema");
-
-            // Here we expect 8 entries as there are 2 authors each publishing to 2 logs which each contain 2
-            // entries.
-            assert!(entries.len() == 8);
-        });
-    }
-
-    #[rstest]
     fn entry_by_seq_number(
         #[from(populate_store_config)]
         #[with(10, 1, 1)]
@@ -733,96 +554,6 @@ mod tests {
                 .await
                 .unwrap();
             assert!(entry.is_none());
-        });
-    }
-
-    #[rstest]
-    #[case(1, 0, 0)]
-    #[case(1, 20, 20)]
-    #[case(1, 30, 30)]
-    #[case(10, 20, 20)]
-    #[case(20, 20, 11)]
-    #[case(30, 20, 1)]
-    #[case(100, 20, 0)]
-    fn paginated_log_entries(
-        #[case] from: u64,
-        #[case] num_of_entries: u64,
-        #[case] expected_entries: usize,
-        #[from(populate_store_config)]
-        #[with(30, 1, 1)]
-        config: PopulateStoreConfig,
-    ) {
-        test_runner(move |node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
-
-            // The public key of the author who published to the node.
-            let public_key = key_pairs
-                .get(0)
-                .expect("At least one key pair")
-                .public_key();
-
-            // Get paginated entries, starting with the one at seq num defined by `from` and
-            // continuing for `num_of_entries` or the end of the log is reached.
-            let entries = node
-                .context
-                .store
-                .get_paginated_log_entries(
-                    &public_key,
-                    &LogId::default(),
-                    &SeqNum::new(from).unwrap(),
-                    num_of_entries as usize,
-                )
-                .await
-                .unwrap();
-
-            for entry in &entries {
-                // We expect the seq num of every returned entry to lay between the
-                // `from` seq num and the `from` + `num_of_entries`
-                assert!(
-                    entry.seq_num().as_u64() >= from
-                        && entry.seq_num().as_u64() <= num_of_entries + from
-                )
-            }
-
-            // We expect the total number of entries returned to match our `expected_entries`
-            // value.
-            assert_eq!(entries.len(), expected_entries);
-        });
-    }
-
-    #[rstest]
-    fn get_lipmaa_link_entries(
-        #[from(populate_store_config)]
-        #[with(20, 1, 1)]
-        config: PopulateStoreConfig,
-    ) {
-        test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
-
-            // The public key of the author who published to the node.
-            let public_key = key_pairs
-                .get(0)
-                .expect("At least one key pair")
-                .public_key();
-
-            // Get the certificate pool for a specified public_key, log and seq num.
-            let entries = node
-                .context
-                .store
-                .get_certificate_pool(&public_key, &LogId::default(), &SeqNum::new(20).unwrap())
-                .await
-                .unwrap();
-
-            // Convert the seq num of each returned untry into a u64.
-            let cert_pool_seq_nums = entries
-                .iter()
-                .map(|entry| entry.seq_num().as_u64())
-                .collect::<Vec<u64>>();
-
-            // The cert pool should match our expected values.
-            assert_eq!(cert_pool_seq_nums, vec![19, 18, 17, 13, 4, 1]);
         });
     }
 
