@@ -48,7 +48,8 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             Ok(vec![document])
         }
 
-        // This task is about an updated blob piece document that may be used in one or more blob documents.
+        // This task is about an updated blob piece document that may be used in one or more blob
+        // documents.
         SchemaId::BlobPiece(_) => get_related_blobs(&input_view_id, &context).await,
         _ => Err(TaskError::Critical(format!(
             "Unknown system schema id: {}",
@@ -108,7 +109,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                 Err(err) => Err(anyhow!(err)),
             }
             .map_err(|err| {
-                TaskError::Critical(format!(
+                TaskError::Failure(format!(
                     "Could not write blob file @ {}: {}",
                     blob_view_path.display(),
                     err
