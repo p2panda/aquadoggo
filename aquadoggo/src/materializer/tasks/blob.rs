@@ -72,7 +72,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .get_blob_by_view_id(blob_document.view_id())
             .await
             // We don't raise a critical error here, as it is possible that this method returns an
-            // error
+            // error, for example when not all blob pieces are available yet for materialisation
             .map_err(|err| TaskError::Failure(err.to_string()))?
             .expect("Blob data exists at this point");
 
