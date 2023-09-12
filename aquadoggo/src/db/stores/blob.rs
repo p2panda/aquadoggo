@@ -160,6 +160,7 @@ impl SqlStore {
     /// Get data stream for one blob from the store, identified by it's document id.
     pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobStream>, BlobStoreError> {
         if let Some(document) = self.get_document(id).await? {
+            let document = validate_blob_pieces(self, document).await?;
             Ok(Some(BlobStream::new(self, document)?))
         } else {
             Ok(None)
@@ -172,6 +173,7 @@ impl SqlStore {
         view_id: &DocumentViewId,
     ) -> Result<Option<BlobStream>, BlobStoreError> {
         if let Some(document) = self.get_document_by_view_id(view_id).await? {
+            let document = validate_blob_pieces(self, document).await?;
             Ok(Some(BlobStream::new(self, document)?))
         } else {
             Ok(None)
@@ -231,6 +233,43 @@ impl SqlStore {
         }
 
         Ok(())
+    }
+}
+
+/// Throws an error when database does not contain all related blob pieces yet.
+async fn validate_blob_pieces(
+    store: &SqlStore,
+    document: impl AsDocument,
+) -> Result<impl AsDocument, BlobStoreError> {
+    let schema = Schema::get_system(SchemaId::BlobPiece(1)).expect("System schema is given");
+    let list = RelationList::new_pinned(document.view_id(), "pieces");
+
+    let args = Query::new(
+        &Pagination::new(
+            &NonZeroU64::new(BLOB_QUERY_PAGE_SIZE).unwrap(),
+            None,
+            &vec![PaginationField::TotalCount],
+        ),
+        &Select::default(),
+        &Filter::default(),
+        &Order::default(),
+    );
+
+    let (pagination_data, _) = store.query(schema, &args, Some(&list)).await?;
+    let total_count = pagination_data
+        .total_count
+        .expect("total count is selected");
+
+    // Get the number of pieces in the blob
+    let expected_num_pieces = match document.get("pieces").unwrap() {
+        OperationValue::PinnedRelationList(list) => list.len(),
+        _ => unreachable!(), // We already validated that this is a blob document
+    };
+
+    if total_count as usize == expected_num_pieces {
+        Ok(document)
+    } else {
+        Err(BlobStoreError::MissingPieces)
     }
 }
 
