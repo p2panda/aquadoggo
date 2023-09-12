@@ -44,7 +44,7 @@ jobs:
           bin: aquadoggo
           tar: unix
           zip: windows
-          checksum: sha256,sha512
+          checksum: sha512
           archive: $bin-$tag-$target
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
