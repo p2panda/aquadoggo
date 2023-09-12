@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::anyhow;
 use futures::{pin_mut, StreamExt};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
@@ -105,16 +104,18 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
         while let Some(value) = stream.next().await {
             match value {
-                Ok(buf) => file.write(&buf).await.map_err(|err| anyhow!(err)),
-                Err(err) => Err(anyhow!(err)),
-            }
-            .map_err(|err| {
-                TaskError::Failure(format!(
-                    "Could not write blob file @ {}: {}",
-                    blob_view_path.display(),
+                Ok(buf) => file.write(&buf).await.map_err(|err| {
+                    TaskError::Critical(format!(
+                        "Error occurred when writing to blob file @ {}: {}",
+                        blob_view_path.display(),
+                        err
+                    ))
+                }),
+                Err(err) => Err(TaskError::Failure(format!(
+                    "Blob data is invalid and can not be materialised: {}",
                     err
-                ))
-            })?;
+                ))),
+            }?;
         }
     }
 
