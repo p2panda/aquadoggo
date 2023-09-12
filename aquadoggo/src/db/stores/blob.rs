@@ -113,11 +113,6 @@ impl BlobStream {
     /// This method is called _after_ the stream has ended. We compare the values with what we've
     /// expected and find inconsistencies and invalid blobs.
     fn validate(&self) -> Result<(), BlobStoreError> {
-        // No pieces were found
-        if self.length == 0 {
-            return Err(BlobStoreError::NoBlobPiecesFound);
-        };
-
         // Not all pieces were found
         if self.expected_num_pieces != self.num_pieces {
             return Err(BlobStoreError::MissingPieces);
@@ -409,17 +404,8 @@ mod tests {
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // We get the correct `NoBlobPiecesFound` error.
-            let stream = node
-                .context
-                .store
-                .get_blob(&blob_document_id)
-                .await
-                .unwrap();
-            let collected_data = read_data_from_stream(stream.unwrap()).await;
-            assert!(matches!(
-                collected_data,
-                Err(BlobStoreError::NoBlobPiecesFound)
-            ),);
+            let stream = node.context.store.get_blob(&blob_document_id).await;
+            assert!(matches!(stream, Err(BlobStoreError::MissingPieces)));
 
             // Publish one blob piece.
             let blob_piece_view_id_1 = add_document(
@@ -449,14 +435,8 @@ mod tests {
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // We should get the correct `MissingBlobPieces` error.
-            let stream = node
-                .context
-                .store
-                .get_blob(&blob_document_id)
-                .await
-                .unwrap();
-            let collected_data = read_data_from_stream(stream.unwrap()).await;
-            assert!(matches!(collected_data, Err(BlobStoreError::MissingPieces)),);
+            let stream = node.context.store.get_blob(&blob_document_id).await;
+            assert!(matches!(stream, Err(BlobStoreError::MissingPieces)));
 
             // Publish one more blob piece, but it doesn't contain the correct number of bytes.
             let blob_piece_view_id_2 = add_document(
