@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::anyhow;
 use futures::{pin_mut, StreamExt};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
@@ -48,7 +47,8 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             Ok(vec![document])
         }
 
-        // This task is about an updated blob piece document that may be used in one or more blob documents.
+        // This task is about an updated blob piece document that may be used in one or more blob
+        // documents.
         SchemaId::BlobPiece(_) => get_related_blobs(&input_view_id, &context).await,
         _ => Err(TaskError::Critical(format!(
             "Unknown system schema id: {}",
@@ -71,7 +71,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             .get_blob_by_view_id(blob_document.view_id())
             .await
             // We don't raise a critical error here, as it is possible that this method returns an
-            // error
+            // error, for example when not all blob pieces are available yet for materialisation
             .map_err(|err| TaskError::Failure(err.to_string()))?
             .expect("Blob data exists at this point");
 
@@ -104,16 +104,18 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
         while let Some(value) = stream.next().await {
             match value {
-                Ok(buf) => file.write(&buf).await.map_err(|err| anyhow!(err)),
-                Err(err) => Err(anyhow!(err)),
-            }
-            .map_err(|err| {
-                TaskError::Critical(format!(
-                    "Could not write blob file @ {}: {}",
-                    blob_view_path.display(),
+                Ok(buf) => file.write(&buf).await.map_err(|err| {
+                    TaskError::Critical(format!(
+                        "Error occurred when writing to blob file @ {}: {}",
+                        blob_view_path.display(),
+                        err
+                    ))
+                }),
+                Err(err) => Err(TaskError::Failure(format!(
+                    "Blob data is invalid and can not be materialised: {}",
                     err
-                ))
-            })?;
+                ))),
+            }?;
         }
     }
 

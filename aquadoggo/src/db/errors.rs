@@ -53,11 +53,7 @@ pub enum BlobStoreError {
     #[error("Missing \"pieces\" field on blob document")]
     NotBlobDocument,
 
-    /// Error when no pieces found for existing blob document.
-    #[error("No pieces found for the requested blob")]
-    NoBlobPiecesFound,
-
-    /// Error when some pieces not found for existing blob document.
+    /// Error when some or all pieces not found for existing blob document.
     #[error("Some pieces missing for the requested blob")]
     MissingPieces,
 

@@ -113,11 +113,6 @@ impl BlobStream {
     /// This method is called _after_ the stream has ended. We compare the values with what we've
     /// expected and find inconsistencies and invalid blobs.
     fn validate(&self) -> Result<(), BlobStoreError> {
-        // No pieces were found
-        if self.length == 0 {
-            return Err(BlobStoreError::NoBlobPiecesFound);
-        };
-
         // Not all pieces were found
         if self.expected_num_pieces != self.num_pieces {
             return Err(BlobStoreError::MissingPieces);
@@ -160,6 +155,7 @@ impl SqlStore {
     /// Get data stream for one blob from the store, identified by it's document id.
     pub async fn get_blob(&self, id: &DocumentId) -> Result<Option<BlobStream>, BlobStoreError> {
         if let Some(document) = self.get_document(id).await? {
+            let document = validate_blob_pieces(self, document).await?;
             Ok(Some(BlobStream::new(self, document)?))
         } else {
             Ok(None)
@@ -172,6 +168,7 @@ impl SqlStore {
         view_id: &DocumentViewId,
     ) -> Result<Option<BlobStream>, BlobStoreError> {
         if let Some(document) = self.get_document_by_view_id(view_id).await? {
+            let document = validate_blob_pieces(self, document).await?;
             Ok(Some(BlobStream::new(self, document)?))
         } else {
             Ok(None)
@@ -231,6 +228,43 @@ impl SqlStore {
         }
 
         Ok(())
+    }
+}
+
+/// Throws an error when database does not contain all related blob pieces yet.
+async fn validate_blob_pieces(
+    store: &SqlStore,
+    document: impl AsDocument,
+) -> Result<impl AsDocument, BlobStoreError> {
+    let schema = Schema::get_system(SchemaId::BlobPiece(1)).expect("System schema is given");
+    let list = RelationList::new_pinned(document.view_id(), "pieces");
+
+    let args = Query::new(
+        &Pagination::new(
+            &NonZeroU64::new(BLOB_QUERY_PAGE_SIZE).unwrap(),
+            None,
+            &vec![PaginationField::TotalCount],
+        ),
+        &Select::default(),
+        &Filter::default(),
+        &Order::default(),
+    );
+
+    let (pagination_data, _) = store.query(schema, &args, Some(&list)).await?;
+    let total_count = pagination_data
+        .total_count
+        .expect("total count is selected");
+
+    // Get the number of pieces in the blob
+    let expected_num_pieces = match document.get("pieces").unwrap() {
+        OperationValue::PinnedRelationList(list) => list.len(),
+        _ => unreachable!(), // We already validated that this is a blob document
+    };
+
+    if total_count as usize == expected_num_pieces {
+        Ok(document)
+    } else {
+        Err(BlobStoreError::MissingPieces)
     }
 }
 
@@ -370,17 +404,8 @@ mod tests {
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // We get the correct `NoBlobPiecesFound` error.
-            let stream = node
-                .context
-                .store
-                .get_blob(&blob_document_id)
-                .await
-                .unwrap();
-            let collected_data = read_data_from_stream(stream.unwrap()).await;
-            assert!(matches!(
-                collected_data,
-                Err(BlobStoreError::NoBlobPiecesFound)
-            ),);
+            let stream = node.context.store.get_blob(&blob_document_id).await;
+            assert!(matches!(stream, Err(BlobStoreError::MissingPieces)));
 
             // Publish one blob piece.
             let blob_piece_view_id_1 = add_document(
@@ -410,14 +435,8 @@ mod tests {
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // We should get the correct `MissingBlobPieces` error.
-            let stream = node
-                .context
-                .store
-                .get_blob(&blob_document_id)
-                .await
-                .unwrap();
-            let collected_data = read_data_from_stream(stream.unwrap()).await;
-            assert!(matches!(collected_data, Err(BlobStoreError::MissingPieces)),);
+            let stream = node.context.store.get_blob(&blob_document_id).await;
+            assert!(matches!(stream, Err(BlobStoreError::MissingPieces)));
 
             // Publish one more blob piece, but it doesn't contain the correct number of bytes.
             let blob_piece_view_id_2 = add_document(
