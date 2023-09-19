@@ -40,7 +40,7 @@
 #     # BLOBs it finds on the network, but only those which are dependencies of
 #     # other documents you already have. 
 #     #
-#     # If you only want to replicate the meta data, but not the binary content
+#     # If you only want to replicate the meta data, not the binary content,
 #     # then only include the `blob_v1`.
 #
 #     "blob_v1",
