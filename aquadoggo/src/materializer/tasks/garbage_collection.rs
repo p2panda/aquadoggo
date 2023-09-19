@@ -92,7 +92,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 if let SchemaId::Blob(_) = operation.schema_id() {
                     // Purge the blob and all its pieces. This only succeeds if no document refers
                     // to the blob document by either a relation or pinned relation.
-                    context
+                    let _result = context
                         .store
                         .purge_blob(&document_id)
                         .await
