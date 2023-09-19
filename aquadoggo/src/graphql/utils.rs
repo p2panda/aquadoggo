@@ -21,6 +21,8 @@ use crate::db::SqlStore;
 use crate::graphql::constants;
 use crate::graphql::scalars::{CursorScalar, DocumentIdScalar, DocumentViewIdScalar};
 
+use super::scalars::HexBytesScalar;
+
 // Type name suffixes.
 const DOCUMENT_FIELDS_SUFFIX: &str = "Fields";
 const DOCUMENT_FIELDS_INPUT_SUFFIX: &str = "FieldsInput";
@@ -100,6 +102,7 @@ pub fn graphql_input(field_type: &FieldType) -> TypeRef {
         FieldType::Integer => TypeRef::named(TypeRef::INT),
         FieldType::Float => TypeRef::named(TypeRef::FLOAT),
         FieldType::String => TypeRef::named(TypeRef::STRING),
+        FieldType::Bytes => TypeRef::named("HexBytes"),
         FieldType::Relation(_) => TypeRef::named("DocumentId"),
         FieldType::PinnedRelation(_) => TypeRef::named("DocumentViewId"),
         FieldType::RelationList(_) => TypeRef::named_list("DocumentId"),
@@ -138,18 +141,24 @@ pub fn graphql_to_operation_value(value: &Value, field_type: FieldType) -> Opera
                 unreachable!()
             }
         }
+        FieldType::Bytes => {
+            let hex_bytes: String = HexBytesScalar::from_value(value.to_owned())
+                .expect("Value is hex byte string")
+                .into();
+            OperationValue::Bytes(hex::decode(hex_bytes).expect("Valid hex byte string"))
+        }
         FieldType::Relation(_) => {
             let document_id: DocumentId = DocumentIdScalar::from_value(value.to_owned())
                 .expect("Value is document id")
                 .into();
             document_id.into()
-        },
+        }
         FieldType::PinnedRelation(_) => {
-            let document_view_id: DocumentViewId = DocumentViewIdScalar::from_value(value.to_owned())
-            .expect("Value is document id")
-            .into();
-        document_view_id.into()
-
+            let document_view_id: DocumentViewId =
+                DocumentViewIdScalar::from_value(value.to_owned())
+                    .expect("Value is document id")
+                    .into();
+            document_view_id.into()
         }
         FieldType::RelationList(_) => {
             if let Value::List(value_list) = value {
