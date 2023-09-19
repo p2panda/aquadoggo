@@ -407,30 +407,30 @@ mod tests {
             "collection": value!({
                 "hasNextPage": false,
                 "totalCount": 2,
-                "endCursor": "24gc7iHafVKTcfRZfVVV8etkSoJMJVsqs1iYJAuHb8oNp32Vi1PcYw6S5GJ8hNhPmHHbP1weVbACYRctHVz4jXjQ",
+                "endCursor": "32Zn29gCkVQfdCBqnau1WWu4xVKYjmU5F1SPgoZ3sW6GALcbY22EGxEL2K8aNRPQaxppPGfUjSR41Xg9NyayD613",
                 "documents": [
                     {
-                        "cursor": "24gZVnL75RPvxMVAiuGT2SgCrHneGZgsvEaiCh5g8qgxGBhcunAffueCUTiyuLDamP1G48KYPmRDBBFG43dh3XJ2",
+                        "cursor": "27ECgmQpeuQwMKtCZxkbJUtCvkZDLuayQKv9zkV5uKx1xMHBeeSBasdhvoZwcgXLC5mnv7QR9HW11gjhH57D1mjs",
                         "fields": { 
-                            "bool": true,
-                            "data": "00010203",
+                            "bool": false,
+                            "data": "04050607",
                         },
                         "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
-                            "documentId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
-                            "viewId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
+                            "documentId": "002015d927155173a6cc09531864d4f95c88a5ac910c5a17bf223f075b1cc438a511",
+                            "viewId": "002015d927155173a6cc09531864d4f95c88a5ac910c5a17bf223f075b1cc438a511",
                         }
                     },
                     {
-                        "cursor": "24gc7iHafVKTcfRZfVVV8etkSoJMJVsqs1iYJAuHb8oNp32Vi1PcYw6S5GJ8hNhPmHHbP1weVbACYRctHVz4jXjQ",
+                        "cursor": "32Zn29gCkVQfdCBqnau1WWu4xVKYjmU5F1SPgoZ3sW6GALcbY22EGxEL2K8aNRPQaxppPGfUjSR41Xg9NyayD613",
                         "fields": { 
-                            "bool": false,
-                            "data": "04050607"
+                            "bool": true,
+                            "data": "00010203"
                         },
                         "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
-                            "documentId": "0020c7dbed85159bbea8f1c44f1d4d7dfbdded6cd43c09ab1a292089e9530964cab9",
-                            "viewId": "0020c7dbed85159bbea8f1c44f1d4d7dfbdded6cd43c09ab1a292089e9530964cab9",
+                            "documentId": "00204ca0609fc55756c2aed7045f72b62bedeff7c96e4900b3aa29f7106f4a70baf1",
+                            "viewId": "00204ca0609fc55756c2aed7045f72b62bedeff7c96e4900b3aa29f7106f4a70baf1",
                         }
                     }
                 ]
@@ -442,7 +442,7 @@ mod tests {
         r#"
             (
                 first: 1,
-                after: "24gc7iHafVKTcfRZfVVV8etkSoJMJVsqs1iYJAuHb8oNp32Vi1PcYw6S5GJ8hNhPmHHbP1weVbACYRctHVz4jXjQ",
+                after: "27ECgmQpeuQwMKtCZxkbJUtCvkZDLuayQKv9zkV5uKx1xMHBeeSBasdhvoZwcgXLC5mnv7QR9HW11gjhH57D1mjs",
                 orderBy: DOCUMENT_ID,
                 orderDirection: ASC,
                 filter: {
@@ -475,18 +475,18 @@ mod tests {
             "collection": value!({
                 "hasNextPage": false,
                 "totalCount": 1,
-                "endCursor": "24gZVnL75RPvxMVAiuGT2SgCrHneGZgsvEaiCh5g8qgxGBhcunAffueCUTiyuLDamP1G48KYPmRDBBFG43dh3XJ2",
+                "endCursor": "32Zn29gCkVQfdCBqnau1WWu4xVKYjmU5F1SPgoZ3sW6GALcbY22EGxEL2K8aNRPQaxppPGfUjSR41Xg9NyayD613",
                 "documents": [
                     {
-                        "cursor": "24gZVnL75RPvxMVAiuGT2SgCrHneGZgsvEaiCh5g8qgxGBhcunAffueCUTiyuLDamP1G48KYPmRDBBFG43dh3XJ2",
+                        "cursor": "32Zn29gCkVQfdCBqnau1WWu4xVKYjmU5F1SPgoZ3sW6GALcbY22EGxEL2K8aNRPQaxppPGfUjSR41Xg9NyayD613",
                         "fields": { 
                             "bool": true,
                             "data": "00010203",
                         },
                         "meta": {
                             "owner": "2f8e50c2ede6d936ecc3144187ff1c273808185cfbc5ff3d3748d1ff7353fc96",
-                            "documentId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
-                            "viewId": "0020223f123be0f9025c591fba1a5800ca64084e837315521d5b65a870e874ed8b4e",
+                            "documentId": "00204ca0609fc55756c2aed7045f72b62bedeff7c96e4900b3aa29f7106f4a70baf1",
+                            "viewId": "00204ca0609fc55756c2aed7045f72b62bedeff7c96e4900b3aa29f7106f4a70baf1",
                         }
                     }
                 ]
@@ -522,12 +522,12 @@ mod tests {
     #[case(
         r#"(orderBy: HELLO)"#.to_string(),
         Value::Null,
-        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_0020d384b69386867b61acebe6b23d4fac8c1425d5dce339bb3ef7c2218c155b3f9aOrderBy\" does not contain the value \"HELLO\"".to_string()]
+        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00202356a8c4da41126b8098084c2a3b653be99d61bfd805f34e967b2970b9b1998dOrderBy\" does not contain the value \"HELLO\"".to_string()]
     )]
     #[case(
         r#"(orderBy: "hello")"#.to_string(),
         Value::Null,
-        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_0020d384b69386867b61acebe6b23d4fac8c1425d5dce339bb3ef7c2218c155b3f9aOrderBy\" does not contain the value \"hello\"".to_string()]
+        vec!["Invalid value for argument \"orderBy\", enumeration type \"schema_name_00202356a8c4da41126b8098084c2a3b653be99d61bfd805f34e967b2970b9b1998dOrderBy\" does not contain the value \"hello\"".to_string()]
     )]
     #[case(
         r#"(orderDirection: HELLO)"#.to_string(),
@@ -552,7 +552,7 @@ mod tests {
     #[case(
         r#"(filter: { hello: { eq: true }})"#.to_string(),
         Value::Null,
-        vec!["Invalid value for argument \"filter\", unknown field \"hello\" of type \"schema_name_0020d384b69386867b61acebe6b23d4fac8c1425d5dce339bb3ef7c2218c155b3f9aFilter\"".to_string()]
+        vec!["Invalid value for argument \"filter\", unknown field \"hello\" of type \"schema_name_00202356a8c4da41126b8098084c2a3b653be99d61bfd805f34e967b2970b9b1998dFilter\"".to_string()]
     )]
     #[case(
         r#"(filter: { bool: { contains: "hello" }})"#.to_string(),
