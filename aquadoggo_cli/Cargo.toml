@@ -1,6 +1,6 @@
 [package]
 name = "aquadoggo_cli"
-version = "0.3.0"
+version = "0.5.0"
 authors = [
     "adz <x12@adz.garden>",
     "cafca <cafca@001.land>",
@@ -29,7 +29,7 @@ figment = { version = "0.10.10", features = ["toml", "env"] }
 hex = "0.4.3"
 libp2p = "0.52.0"
 log = "0.4.20"
-p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "be84d7c4e39c1b67125d80468ccf412cf25ae1d7" }
+p2panda-rs = { git = "https://github.com/p2panda/p2panda", rev = "c0b382c9b31425748bba7c150ec9ad7a784d000c" }
 path-clean = "1.0.1"
 serde = { version = "1.0.185", features = ["serde_derive"] }
 tempfile = "3.7.0"

@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "aquadoggo_cli"
-version = "0.3.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "aquadoggo",
@@ -3118,7 +3118,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 [[package]]
 name = "p2panda-rs"
 version = "0.7.1"
-source = "git+https://github.com/p2panda/p2panda?rev=be84d7c4e39c1b67125d80468ccf412cf25ae1d7#be84d7c4e39c1b67125d80468ccf412cf25ae1d7"
+source = "git+https://github.com/p2panda/p2panda?rev=c0b382c9b31425748bba7c150ec9ad7a784d000c#c0b382c9b31425748bba7c150ec9ad7a784d000c"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",
