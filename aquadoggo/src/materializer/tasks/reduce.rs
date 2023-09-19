@@ -254,7 +254,7 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
             if document.is_deleted() || document.is_edited() {
                 debug!(
-                    "Dispatch prune task for document with id: {}",
+                    "Dispatch garbage collection task for document with id: {}",
                     document.id()
                 );
 
