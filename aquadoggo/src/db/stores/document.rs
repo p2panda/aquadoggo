@@ -401,38 +401,58 @@ impl SqlStore {
         &self,
         document_view_id: &DocumentViewId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
-        let document_view_ids: Vec<String> = query_scalar(
+        let children_ids: Vec<String> = query_scalar(
             "
-            SELECT DISTINCT
-                document_views.document_id
+            SELECT
+                operation_fields_v1.value
             FROM
-                document_views
+                document_view_fields
+            LEFT JOIN
+                operation_fields_v1
+            ON
+                document_view_fields.operation_id = operation_fields_v1.operation_id
+            AND
+                document_view_fields.name = operation_fields_v1.name
             WHERE
-                document_views.document_view_id
-            IN (
-                SELECT
-                    operation_fields_v1.value
-                FROM
-                    document_view_fields
-                LEFT JOIN
-                    operation_fields_v1
-                ON
-                    document_view_fields.operation_id = operation_fields_v1.operation_id
-                AND
-                    document_view_fields.name = operation_fields_v1.name
-                WHERE
-                    operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
-                AND
-                    document_view_fields.document_view_id = $1
-            )
-            ",
+                operation_fields_v1.field_type IN (
+                    'pinned_relation', 
+                    'pinned_relation_list', 
+                    'relation', 
+                    'relation_list'
+                )
+            AND
+                document_view_fields.document_view_id = $1;
+        ",
         )
         .bind(document_view_id.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-        Ok(document_view_ids
+        let args = children_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect::<Vec<String>>()
+            .join(",");
+
+        let document_ids: Vec<String> = query_scalar(&format!(
+            "
+            SELECT DISTINCT
+                document_views.document_id
+            FROM
+                document_views
+            WHERE
+                document_views.document_view_id IN ({})
+            OR
+                document_views.document_id IN ({})
+            ",
+            args, args
+        ))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        Ok(document_ids
             .iter()
             .map(|document_id_str| {
                 document_id_str

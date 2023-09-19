@@ -350,7 +350,6 @@ mod tests {
                 next_tasks,
                 child_document_view_ids
                     .iter()
-                    .rev()
                     .map(|document_view_id| {
                         let document_id: DocumentId = document_view_id.to_string().parse().unwrap();
                         Task::new("garbage_collection", TaskInput::DocumentId(document_id))
