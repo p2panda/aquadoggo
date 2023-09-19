@@ -21,11 +21,13 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             // This task is concerned with a document which may now have dangling views. We want
             // to check for this and delete any views which are no longer needed.
             debug!(
-                "Prune document views for document: {}",
+                "Garbage collect views for document: {}",
                 document_id.display()
             );
 
             // Collect the ids of all views for this document.
+            //
+            // Does not include the current view of a deleted document.
             let all_document_view_ids: Vec<DocumentViewId> = context
                 .store
                 .get_all_document_view_ids(&document_id)
@@ -40,10 +42,12 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             //
             // During iteration we collect ids for all effected child documents, deleted views and
             // remaining views.
-            let mut all_effected_child_relations = vec![];
+            let mut effected_child_documents = vec![];
             let mut deleted_views = vec![];
             let mut remaining_views = vec![];
             for document_view_id in &all_document_view_ids {
+                debug!("Handling view with id: {}", document_view_id);
+
                 // Check if this is the current view of its document. This will still return true
                 // if the document in question is deleted.
                 let is_current_view = context
@@ -52,7 +56,9 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                     .await
                     .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-                let mut effected_child_relations = vec![];
+                debug!("Current view: {}", is_current_view);
+
+                let mut pinned_children = vec![];
                 let mut view_deleted = false;
 
                 // Skip this step if this is the current view as this shouldn't be garbage
@@ -61,11 +67,15 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                     // Before attempting to delete this view we need to fetch the ids of any child documents
                     // which might have views that could become unpinned as a result of this delete. These
                     // will be returned if the deletion is successful.
-                    effected_child_relations = context
+                    pinned_children = context
                         .store
                         .get_child_document_ids(document_view_id)
                         .await
                         .map_err(|err| TaskError::Critical(err.to_string()))?;
+
+                    for document_id in pinned_children.iter() {
+                        debug!("Child relation: {}", document_id);
+                    }
 
                     // Attempt to delete the view. If it is pinned from an existing view the deletion will
                     // not go ahead.
@@ -79,7 +89,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 if view_deleted {
                     debug!("Deleted view: {}", document_view_id);
                     deleted_views.push(document_view_id);
-                    all_effected_child_relations.extend(effected_child_relations);
+                    effected_child_documents.extend(pinned_children);
                 } else {
                     debug!("Did not delete view: {}", document_view_id);
                     remaining_views.push(document_view_id);
@@ -132,10 +142,13 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             }
 
             // We compose some more prune tasks based on the effected documents returned above.
-            let next_tasks: Vec<Task<TaskInput>> = all_effected_child_relations
+            let next_tasks: Vec<Task<TaskInput>> = effected_child_documents
                 .iter()
                 .map(|document_id| {
-                    debug!("Issue prune task for document: {document_id:#?}");
+                    debug!(
+                        "Dispatch garbage_collection task for document: {}",
+                        document_id.display()
+                    );
                     Task::new(
                         "garbage_collection",
                         TaskInput::DocumentId(document_id.to_owned()),
