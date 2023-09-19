@@ -180,7 +180,8 @@ mod tests {
     use crate::materializer::tasks::{blob_task, garbage_collection_task};
     use crate::materializer::{Task, TaskInput};
     use crate::test_utils::{
-        add_blob, add_schema_and_documents, assert_query, test_runner, update_document, TestNode,
+        add_blob, add_schema_and_documents, assert_query, delete_document, test_runner,
+        update_document, TestNode,
     };
 
     #[rstest]
@@ -564,6 +565,98 @@ mod tests {
                 &mut node,
                 schema.id(),
                 vec![("blob", random_document_view_id().into())],
+                &documents_pinning_blob[0].clone(),
+                &key_pair,
+            )
+            .await;
+
+            // Run a task for the parent document
+            let document_id: DocumentId = documents_pinning_blob[0].to_string().parse().unwrap();
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), TaskInput::DocumentId(document_id))
+                    .await
+                    .unwrap()
+                    .unwrap();
+
+            // It issues one new task which is for the blob document
+            assert_eq!(next_tasks.len(), 1);
+            let next_tasks =
+                garbage_collection_task(node.context.clone(), next_tasks[0].input().to_owned())
+                    .await
+                    .unwrap();
+            // No new tasks issued
+            assert!(next_tasks.is_none());
+
+            // The blob has correctly been purged from the store
+            let blob = node
+                .context
+                .store
+                .get_blob(&blob_document_id)
+                .await
+                .unwrap();
+
+            assert!(blob.is_none());
+
+            // And all expected rows deleted from the database.
+            assert_query(
+                &node,
+                "SELECT operation_id FROM operations_v1 WHERE schema_id = 'blob_v1'",
+                0,
+            )
+            .await;
+            assert_query(&node, "SELECT log_id FROM logs WHERE schema = 'blob_v1'", 1).await;
+            assert_query(
+                &node,
+                "SELECT document_id FROM documents WHERE schema_id = 'blob_v1'",
+                0,
+            )
+            .await;
+
+            // And it no longer exists on the file system.
+            let blob_view_path = node
+                .context
+                .config
+                .blobs_base_path
+                .join(blob_view_id.to_string());
+
+            let result = fs::read(blob_view_path.clone());
+            assert!(result.is_err());
+        })
+    }
+
+    #[rstest]
+    fn purges_blob_of_deleted_document(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Create a blob document
+            let blob_data = "Hello, World!".as_bytes();
+            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Run a blob task which persists the blob to the filesystem.
+            let _next_tasks = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await
+            .unwrap();
+
+            // Relate to the blob from a new document.
+            let (schema, documents_pinning_blob) = add_schema_and_documents(
+                &mut node,
+                "img",
+                vec![vec![(
+                    "blob",
+                    blob_view_id.clone().into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            // Now delete the document. This means the previously created blob is now "dangling".
+            delete_document(
+                &mut node,
+                schema.id(),
                 &documents_pinning_blob[0].clone(),
                 &key_pair,
             )
