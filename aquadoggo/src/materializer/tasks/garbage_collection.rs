@@ -485,6 +485,11 @@ mod tests {
                 .unwrap();
 
             assert!(blob.is_none());
+
+            // And all expected rows deleted from the database.
+            assert_query(&node, "SELECT operation_id FROM operations_v1 WHERE schema_id = 'blob_v1'", 0).await;
+            assert_query(&node, "SELECT log_id FROM logs WHERE schema = 'blob_v1'", 1).await;
+            assert_query(&node, "SELECT document_id FROM documents WHERE schema_id = 'blob_v1'", 0).await;
         })
     }
 
