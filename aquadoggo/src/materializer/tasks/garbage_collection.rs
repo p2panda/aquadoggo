@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::fs::remove_file;
+
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
 use p2panda_rs::operation::traits::AsOperation;
@@ -35,8 +37,12 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             //
             // Deletes on "document_views" cascade to "document_view_fields" so rows there are also removed
             // from the database.
+            //
+            // During iteration we collect ids for all effected child documents, deleted views and
+            // remaining views.
             let mut all_effected_child_relations = vec![];
-            let mut deleted_views_count = 0;
+            let mut deleted_views = vec![];
+            let mut remaining_views = vec![];
             for document_view_id in &all_document_view_ids {
                 // Check if this is the current view of its document. This will still return true
                 // if the document in question is deleted.
@@ -49,6 +55,8 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 let mut effected_child_relations = vec![];
                 let mut view_deleted = false;
 
+                // Skip this step if this is the current view as this shouldn't be garbage
+                // collected in any case (blobs are an exception which we deal with below).
                 if !is_current_view {
                     // Before attempting to delete this view we need to fetch the ids of any child documents
                     // which might have views that could become unpinned as a result of this delete. These
@@ -68,35 +76,58 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                         .map_err(|err| TaskError::Critical(err.to_string()))?;
                 }
 
-                // If the view was deleted then push the effected children to the return array
                 if view_deleted {
                     debug!("Deleted view: {}", document_view_id);
-                    deleted_views_count += 1;
+                    deleted_views.push(document_view_id);
                     all_effected_child_relations.extend(effected_child_relations);
                 } else {
                     debug!("Did not delete view: {}", document_view_id);
+                    remaining_views.push(document_view_id);
                 }
             }
 
-            // If the number of deleted views equals the total existing views (minus one for the
-            // current view), then there is a chance this became completely detached. In this case
-            // we should check if this document is a blob document and then try to purge it.
-            if all_document_view_ids.len() - 1 == deleted_views_count {
-                let operation = context
-                    .store
-                    .get_operation(&document_id.as_str().parse().unwrap())
-                    .await
-                    .map_err(|err| TaskError::Failure(err.to_string()))?
-                    .expect("Operation exists in store");
+            // Retrieve the schema id for this document.
+            let operation = context
+                .store
+                .get_operation(&document_id.as_str().parse().unwrap())
+                .await
+                .map_err(|err| TaskError::Failure(err.to_string()))?
+                .expect("Operation exists in store");
 
-                if let SchemaId::Blob(_) = operation.schema_id() {
-                    // Purge the blob and all its pieces. This only succeeds if no document refers
-                    // to the blob document by either a relation or pinned relation.
-                    let _result = context
-                        .store
-                        .purge_blob(&document_id)
-                        .await
-                        .map_err(|err| TaskError::Failure(err.to_string()))?;
+            let is_blob = matches!(operation.schema_id(), SchemaId::Blob(1));
+
+            // If the number of remaining views is equal to one (the current view) and this is a
+            // blob document then we should attempt to purge the blob completely from the store
+            // and filesystem.
+            if remaining_views.len() == 1 && is_blob {
+                // Attempt to purge the blob and all its pieces. This only succeeds if no document
+                // refers to the blob document by either a relation or pinned relation.
+                let purge_success = context
+                    .store
+                    .purge_blob(&document_id)
+                    .await
+                    .map_err(|err| TaskError::Failure(err.to_string()))?;
+
+                // If the purging succeeded add the current view to the deleted views array.
+                if purge_success {
+                    debug!("Purged blob from the database: {}", document_id);
+
+                    // Push the blobs current view id to the deleted views array.
+                    //
+                    // Unwrap as we checked length above.
+                    let current_view_id = remaining_views.pop().unwrap();
+                    deleted_views.push(current_view_id);
+                }
+            }
+
+            // We now remove all deleted blob views from the filesystem.
+            if is_blob {
+                for view_id in deleted_views {
+                    // Delete this blob view from the filesystem also.
+                    let blob_view_path = context.config.blobs_base_path.join(view_id.to_string());
+                    remove_file(blob_view_path.clone())
+                        .map_err(|err| TaskError::Critical(err.to_string()))?;
+                    debug!("Deleted blob view from filesystem: {}", view_id);
                 }
             }
 
@@ -124,6 +155,8 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::SchemaId;
@@ -131,7 +164,7 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use rstest::rstest;
 
-    use crate::materializer::tasks::garbage_collection_task;
+    use crate::materializer::tasks::{blob_task, garbage_collection_task};
     use crate::materializer::{Task, TaskInput};
     use crate::test_utils::{
         add_blob, add_schema_and_documents, assert_query, test_runner, update_document, TestNode,
@@ -374,7 +407,7 @@ mod tests {
     }
 
     #[rstest]
-    fn purges_blobs(key_pair: KeyPair) {
+    fn purges_blob_from_store(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             // Publish a blob
             let blob_document_view = add_blob(
@@ -396,7 +429,15 @@ mod tests {
                 .unwrap();
             assert!(blob.is_some());
 
-            // Run a garbage collection task for the blob document
+            // Run a blob task which persists the blob to the filesystem.
+            let _next_tasks = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_document_view.clone()),
+            )
+            .await
+            .unwrap();
+
+            // Run a garbage collection task for the blob document.
             let next_tasks = garbage_collection_task(
                 node.context.clone(),
                 TaskInput::DocumentId(blob_document_id.clone()),
@@ -428,12 +469,68 @@ mod tests {
     }
 
     #[rstest]
+    fn purges_blob_from_filesystem(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish a blob
+            let blob_document_view = add_blob(
+                &mut node,
+                "Hello World!".as_bytes(),
+                6,
+                "text/plain",
+                &key_pair,
+            )
+            .await;
+
+            let blob_document_id: DocumentId = blob_document_view.to_string().parse().unwrap();
+
+            // Run a blob task which persists the blob to the filesystem.
+            let _next_tasks = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_document_view.clone()),
+            )
+            .await
+            .unwrap();
+
+            let blob_view_path = node
+                .context
+                .config
+                .blobs_base_path
+                .join(blob_document_view.to_string());
+
+            let result = fs::read(blob_view_path.clone());
+            assert!(result.is_ok());
+
+            // Run a garbage collection task for the blob document.
+            let next_tasks = garbage_collection_task(
+                node.context.clone(),
+                TaskInput::DocumentId(blob_document_id.clone()),
+            )
+            .await
+            .unwrap();
+
+            // It shouldn't return any new tasks
+            assert!(next_tasks.is_none());
+
+            let result = fs::read(blob_view_path);
+            assert!(result.is_err());
+        });
+    }
+
+    #[rstest]
     fn purges_newly_detached_blobs(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             // Create a blob document
             let blob_data = "Hello, World!".as_bytes();
             let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Run a blob task which persists the blob to the filesystem.
+            let _next_tasks = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await
+            .unwrap();
 
             // Relate to the blob from a new document
             let (schema, documents_pinning_blob) = add_schema_and_documents(
@@ -476,7 +573,7 @@ mod tests {
             // No new tasks issued
             assert!(next_tasks.is_none());
 
-            // The blob has correctly been purged
+            // The blob has correctly been purged from the store
             let blob = node
                 .context
                 .store
@@ -500,6 +597,16 @@ mod tests {
                 0,
             )
             .await;
+
+            // And it no longer exists on the file system.
+            let blob_view_path = node
+                .context
+                .config
+                .blobs_base_path
+                .join(blob_view_id.to_string());
+
+            let result = fs::read(blob_view_path.clone());
+            assert!(result.is_err());
         })
     }
 
@@ -510,6 +617,14 @@ mod tests {
             let blob_data = "Hello, World!".as_bytes();
             let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
+
+            // Run a blob task which persists the blob to the filesystem.
+            let _next_tasks = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await
+            .unwrap();
 
             // Relate to the blob from a new document.
             let (schema, documents_pinning_blob) = add_schema_and_documents(
@@ -574,6 +689,16 @@ mod tests {
                 .unwrap();
 
             assert!(blob.is_some());
+
+            // And it should still be on the file system.
+            let blob_view_path = node
+                .context
+                .config
+                .blobs_base_path
+                .join(blob_view_id.to_string());
+
+            let result = fs::read(blob_view_path.clone());
+            assert!(result.is_ok());
         })
     }
 
