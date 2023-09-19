@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::path::PathBuf;
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 
 use p2panda_rs::schema::SchemaId;
 
