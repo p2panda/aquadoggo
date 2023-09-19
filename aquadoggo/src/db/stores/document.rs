@@ -503,8 +503,12 @@ impl SqlStore {
     ) -> Result<bool, DocumentStorageError> {
         let document_view_id: Option<String> = query_scalar(
             "
-            SELECT documents.document_view_id FROM documents
-            WHERE documents.document_view_id = $1
+            SELECT 
+                documents.document_view_id 
+            FROM 
+                documents
+            WHERE 
+                documents.document_view_id = $1
             ",
         )
         .bind(document_view_id.to_string())
