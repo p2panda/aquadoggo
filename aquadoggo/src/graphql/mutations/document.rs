@@ -48,19 +48,21 @@ pub fn build_document_mutation(query: Object, schema: &Schema) -> Object {
 
                 let operation = operation_builder.build()?;
 
-                // @TODO: We need to consider what key pair we want to use here (the node's?) and how to 
+                // @TODO: We need to consider what key pair we want to use here (the node's?) and how to
                 // make it available here to sign entries.
                 let (encoded_entry, _) =
                     send_to_store(store, &operation, &schema_clone, &KeyPair::new()).await?;
 
                 let operation_id: OperationId = encoded_entry.hash().into();
 
-                if tx.send(ServiceMessage::NewOperation(operation_id)).is_err() {
+                if tx.send(ServiceMessage::NewOperation(operation_id.clone())).is_err() {
                     // Silently fail here as we don't mind if there are no subscribers. We have
                     // tests in other places to check if messages arrive.
                 }
 
-                Ok(None::<FieldValue>)
+                Ok(Some(FieldValue::from(Value::String(
+                    operation_id.to_string(),
+                ))))
             })
         },
     );
