@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stream blob data in chunks to files to not occupy too much memory [#551](https://github.com/p2panda/aquadoggo/pull/551)
 - Remove unused methods from `EntryStore` [#560](https://github.com/p2panda/aquadoggo/pull/560)
 - Updates for new hash serialization in p2panda-rs [#569](https://github.com/p2panda/aquadoggo/pull/569)
+- Use `libp2p` `0.5.3` [#570](https://github.com/p2panda/aquadoggo/pull/570)
 
 ## Fixed
 
