@@ -18,7 +18,7 @@ use crate::graphql::input_values::{
     PinnedRelationFilter, PinnedRelationListFilter, RelationFilter, RelationListFilter,
     StringFilter,
 };
-use crate::graphql::mutations::{build_document_mutation, MutationRoot, Publish};
+use crate::graphql::mutations::{build_document_mutation, build_publish_mutation};
 use crate::graphql::objects::{
     build_document_collection_object, build_document_fields_object, build_document_object,
     build_paginated_document_object, DocumentMeta,
@@ -45,9 +45,6 @@ pub async fn build_root_schema(
 
     // Using dynamic-graphql we create a registry and add types
     let registry = Registry::new()
-        // Register mutation operations
-        .register::<MutationRoot>()
-        .register::<Publish>()
         // Register responses
         .register::<NextArguments>()
         // Register objects
@@ -85,6 +82,8 @@ pub async fn build_root_schema(
     // Construct the root query object
     let mut root_query = Object::new("Query");
     let mut mutation_root = Object::new("Mutation");
+
+    mutation_root = build_publish_mutation(mutation_root);
 
     // Loop through all schema retrieved from the schema store, dynamically create GraphQL objects,
     // input values and a query for the documents they describe

@@ -14,6 +14,7 @@ use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::SqlStore;
+use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::DocumentViewIdScalar;
 use crate::graphql::utils::{fields_input_name, graphql_to_operation_value};
 
@@ -23,7 +24,7 @@ pub fn build_document_mutation(query: Object, schema: &Schema) -> Object {
     let schema_clone = schema.clone();
     let mutation_field = Field::new(
         schema_id.to_string(),
-        TypeRef::named(TypeRef::BOOLEAN),
+        TypeRef::named("NextArguments"),
         move |ctx| {
             let schema_clone = schema_clone.clone();
             FieldFuture::new(async move {
@@ -50,19 +51,29 @@ pub fn build_document_mutation(query: Object, schema: &Schema) -> Object {
 
                 // @TODO: We need to consider what key pair we want to use here (the node's?) and how to
                 // make it available here to sign entries.
-                let (encoded_entry, _) =
+                let (encoded_entry, (backlink, skiplink, seq_num, log_id)) =
                     send_to_store(store, &operation, &schema_clone, &KeyPair::new()).await?;
 
                 let operation_id: OperationId = encoded_entry.hash().into();
 
-                if tx.send(ServiceMessage::NewOperation(operation_id.clone())).is_err() {
+                if tx
+                    .send(ServiceMessage::NewOperation(operation_id.clone()))
+                    .is_err()
+                {
                     // Silently fail here as we don't mind if there are no subscribers. We have
                     // tests in other places to check if messages arrive.
                 }
 
-                Ok(Some(FieldValue::from(Value::String(
-                    operation_id.to_string(),
-                ))))
+                // @TODO: Returning next args for now, not really necessary, but don't have
+                // another idea yet.
+                let next_args = NextArguments {
+                    log_id: log_id.into(),
+                    seq_num: seq_num.into(),
+                    backlink: backlink.map(|hash| hash.into()),
+                    skiplink: skiplink.map(|hash| hash.into()),
+                };
+
+                Ok(Some(FieldValue::owned_any(next_args)))
             })
         },
     );

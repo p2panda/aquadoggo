@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::collections::HashMap;
+
 use anyhow::anyhow;
-use dynamic_graphql::{Context, Mutation, MutationFields, MutationRoot, Result};
+use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
+use async_graphql::{Error, Name, Value};
+use dynamic_graphql::{FieldValue, Result, ScalarValue};
 use log::debug;
 use p2panda_rs::api::publish;
 use p2panda_rs::entry::traits::AsEncodedEntry;
@@ -16,79 +20,99 @@ use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{EncodedEntryScalar, EncodedOperationScalar};
 use crate::schema::SchemaProvider;
 
-/// GraphQL mutation root.
-#[derive(MutationRoot, Default, Debug, Copy, Clone)]
-pub struct MutationRoot;
+/// Construct a mutation query based on a schema, for creating, updating and deleting documents.
+pub fn build_publish_mutation(query: Object) -> Object {
+    let mutation_field = Field::new("publish", TypeRef::named("NextArguments"), move |ctx| {
+        FieldFuture::new(async move {
+            let (entry, operation) = parse_arguments(&ctx)?;
+            let store = ctx.data_unchecked::<SqlStore>();
+            let tx = ctx.data_unchecked::<ServiceSender>();
+            let schema_provider = ctx.data::<SchemaProvider>()?;
 
-/// GraphQL "publish" mutation.
-#[derive(Mutation, Default, Debug, Copy, Clone)]
-pub struct Publish(MutationRoot);
+            let encoded_entry: EncodedEntry = entry.into();
+            let encoded_operation: EncodedOperation = operation.into();
 
-#[MutationFields]
-impl Publish {
-    /// Publish an entry using parameters obtained through `nextArgs` query.
-    ///
-    /// Returns arguments for publishing the next entry in the same log.
-    async fn publish(
-        ctx: &Context<'_>,
-        // Signed and encoded entry to publish
-        entry: EncodedEntryScalar,
-        // p2panda operation representing the entry payload.
-        operation: EncodedOperationScalar,
-    ) -> Result<NextArguments> {
-        let store = ctx.data::<SqlStore>()?;
-        let tx = ctx.data::<ServiceSender>()?;
-        let schema_provider = ctx.data::<SchemaProvider>()?;
+            debug!(
+                "Query to publish received containing entry with hash {}",
+                encoded_entry.hash()
+            );
 
-        let encoded_entry: EncodedEntry = entry.into();
-        let encoded_operation: EncodedOperation = operation.into();
+            let operation = decode_operation(&encoded_operation)?;
 
-        debug!(
-            "Query to publish received containing entry with hash {}",
-            encoded_entry.hash()
+            let schema = schema_provider
+                .get(operation.schema_id())
+                .await
+                .ok_or_else(|| anyhow!("Schema not found"))?;
+
+            /////////////////////////////////////
+            // PUBLISH THE ENTRY AND OPERATION //
+            /////////////////////////////////////
+
+            let (backlink, skiplink, seq_num, log_id) = publish(
+                store,
+                &schema,
+                &encoded_entry,
+                &operation,
+                &encoded_operation,
+            )
+            .await?;
+
+            ////////////////////////////////////////
+            // SEND THE OPERATION TO MATERIALIZER //
+            ////////////////////////////////////////
+
+            // Send new operation on service communication bus, this will arrive eventually at
+            // the materializer service
+
+            let operation_id: OperationId = encoded_entry.hash().into();
+
+            if tx.send(ServiceMessage::NewOperation(operation_id)).is_err() {
+                // Silently fail here as we don't mind if there are no subscribers. We have
+                // tests in other places to check if messages arrive.
+            }
+
+            let next_args = NextArguments {
+                log_id: log_id.into(),
+                seq_num: seq_num.into(),
+                backlink: backlink.map(|hash| hash.into()),
+                skiplink: skiplink.map(|hash| hash.into()),
+            };
+
+            Ok(Some(FieldValue::owned_any(next_args)))
+        })
+    });
+
+    let mutation_field = mutation_field
+        .argument(InputValue::new("entry", TypeRef::named_nn("EncodedEntry"))).description("Signed and encoded entry to publish")
+        .argument(InputValue::new(
+            "operation",
+            TypeRef::named_nn("EncodedOperation"),
+        )).description("Encoded p2panda operation")
+        .description(
+            "Publish an entry using parameters obtained through `nextArgs` query. Returns arguments for publishing the next entry in the same log.",
         );
 
-        let operation = decode_operation(&encoded_operation)?;
+    query.field(mutation_field)
+}
 
-        let schema = schema_provider
-            .get(operation.schema_id())
-            .await
-            .ok_or_else(|| anyhow!("Schema not found"))?;
+fn parse_arguments(
+    ctx: &ResolverContext,
+) -> Result<(EncodedEntryScalar, EncodedOperationScalar), Error> {
+    let arguments: HashMap<Name, Value> = ctx.field().arguments()?.into_iter().collect();
+    let entry = EncodedEntryScalar::from_value(
+        arguments
+            .get("entry")
+            .expect("Is required field")
+            .to_owned(),
+    )?;
+    let operation = EncodedOperationScalar::from_value(
+        arguments
+            .get("operation")
+            .expect("Is required field")
+            .to_owned(),
+    )?;
 
-        /////////////////////////////////////
-        // PUBLISH THE ENTRY AND OPERATION //
-        /////////////////////////////////////
-
-        let (backlink, skiplink, seq_num, log_id) = publish(
-            store,
-            &schema,
-            &encoded_entry,
-            &operation,
-            &encoded_operation,
-        )
-        .await?;
-
-        ////////////////////////////////////////
-        // SEND THE OPERATION TO MATERIALIZER //
-        ////////////////////////////////////////
-
-        // Send new operation on service communication bus, this will arrive eventually at
-        // the materializer service
-
-        let operation_id: OperationId = encoded_entry.hash().into();
-
-        if tx.send(ServiceMessage::NewOperation(operation_id)).is_err() {
-            // Silently fail here as we don't mind if there are no subscribers. We have
-            // tests in other places to check if messages arrive.
-        }
-
-        Ok(NextArguments {
-            log_id: log_id.into(),
-            seq_num: seq_num.into(),
-            backlink: backlink.map(|hash| hash.into()),
-            skiplink: skiplink.map(|hash| hash.into()),
-        })
-    }
+    Ok((entry, operation))
 }
 
 #[cfg(test)]
