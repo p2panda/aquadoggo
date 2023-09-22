@@ -11,6 +11,7 @@ use crate::replication::traits::Strategy;
 use crate::replication::{
     LogHeightStrategy, Message, Mode, SchemaIdSet, SetReconciliationStrategy, StrategyResult,
 };
+use crate::schema::SchemaProvider;
 
 pub type SessionId = u64;
 
@@ -55,9 +56,10 @@ impl Session {
         mode: &Mode,
         local: bool,
         live_mode: bool,
+        schema_provider: SchemaProvider,
     ) -> Self {
         let strategy: Box<dyn Strategy> = match mode {
-            Mode::LogHeight => Box::new(LogHeightStrategy::new(target_set)),
+            Mode::LogHeight => Box::new(LogHeightStrategy::new(target_set, schema_provider)),
             Mode::SetReconciliation => Box::new(SetReconciliationStrategy::new()),
             Mode::Unknown => panic!("Unknown replication mode"),
         };
@@ -199,6 +201,7 @@ mod tests {
                 &Mode::LogHeight,
                 true,
                 false,
+                node.context.schema_provider.clone(),
             );
             assert!(!session.is_local_done);
             assert!(!session.is_local_live_mode);
@@ -225,6 +228,10 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let mut node_a = manager.create().await;
+            let schema_provider = node_a.context.schema_provider.clone();
+            populate_and_materialize(&mut node_a, &config).await;
+
             let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
             let mut session = Session::new(
                 &INITIAL_SESSION_ID,
@@ -232,10 +239,8 @@ mod tests {
                 &Mode::LogHeight,
                 true,
                 false,
+                schema_provider.clone(),
             );
-
-            let mut node_a = manager.create().await;
-            populate_and_materialize(&mut node_a, &config).await;
 
             let response_messages = session
                 .handle_message(&node_a.context.store, &Message::Have(vec![]))
@@ -255,6 +260,7 @@ mod tests {
                 &Mode::LogHeight,
                 true,
                 false,
+                schema_provider.clone(),
             );
 
             let node_b: TestNode = manager.create().await;

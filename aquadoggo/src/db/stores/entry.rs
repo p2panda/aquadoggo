@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use std::vec;
 
 use async_trait::async_trait;
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
-use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::EntryStorageError;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use sqlx::{query, query_as};
@@ -184,11 +184,23 @@ impl EntryStore for SqlStore {
 }
 
 impl SqlStore {
-    pub async fn get_log_heights(
+    pub async fn get_document_log_heights(
         &self,
-        schema_id: &SchemaId,
+        document_ids: &[DocumentId],
     ) -> Result<Vec<(PublicKey, Vec<(LogId, SeqNum)>)>, EntryStorageError> {
-        let log_height_rows = query_as::<_, LogHeightRow>(
+        // If no document ids were passed then don't query the database. Instead return an empty
+        // vec now already.
+        if document_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let document_ids_str: String = document_ids
+            .iter()
+            .map(|document_id| format!("'{}'", document_id.as_str()))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        let log_height_rows = query_as::<_, LogHeightRow>(&format!(
             "
             SELECT
                 entries.public_key,
@@ -200,14 +212,13 @@ impl SqlStore {
                 ON entries.log_id = logs.log_id
                     AND entries.public_key = logs.public_key
             WHERE
-                logs.schema = $1
+                logs.document IN ({document_ids_str})
             GROUP BY
                 entries.public_key, entries.log_id
             ORDER BY
                 entries.public_key, CAST(entries.log_id AS NUMERIC)
             ",
-        )
-        .bind(schema_id.to_string())
+        ))
         .fetch_all(&self.pool)
         .await
         .map_err(|e| EntryStorageError::Custom(e.to_string()))?;
@@ -554,39 +565,6 @@ mod tests {
                 .await
                 .unwrap();
             assert!(entry.is_none());
-        });
-    }
-
-    #[rstest]
-    fn get_log_heights(
-        #[from(populate_store_config)]
-        #[with(5, 5, 5)]
-        config: PopulateStoreConfig,
-    ) {
-        test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
-
-            let log_heights = node
-                .context
-                .store
-                .get_log_heights(config.schema.id())
-                .await
-                .unwrap();
-
-            assert_eq!(log_heights.len(), 5);
-
-            for (public_key, author_logs) in log_heights {
-                assert!(key_pairs
-                    .iter()
-                    .find(|key_pair| key_pair.public_key() == public_key)
-                    .is_some());
-                assert_eq!(author_logs.len(), 5);
-
-                for (_, seq_num) in author_logs {
-                    assert_eq!(seq_num.as_u64(), 5)
-                }
-            }
         });
     }
 

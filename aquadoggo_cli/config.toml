@@ -35,6 +35,16 @@
 #     "schema_definition_v1",
 #     "schema_field_definition_v1",
 #
+#     # To replicate documents which represent blobs (binary files) include the
+#     # following two built-in schema ids. This does not instruct your node to
+#     # replicate any blobs it finds on the network, but only those which are
+#     # dependencies of # other documents you already have.
+#     #
+#     # If you only want to replicate the meta data, not the binary content,
+#     # then only include the `blob_v1`.
+#     "blob_v1",
+#     "blob_piece_v1",
+#
 #     # Once you discover new schemas and want to start replicating their
 #     # documents, then add their schema ids to this list as well. It's also
 #     # possible to create and load schemas directly onto your node using the

@@ -90,7 +90,14 @@ where
         mode: &Mode,
         local: bool,
     ) -> Vec<Message> {
-        let mut session = Session::new(session_id, target_set, mode, local, SUPPORT_LIVE_MODE);
+        let mut session = Session::new(
+            session_id,
+            target_set,
+            mode,
+            local,
+            SUPPORT_LIVE_MODE,
+            self.ingest.schema_provider.clone(),
+        );
         let initial_messages = session.initial_messages(&self.store).await;
 
         if let Some(sessions) = self.sessions.get_mut(remote_peer) {
@@ -111,7 +118,14 @@ where
         mode: &Mode,
         local: bool,
     ) {
-        let session = Session::new(session_id, target_set, mode, local, SUPPORT_LIVE_MODE);
+        let session = Session::new(
+            session_id,
+            target_set,
+            mode,
+            local,
+            SUPPORT_LIVE_MODE,
+            self.ingest.schema_provider.clone(),
+        );
 
         if let Some(sessions) = self.sessions.get_mut(remote_peer) {
             sessions.push(session);

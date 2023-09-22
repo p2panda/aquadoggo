@@ -229,6 +229,58 @@ impl SqlStore {
 
         Ok(())
     }
+
+    /// Get ids for all blob documents which are related to from any view of the passed document.
+    pub async fn get_blob_child_relations(
+        &self,
+        document_id: &DocumentId,
+    ) -> Result<Vec<DocumentId>, SqlStoreError> {
+        let document_ids: Vec<String> = query_scalar(
+            "
+            SELECT DISTINCT 
+                document_views.document_id
+            FROM
+                document_views
+            WHERE 
+                document_views.schema_id = 'blob_v1' 
+            AND 
+                document_views.document_view_id 
+            IN (
+                SELECT
+                    operation_fields_v1.value
+                FROM 
+                    document_view_fields
+                LEFT JOIN 
+                    operation_fields_v1
+                ON
+                    document_view_fields.operation_id = operation_fields_v1.operation_id
+                AND
+                    document_view_fields.name = operation_fields_v1.name
+                LEFT JOIN 
+                    document_views
+                ON
+                    document_view_fields.document_view_id = document_views.document_view_id
+                WHERE
+                    operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list', 'relation_list', 'relation')
+                AND 
+                    document_views.document_id = $1
+            )
+            "
+        )
+        .bind(document_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| SqlStoreError::Transaction(err.to_string()))?;
+
+        Ok(document_ids
+            .iter()
+            .map(|document_id_str| {
+                document_id_str
+                    .parse::<DocumentId>()
+                    .expect("Document Id's coming from the store should be valid")
+            })
+            .collect())
+    }
 }
 
 /// Throws an error when database does not contain all related blob pieces yet.
