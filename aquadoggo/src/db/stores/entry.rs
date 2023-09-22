@@ -10,7 +10,6 @@ use p2panda_rs::entry::{EncodedEntry, Entry, LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::PublicKey;
 use p2panda_rs::operation::EncodedOperation;
-use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::error::EntryStorageError;
 use p2panda_rs::storage_provider::traits::EntryStore;
 use sqlx::{query, query_as};
