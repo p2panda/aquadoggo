@@ -3,7 +3,7 @@
 mod common;
 mod diff;
 mod log_height;
-mod set_reconciliation;
+pub mod set_reconciliation;
 
 pub use common::{has_blob_relation, included_document_ids};
 pub use diff::diff_log_heights;

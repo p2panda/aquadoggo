@@ -7,10 +7,12 @@ use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::Human;
 use serde::ser::SerializeSeq;
 use serde::Serialize;
+use unionize::protocol::Message as UnionizeMessage;
 
+use crate::replication::strategies::set_reconciliation::{Item, Monoid};
 use crate::replication::{
-    MessageType, Mode, SchemaIdSet, SessionId, ENTRY_TYPE, HAVE_TYPE, SYNC_DONE_TYPE,
-    SYNC_REQUEST_TYPE,
+    MessageType, Mode, SchemaIdSet, SessionId, ENTRY_TYPE, HAVE_TYPE, SET_RECONCILIATION_TYPE,
+    SYNC_DONE_TYPE, SYNC_REQUEST_TYPE,
 };
 
 pub type LiveMode = bool;
@@ -22,6 +24,7 @@ pub enum Message {
     SyncRequest(Mode, SchemaIdSet),
     Entry(EncodedEntry, Option<EncodedOperation>),
     SyncDone(LiveMode),
+    SetReconciliation(UnionizeMessage<Monoid, (Item, bool)>),
     Have(Vec<LogHeights>),
 }
 
@@ -31,6 +34,7 @@ impl Message {
             Message::SyncRequest(_, _) => SYNC_REQUEST_TYPE,
             Message::Entry(_, _) => ENTRY_TYPE,
             Message::SyncDone(_) => SYNC_DONE_TYPE,
+            Message::SetReconciliation(_) => SET_RECONCILIATION_TYPE,
             Message::Have(_) => HAVE_TYPE,
         }
     }
@@ -106,6 +110,11 @@ impl Serialize for SyncMessage {
             Message::SyncDone(live_mode) => {
                 let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
                 seq.serialize_element(live_mode)?;
+                seq.end()
+            }
+            Message::SetReconciliation(unionize_message) => {
+                let mut seq = serialize_header(serializer.serialize_seq(Some(3))?)?;
+                seq.serialize_element(unionize_message)?;
                 seq.end()
             }
             Message::Have(log_heights) => {

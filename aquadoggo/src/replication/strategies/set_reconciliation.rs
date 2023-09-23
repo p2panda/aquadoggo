@@ -27,13 +27,13 @@ fn to_item(operation: &OperationId) -> LEByteArray<34> {
 }
 
 /// A member of the sets we are unionizing.
-type Item = LEByteArray<34>;
+pub type Item = LEByteArray<34>;
 
 /// The monoid hashing function.
-type Monoid = CountingSha256Xor<Item>;
+pub type Monoid = CountingSha256Xor<Item>;
 
 /// Node which contains the item tree.
-type Node = mem_rc::Node<Monoid>;
+pub type Node = mem_rc::Node<Monoid>;
 
 #[derive(Clone, Debug)]
 pub struct SetReconciliationStrategy {
