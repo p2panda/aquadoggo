@@ -1,4 +1,8 @@
-use p2panda_rs::{document::{DocumentId, traits::AsDocument}, schema::{SchemaId, Schema}, storage_provider::traits::DocumentStore};
+use p2panda_rs::{
+    document::{traits::AsDocument, DocumentId},
+    schema::{Schema, SchemaId},
+    storage_provider::traits::DocumentStore,
+};
 
 use crate::{db::SqlStore, replication::SchemaIdSet, schema::SchemaProvider};
 
@@ -30,7 +34,11 @@ pub fn has_blob_relation(schema: &Schema) -> bool {
 ///
 /// For example, a target set including the schema id `[img_0020, blob_v1]` would look at all
 /// `img_0020` documents and only include blobs which they relate to.
-pub async fn included_document_ids(store: &SqlStore, schema_provider: &SchemaProvider, target_set: &SchemaIdSet) -> Vec<DocumentId> {
+pub async fn included_document_ids(
+    store: &SqlStore,
+    schema_provider: &SchemaProvider,
+    target_set: &SchemaIdSet,
+) -> Vec<DocumentId> {
     let wants_blobs = target_set.contains(&SchemaId::Blob(1));
     let wants_blob_pieces = target_set.contains(&SchemaId::BlobPiece(1));
     let mut all_target_documents = vec![];

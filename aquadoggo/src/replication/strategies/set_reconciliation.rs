@@ -178,7 +178,7 @@ impl Strategy for SetReconciliationStrategy {
 
         // If we weren't the one's sending the first message then we also need to initiate the session.
         if !self.is_initiated {
-            self.init(&store).await;
+            self.init(store).await;
         };
 
         let response = match message {
@@ -193,7 +193,7 @@ impl Strategy for SetReconciliationStrategy {
 
                 // Generate a response message.
                 let (response, _new_objects) =
-                    respond_to_message(&tree, &self.object_store, &message, 3, split::<2>).unwrap();
+                    respond_to_message(&tree, &self.object_store, message, 3, split::<2>).unwrap();
 
                 response
             }
