@@ -108,3 +108,113 @@ pub async fn included_document_ids(
 
     all_included_document_ids
 }
+
+#[cfg(test)]
+mod tests {
+    use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::schema::SchemaId;
+    use p2panda_rs::test_utils::fixtures::key_pair;
+    use p2panda_rs::test_utils::generate_random_bytes;
+    use rstest::rstest;
+
+    use crate::replication::strategies::included_document_ids;
+    use crate::replication::SchemaIdSet;
+    use crate::test_utils::{
+        add_blob, add_schema_and_documents, test_runner_with_manager, TestNodeManager,
+    };
+
+    #[rstest]
+    // In the test we add the schema id of the `img` document to the target which is why this
+    // seemingly empty target set returns log heights....
+    #[case(vec![], 1)] // LogId 5 is where the img document lives
+    #[case(vec![SchemaId::Blob(1)], 2)]
+    #[case(vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)], 4)]
+    fn calculates_included_document_ids(
+        #[case] target_set_extension: Vec<SchemaId>,
+        key_pair: KeyPair,
+        #[case] expected_document_ids_len: usize,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let mut node_a = manager.create().await;
+            let document_view_id = add_blob(
+                &mut node_a,
+                &generate_random_bytes(10),
+                5,
+                "text/plain".into(),
+                &key_pair,
+            )
+            .await;
+
+            let (schema, _) = add_schema_and_documents(
+                &mut node_a,
+                "img",
+                vec![vec![(
+                    "relation_to_blob",
+                    document_view_id.into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            let mut target_set_schema = vec![schema.id().to_owned()];
+            target_set_schema.extend(target_set_extension);
+            let target_set = SchemaIdSet::new(&target_set_schema);
+            let _ = node_a.context.schema_provider.update(schema).await;
+
+            let included_document_ids = included_document_ids(
+                &node_a.context.store,
+                &node_a.context.schema_provider,
+                &target_set,
+            )
+            .await;
+
+            assert_eq!(included_document_ids.len(), expected_document_ids_len)
+        });
+    }
+
+    #[rstest]
+    #[case(vec![])]
+    #[case(vec![SchemaId::Blob(1)])]
+    #[case(vec![SchemaId::Blob(1), SchemaId::BlobPiece(1)])]
+    fn blobs_and_pieces_not_included_on_their_own(
+        #[case] target_set_schema: Vec<SchemaId>,
+        key_pair: KeyPair,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let mut node_a = manager.create().await;
+            let document_view_id = add_blob(
+                &mut node_a,
+                &generate_random_bytes(10),
+                2,
+                "text/plain".into(),
+                &key_pair,
+            )
+            .await;
+
+            let (schema, _) = add_schema_and_documents(
+                &mut node_a,
+                "img",
+                vec![vec![(
+                    "relation_to_blob",
+                    document_view_id.into(),
+                    Some(SchemaId::Blob(1)),
+                )]],
+                &key_pair,
+            )
+            .await;
+
+            let target_set = SchemaIdSet::new(&target_set_schema);
+            let _ = node_a.context.schema_provider.update(schema).await;
+
+            let included_document_ids = included_document_ids(
+                &node_a.context.store,
+                &node_a.context.schema_provider,
+                &target_set,
+            )
+            .await;
+
+            assert!(included_document_ids.is_empty());
+        });
+    }
+}
