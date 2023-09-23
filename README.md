@@ -1,9 +1,10 @@
 <h1 align="center">aquadoggo</h1>
 
 <div align="center">
-  <strong>p2panda network node</strong>
+    <img src="https://raw.githubusercontent.com/p2panda/handbook/663faf37420dea10741d47a18a03abdd85309c76/website/static/images/dolphin-left.gif" width="auto" height="30px">
+    <strong>p2panda network node</strong>
+    <img src="https://raw.githubusercontent.com/p2panda/handbook/663faf37420dea10741d47a18a03abdd85309c76/website/static/images/dolphin-right.gif" width="auto" height="30px">
 </div>
-
 <br />
 
 <div align="center">
