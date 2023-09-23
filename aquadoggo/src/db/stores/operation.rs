@@ -376,6 +376,11 @@ impl SqlStore {
         &self,
         document_ids: &[DocumentId],
     ) -> Result<Vec<OperationId>, OperationStorageError> {
+        // already return here if an empty vec of document ids was passed.
+        if document_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
         let args = document_ids
             .iter()
             .map(|id| format!("'{id}'"))
