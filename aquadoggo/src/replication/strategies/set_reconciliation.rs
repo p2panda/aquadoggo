@@ -272,11 +272,15 @@ impl SetReconciliationStrategy {
 }
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use p2panda_rs::operation::OperationId;
     use p2panda_rs::storage_provider::traits::OperationStore;
     use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use p2panda_rs::Human;
     use rstest::rstest;
     use tokio::sync::broadcast;
+    use unionize::Item;
 
     use crate::replication::manager::SyncManager;
     use crate::replication::{Mode, SchemaIdSet, SyncIngest};
@@ -284,6 +288,8 @@ mod tests {
         doggo_schema, populate_and_materialize, populate_store_config, test_runner_with_manager,
         TestNodeManager,
     };
+
+    use super::OperationIdItem;
 
     #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
     struct Peer(String);
@@ -300,10 +306,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn item() {
+        let operation_id = OperationId::from_str(
+            "00200000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .unwrap();
+        let item = OperationIdItem(operation_id);
+        let next_item = item.next();
+        assert_eq!(
+            next_item.0.as_str(),
+            "00200000000000000000000000000000000000000000000000000000000000000001"
+        );
+
+        let operation_id = OperationId::from_str(
+            "0020000000000000000000000000000000000000000000000000000000000000000a",
+        )
+        .unwrap();
+        let item = OperationIdItem(operation_id);
+        let next_item = item.next();
+        assert_eq!(
+            next_item.0.as_str(),
+            "0020000000000000000000000000000000000000000000000000000000000000000b"
+        );
+
+        let operation_id = OperationId::from_str(
+            "0020000000000000000000000000000000000000000000000000000000000000000f",
+        )
+        .unwrap();
+        let item = OperationIdItem(operation_id);
+        let next_item = item.next();
+        assert_eq!(
+            next_item.0.as_str(),
+            "0020000000000000000000000000000000000000000000000000000000000000001f"
+        );
+
+        let operation_id = OperationId::from_str(
+            "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        )
+        .unwrap();
+        let item = OperationIdItem(operation_id);
+        let next_item = item.next();
+        assert_eq!(
+            next_item.0.as_str(),
+            "0020ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        );
+    }
+
     #[rstest]
     fn sync_lifetime(
         // This config generates 200 operations on the node by two authors, one author is the
-        // default test author (the operations will be the same on each node) and one if a random
+        // default test author (the operations will be the same on each node) and one is a random
         // different author (the operations will not match).
         #[from(populate_store_config)]
         #[with(10, 10, 2)]
