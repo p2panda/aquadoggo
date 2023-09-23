@@ -144,7 +144,7 @@ impl Strategy for SetReconciliationStrategy {
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
         // Initiate the session, this fetches operation ids and keeps them in memory.
-        self.init(&store).await;
+        self.init(store).await;
 
         // Build the tree.
         //
