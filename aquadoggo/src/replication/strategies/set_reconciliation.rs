@@ -29,7 +29,7 @@ impl UnionizeItem for OperationIdItem {
     // Return the "zero" item.
     fn zero() -> Self {
         let hash =
-            Hash::new("0020000000000000000000000000000000000000000000000000000000000000").unwrap();
+            Hash::new("00200000000000000000000000000000000000000000000000000000000000000000").unwrap();
         OperationIdItem(OperationId::new(&hash))
     }
 
