@@ -60,7 +60,9 @@ impl Session {
     ) -> Self {
         let strategy: Box<dyn Strategy> = match mode {
             Mode::LogHeight => Box::new(LogHeightStrategy::new(target_set, schema_provider)),
-            Mode::SetReconciliation => Box::new(SetReconciliationStrategy::new()),
+            Mode::SetReconciliation => {
+                Box::new(SetReconciliationStrategy::new(target_set, schema_provider))
+            }
             Mode::Unknown => panic!("Unknown replication mode"),
         };
 

@@ -10,8 +10,10 @@ use unionize::tree::mem_rc;
 
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
+use crate::replication::strategies::included_document_ids;
 use crate::replication::traits::Strategy;
 use crate::replication::{Message, Mode, SchemaIdSet, StrategyResult};
+use crate::schema::SchemaProvider;
 
 /// Convert OperationId into LEByteArray<34> which is a supported unionize item.
 fn to_item(operation: &OperationId) -> LEByteArray<34> {
@@ -34,33 +36,65 @@ type Monoid = CountingSha256Xor<Item>;
 type Node = mem_rc::Node<Monoid>;
 
 #[derive(Clone, Debug)]
-pub struct SetReconciliationStrategy;
+pub struct SetReconciliationStrategy {
+    schema_provider: SchemaProvider,
+    target_set: SchemaIdSet,
+    received_remote_have: bool,
+    sent_have: bool,
+}
 
 impl SetReconciliationStrategy {
-    pub fn new() -> Self {
-        Self
+    pub fn new(target_set: &SchemaIdSet, schema_provider: SchemaProvider) -> Self {
+        Self {
+            schema_provider,
+            target_set: target_set.clone(),
+            received_remote_have: false,
+            sent_have: false,
+        }
     }
 }
 
 #[async_trait]
 impl Strategy for SetReconciliationStrategy {
     fn mode(&self) -> Mode {
-        Mode::SetReconciliation
+        Mode::LogHeight
     }
 
     fn target_set(&self) -> SchemaIdSet {
-        todo!()
+        self.target_set.clone()
     }
 
-    async fn initial_messages(&mut self, _store: &SqlStore) -> StrategyResult {
+    async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
+        // Calculate which documents should be included in the log height.
+        let included_document_ids =
+            included_document_ids(store, &self.schema_provider, &self.target_set()).await;
+
+        // @TODO: build tree over included documents' operation ids, persist on session.
+        // @TODO: calculate initial messages.
+
+        self.sent_have = true;
+
+        // @TODO: return strategy response.
         todo!()
     }
 
     async fn handle_message(
         &mut self,
-        _store: &SqlStore,
-        _message: &Message,
+        store: &SqlStore,
+        message: &Message,
     ) -> Result<StrategyResult, ReplicationError> {
+        let mut result = StrategyResult {
+            is_local_done: false,
+            messages: vec![],
+        };
+
+        // Send our Have message to remote if we haven't done it yet
+        if !self.sent_have {
+            result.merge(self.initial_messages(store).await);
+        }
+
+        // @TODO: process messages and calculate response.
+
         todo!()
     }
 }
