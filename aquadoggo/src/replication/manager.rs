@@ -17,7 +17,7 @@ use crate::replication::{
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
-pub const SUPPORTED_MODES: [Mode; 1] = [Mode::LogHeight];
+pub const SUPPORTED_MODES: [Mode; 2] = [Mode::LogHeight, Mode::SetReconciliation];
 
 pub const SUPPORT_LIVE_MODE: bool = false;
 
