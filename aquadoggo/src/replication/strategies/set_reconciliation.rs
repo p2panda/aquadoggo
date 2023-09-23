@@ -192,6 +192,8 @@ impl Strategy for SetReconciliationStrategy {
                 }
 
                 // Generate a response message.
+                //
+                // @TODO: Not sure how "threshold" and "split" affect things yet
                 let (response, _new_objects) =
                     respond_to_message(&tree, &self.object_store, message, 3, split::<2>).unwrap();
 
