@@ -131,7 +131,7 @@ impl SetReconciliationStrategy {
             object_store: BTreeMap::new(),
             send_operation_ids: Vec::new(),
             is_initiated: false,
-            entries_sent: false
+            entries_sent: false,
         }
     }
 }
@@ -246,7 +246,7 @@ impl Strategy for SetReconciliationStrategy {
 
             // Flip the `is_local_done` flag as we are done!
             result.is_local_done = true;
-            self.entries_sent = true; 
+            self.entries_sent = true;
         }
 
         Ok(result)
@@ -287,10 +287,11 @@ mod tests {
     use unionize::Item;
 
     use crate::replication::manager::SyncManager;
+    use crate::replication::strategies::run_protocol;
     use crate::replication::{Mode, SchemaIdSet, SyncIngest};
     use crate::test_utils::{
-        doggo_schema, populate_and_materialize, populate_store_config, test_runner_with_manager,
-        TestNodeManager, generate_key_pairs, PopulateStoreConfig,
+        doggo_schema, generate_key_pairs, populate_and_materialize, populate_store_config,
+        test_runner_with_manager, PopulateStoreConfig, TestNodeManager,
     };
 
     use super::OperationIdItem;
@@ -359,21 +360,15 @@ mod tests {
 
     #[rstest]
     fn sync_lifetime(
-        // This config generates 200 operations on the node by two authors, one author is the
-        // default test author (the operations will be the same on each node) and one is a random
-        // different author (the operations will not match).
         #[from(populate_store_config)]
         #[with(10, 10, generate_key_pairs(2))]
         config_200: PopulateStoreConfig,
     ) {
-        let peer_id_a: Peer = Peer::new("a");
-        let peer_id_b: Peer = Peer::new("b");
-
         test_runner_with_manager(|manager: TestNodeManager| async move {
             let mut node_a = manager.create().await;
             let mut node_b = manager.create().await;
 
-            // Populate both nodes with 100 matching and 100 unique operations.
+            // Populate each node with 200 unique operations.
             populate_and_materialize(&mut node_a, &config_200).await;
             populate_and_materialize(&mut node_b, &config_200).await;
 
@@ -398,98 +393,15 @@ mod tests {
             println!("Node B has {} operations", node_b_operations.len());
             assert_eq!(node_b_operations.len(), 200);
 
-            // Setup sync managers for both peers.
-            let (tx, _rx) = broadcast::channel(8);
             let target_set = SchemaIdSet::new(&[config_200.schema.id().to_owned()]);
 
-            let mut manager_a = SyncManager::new(
-                node_a.context.store.clone(),
-                SyncIngest::new(node_a.context.schema_provider.clone(), tx.clone()),
-                peer_id_a.clone(),
-            );
-
-            let mut manager_b = SyncManager::new(
-                node_b.context.store.clone(),
-                SyncIngest::new(node_b.context.schema_provider.clone(), tx),
-                peer_id_b.clone(),
-            );
-
-            // Generate a `SyncRequest` from peer a.
-            let messages = manager_a
-                .initiate_session(&peer_id_b, &target_set, &Mode::SetReconciliation)
-                .await
-                .unwrap();
-
-            println!("Node A: initiate sync session with Node B");
-
-            // Process the `SyncRequest` on peer b.
-            let mut result = manager_b
-                .handle_message(&peer_id_a, &messages[0])
-                .await
-                .unwrap();
-
-            println!("Node B: accept sync session with Node A");
-
-            // The next set of sync messages peer b will send.
-            let mut peer_b_sync_messages = result.messages;
-
-            println!(
-                "Peer B: send {} sync message(s)",
-                peer_b_sync_messages.len()
-            );
-
-            let mut peer_a_done = false;
-            let mut peer_b_done = false;
-
-            loop {
-                let mut peer_a_sync_messages = vec![];
-                for sync_message in &peer_b_sync_messages {
-                    let result = manager_a
-                        .handle_message(&peer_id_b, sync_message)
-                        .await
-                        .unwrap();
-
-                    peer_a_sync_messages.extend(result.messages);
-                    peer_a_done = result.is_done;
-                }
-
-                println!(
-                    "Peer A: send {} sync message(s)",
-                    peer_a_sync_messages.len()
-                );
-
-                if peer_a_done {
-                    println!("Peer A: is done!");
-                }
-
-                if peer_a_done && peer_b_done {
-                    break;
-                }
-
-                peer_b_sync_messages = vec![];
-                for sync_message in &peer_a_sync_messages {
-                    result = manager_b
-                        .handle_message(&peer_id_a, sync_message)
-                        .await
-                        .unwrap();
-
-                    peer_b_sync_messages.extend(result.messages);
-                    peer_b_done = result.is_done;
-                }
-
-                println!(
-                    "Peer B: send {} sync message(s)",
-                    peer_b_sync_messages.len()
-                );
-
-                if peer_b_done {
-                    println!("Peer B: is done!");
-                }
-
-                if peer_a_done && peer_b_done {
-                    break;
-                }
-            }
+            run_protocol(
+                &mut node_a,
+                &mut node_b,
+                &target_set,
+                &Mode::SetReconciliation,
+            )
+            .await;
 
             let node_a_operations = node_a
                 .context
@@ -498,6 +410,9 @@ mod tests {
                 .await
                 .unwrap();
 
+            println!("Node A has {} operations", node_a_operations.len());
+            assert_eq!(node_a_operations.len(), 400);
+
             let node_b_operations = node_b
                 .context
                 .store
@@ -505,9 +420,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            println!("Node A has {} operations", node_a_operations.len());
             println!("Node B has {} operations", node_b_operations.len());
-            assert_eq!(node_a_operations.len(), node_b_operations.len())
+            assert_eq!(node_b_operations.len(), 400);
         })
     }
 }

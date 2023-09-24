@@ -11,6 +11,8 @@ pub use common::{has_blob_relation, included_document_ids};
 pub use diff::diff_log_heights;
 pub use log_height::LogHeightStrategy;
 pub use set_reconciliation::SetReconciliationStrategy;
+#[cfg(test)]
+pub use tests::run_protocol;
 
 use crate::replication::Message;
 
