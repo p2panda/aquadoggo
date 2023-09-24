@@ -343,16 +343,19 @@ mod tests {
     #[rstest]
     fn sync_lifetime(
         #[from(populate_store_config)]
-        #[with(10, 10, generate_key_pairs(2))]
-        config_200: PopulateStoreConfig,
+        #[with(10, 10)]
+        mut config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(|manager: TestNodeManager| async move {
             let mut node_a = manager.create().await;
             let mut node_b = manager.create().await;
 
-            // Populate each node with 200 unique operations.
-            populate_and_materialize(&mut node_a, &config_200).await;
-            populate_and_materialize(&mut node_b, &config_200).await;
+            // Populate node A with 200 operations.
+            config.authors = generate_key_pairs(2);
+            populate_and_materialize(&mut node_a, &config).await;
+            // Populate node B with 200 operations.
+            config.authors = generate_key_pairs(2);
+            populate_and_materialize(&mut node_b, &config).await;
 
             // Check the number of operations on each node.
             let node_a_operations = node_a
@@ -362,7 +365,6 @@ mod tests {
                 .await
                 .unwrap();
 
-            println!("Node A has {} operations", node_a_operations.len());
             assert_eq!(node_a_operations.len(), 200);
 
             let node_b_operations = node_b
@@ -372,10 +374,9 @@ mod tests {
                 .await
                 .unwrap();
 
-            println!("Node B has {} operations", node_b_operations.len());
             assert_eq!(node_b_operations.len(), 200);
 
-            let target_set = SchemaIdSet::new(&[config_200.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&[config.schema.id().to_owned()]);
 
             run_protocol(
                 &mut node_a,
@@ -392,7 +393,6 @@ mod tests {
                 .await
                 .unwrap();
 
-            println!("Node A has {} operations", node_a_operations.len());
             assert_eq!(node_a_operations.len(), 400);
 
             let node_b_operations = node_b
@@ -402,7 +402,6 @@ mod tests {
                 .await
                 .unwrap();
 
-            println!("Node B has {} operations", node_b_operations.len());
             assert_eq!(node_b_operations.len(), 400);
         })
     }

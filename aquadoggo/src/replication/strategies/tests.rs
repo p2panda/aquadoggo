@@ -4,7 +4,6 @@ use p2panda_rs::serde::serialize_from;
 use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::Human;
 use rstest::rstest;
-use serial_test::serial;
 use tokio::sync::broadcast;
 
 use crate::replication::manager::SyncManager;
@@ -211,58 +210,64 @@ pub async fn run_protocol(
     println!("");
 }
 
+// Uncomment if you want to read the test logging in a sensible order.
+// use serial_test::serial;
+
 #[rstest]
-#[serial]
+// #[serial]
 fn sync_lifetime(
     #[from(populate_store_config)]
     #[with(2, 10)]
     mut config: PopulateStoreConfig,
-    #[values(100)] authors_on_node: u64,
+    #[values(10)] total_authors: usize,
     #[values(0.0, 0.5, 1.0)] shared_state_ratio: f64,
     #[values(Mode::SetReconciliation, Mode::LogHeight)] mode: Mode,
 ) {
     test_runner_with_manager(move |manager: TestNodeManager| async move {
         let mut node_a = manager.create().await;
         let mut node_b = manager.create().await;
-        let num_common_key_pairs = (authors_on_node as f64 * shared_state_ratio) as u64;
+        let common_authors = (total_authors as f64 * shared_state_ratio) as usize;
+        let distinct_authors = total_authors - common_authors;
+        let operations_per_author = config.no_of_logs * config.no_of_entries;
+        let common_operations = common_authors * operations_per_author;
+        let distinct_operations = distinct_authors * operations_per_author;
+
+        let expected_starting_operations = common_operations + distinct_operations;
+        let expected_ending_operations = expected_starting_operations + distinct_operations;
 
         println!("START SYNC TEST");
         println!("Mode: {}", mode.as_str());
         println!("");
 
         println!("GENERATING TEST DATA");
-        println!("Common authors: {}", num_common_key_pairs);
-        println!(
-            "Distinct authors: {}",
-            authors_on_node - num_common_key_pairs
-        );
+        println!("Common authors: {}", common_authors);
+        println!("Distinct authors: {}", distinct_authors);
         println!("Documents per author: {}", config.no_of_logs);
         println!("Operations per document: {}", config.no_of_entries);
         println!("");
         println!(
             "Generating common test data on nodes A and B for {} authors",
-            num_common_key_pairs
+            common_authors
         );
 
-        let common_key_pairs = generate_key_pairs(num_common_key_pairs);
-        config.authors = common_key_pairs;
+        config.authors = generate_key_pairs(common_authors as u64);
         populate_and_materialize(&mut node_a, &config).await;
         populate_and_materialize(&mut node_b, &config).await;
 
         println!(
             "Generating unique test data on node A for {} authors",
-            authors_on_node - num_common_key_pairs
+            distinct_authors
         );
 
-        config.authors = generate_key_pairs(authors_on_node - num_common_key_pairs);
+        config.authors = generate_key_pairs(distinct_authors as u64);
         populate_and_materialize(&mut node_a, &config).await;
 
         println!(
             "Generating unique test data on node B for {} authors",
-            authors_on_node - num_common_key_pairs
+            distinct_authors
         );
 
-        config.authors = generate_key_pairs(authors_on_node - num_common_key_pairs);
+        config.authors = generate_key_pairs(distinct_authors as u64);
         populate_and_materialize(&mut node_b, &config).await;
 
         let node_a_operations = node_a
@@ -273,6 +278,7 @@ fn sync_lifetime(
             .unwrap();
 
         println!("Node A has {} operations", node_a_operations.len());
+        assert_eq!(node_a_operations.len(), expected_starting_operations);
 
         let node_b_operations = node_b
             .context
@@ -282,6 +288,7 @@ fn sync_lifetime(
             .unwrap();
 
         println!("Node B has {} operations", node_b_operations.len());
+        assert_eq!(node_b_operations.len(), expected_starting_operations);
 
         let target_set = SchemaIdSet::new(&[config.schema.id().to_owned()]);
 
@@ -301,6 +308,8 @@ fn sync_lifetime(
             .await
             .unwrap();
 
-        assert_eq!(node_a_operations, node_b_operations)
+        assert_eq!(node_a_operations.len(), expected_ending_operations);
+        assert_eq!(node_b_operations.len(), expected_ending_operations);
+        assert_eq!(node_a_operations.len(), node_b_operations.len())
     })
 }
