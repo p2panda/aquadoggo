@@ -281,35 +281,17 @@ mod tests {
 
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::Human;
     use rstest::rstest;
-    use tokio::sync::broadcast;
     use unionize::Item;
 
-    use crate::replication::manager::SyncManager;
     use crate::replication::strategies::run_protocol;
-    use crate::replication::{Mode, SchemaIdSet, SyncIngest};
+    use crate::replication::{Mode, SchemaIdSet};
     use crate::test_utils::{
         doggo_schema, generate_key_pairs, populate_and_materialize, populate_store_config,
         test_runner_with_manager, PopulateStoreConfig, TestNodeManager,
     };
 
     use super::OperationIdItem;
-
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-    struct Peer(String);
-
-    impl Peer {
-        pub fn new(id: &str) -> Self {
-            Self(id.to_string())
-        }
-    }
-
-    impl Human for Peer {
-        fn display(&self) -> String {
-            self.0.clone()
-        }
-    }
 
     #[test]
     fn item() {
