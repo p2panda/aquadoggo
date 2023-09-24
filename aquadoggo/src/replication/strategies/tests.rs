@@ -217,8 +217,8 @@ fn sync_lifetime(
     #[from(populate_store_config)]
     #[with(2, 10)]
     mut config: PopulateStoreConfig,
-    #[values(100, 1000)] authors_on_node: u64,
-    #[values(0.5, 1.0)] shared_state_ratio: f64,
+    #[values(100)] authors_on_node: u64,
+    #[values(0.0, 0.5, 1.0)] shared_state_ratio: f64,
     #[values(Mode::SetReconciliation, Mode::LogHeight)] mode: Mode,
 ) {
     test_runner_with_manager(move |manager: TestNodeManager| async move {
