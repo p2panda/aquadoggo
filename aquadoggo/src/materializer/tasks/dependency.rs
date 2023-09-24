@@ -253,18 +253,18 @@ mod tests {
     };
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::{DocumentStore, EntryStore, OperationStore};
+    use p2panda_rs::test_utils::constants;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_id, random_document_view_id};
-    use p2panda_rs::test_utils::memory_store::helpers::{
-        populate_store, send_to_store, PopulateStoreConfig,
-    };
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::{Task, TaskInput};
     use crate::test_utils::{
-        add_document, add_schema, doggo_schema, populate_store_config, schema_from_fields,
-        test_runner, test_runner_with_manager, TestNode, TestNodeManager,
+        add_document, add_schema, doggo_schema, populate_store, populate_store_config,
+        schema_from_fields, test_runner, test_runner_with_manager, PopulateStoreConfig, TestNode,
+        TestNodeManager,
     };
 
     use super::dependency_task;
@@ -274,7 +274,7 @@ mod tests {
         populate_store_config(
             1,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             schema_from_fields(vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))]),
             vec![("profile_picture", OperationValue::Relation(Relation::new(random_document_id())))],
@@ -286,7 +286,7 @@ mod tests {
         populate_store_config(
             1,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             schema_from_fields(vec![
                 ("favorite_book_images", OperationValue::RelationList(
@@ -306,7 +306,7 @@ mod tests {
         populate_store_config(
             1,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             schema_from_fields(vec![
                 ("something_from_the_past", OperationValue::PinnedRelation(
@@ -324,7 +324,7 @@ mod tests {
         populate_store_config(
             1,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             schema_from_fields(vec![
                 ("many_previous_drafts", OperationValue::PinnedRelationList(
@@ -344,7 +344,7 @@ mod tests {
         populate_store_config(
             1,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             schema_from_fields(vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
@@ -371,7 +371,7 @@ mod tests {
         populate_store_config(
             4,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             schema_from_fields(vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
@@ -405,21 +405,21 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
 
-            for document_id in &document_ids {
-                let input = TaskInput::DocumentId(document_id.clone());
+            for document in &documents {
+                let input = TaskInput::DocumentId(document.id().clone());
                 reduce_task(node.context.clone(), input)
                     .await
                     .unwrap()
                     .unwrap();
             }
 
-            for document_id in &document_ids {
+            for document in &documents {
                 let document = node
                     .context
                     .store
-                    .get_document(document_id)
+                    .get_document(document.id())
                     .await
                     .unwrap()
                     .unwrap();
@@ -442,15 +442,13 @@ mod tests {
     fn no_reduce_task_for_materialised_document_relations(
         key_pair: KeyPair,
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids
-                .get(0)
-                .expect("Should be at least one document id");
+            let documents = populate_store(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             let input = TaskInput::DocumentId(document_id.clone());
             reduce_task(node.context.clone(), input)
@@ -527,7 +525,7 @@ mod tests {
         populate_store_config(
             2,
             1,
-            1,
+            vec![KeyPair::new()],
             true,
             schema_from_fields(vec![
                 ("profile_picture", OperationValue::Relation(
@@ -544,7 +542,7 @@ mod tests {
         populate_store_config(
             2,
             1,
-            1,
+            vec![KeyPair::new()],
             true,
             schema_from_fields(vec![
                 ("one_relation_field", OperationValue::PinnedRelationList(
@@ -568,10 +566,8 @@ mod tests {
     fn fails_on_deleted_documents(#[case] config: PopulateStoreConfig) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids
-                .get(0)
-                .expect("Should be at least one document id");
+            let documents = populate_store(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             let input = TaskInput::DocumentId(document_id.clone());
             reduce_task(node.context.clone(), input).await.unwrap();
@@ -599,7 +595,7 @@ mod tests {
     #[rstest]
     fn dispatches_schema_tasks_for_field_definitions(
         #[from(populate_store_config)]
-        #[with(1, 1, 1, false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
+        #[with(1, 1, vec![KeyPair::new()], false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
             ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
@@ -608,10 +604,8 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids
-                .get(0)
-                .expect("Should be at least one document id");
+            let documents = populate_store(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             // Materialise the schema field definition.
             let input = TaskInput::DocumentId(document_id.to_owned());
@@ -681,7 +675,7 @@ mod tests {
         #[case] schema_create_operation: Operation,
         #[case] expected_schema_tasks: usize,
         #[from(populate_store_config)]
-        #[with(1, 1, 1, false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
+        #[with(1, 1, vec![KeyPair::from_private_key_str(constants::PRIVATE_KEY).unwrap()], false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
             ("name", OperationValue::String("field_name".to_string())),
             ("type", FieldType::String.into()),
         ])]
@@ -690,10 +684,8 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let schema_field_document_id = document_ids
-                .get(0)
-                .expect("Should be at least one document id");
+            let documents = populate_store(&node.context.store, &config).await;
+            let schema_field_document_id = documents[0].id();
 
             // Materialise the schema field definition.
             let input = TaskInput::DocumentId(schema_field_document_id.to_owned());

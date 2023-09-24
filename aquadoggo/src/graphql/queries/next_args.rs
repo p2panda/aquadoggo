@@ -92,12 +92,13 @@ fn parse_arguments(
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response};
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
+    use p2panda_rs::{document::traits::AsDocument, identity::KeyPair, test_utils::constants};
     use rstest::rstest;
     use serde_json::json;
 
     use crate::test_utils::{
-        http_test_client, populate_and_materialize, populate_store_config, test_runner, TestNode,
+        http_test_client, populate_and_materialize, populate_store_config, test_runner,
+        PopulateStoreConfig, TestNode,
     };
 
     #[rstest]
@@ -142,19 +143,16 @@ mod tests {
     #[rstest]
     fn next_args_valid_query_with_document_id(
         #[from(populate_store_config)]
-        #[with(1, 1, 1)]
+        #[with(1, 1, vec![KeyPair::from_private_key_str(constants::PRIVATE_KEY).unwrap()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populates the store and materialises documents and schema.
-            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
 
             let client = http_test_client(&node).await;
-            let document_id = document_ids.get(0).expect("There should be a document id");
-            let public_key = key_pairs
-                .get(0)
-                .expect("There should be a key pair")
-                .public_key();
+            let document_id = documents[0].id();
+            let public_key = config.authors[0].public_key();
 
             // Selected fields need to be alphabetically sorted because that's what the `json`
             // macro that is used in the assert below produces.

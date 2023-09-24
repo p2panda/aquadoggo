@@ -305,6 +305,7 @@ impl Strategy for LogHeightStrategy {
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::DocumentId;
     use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum};
     use p2panda_rs::identity::KeyPair;
@@ -314,7 +315,7 @@ mod tests {
     use p2panda_rs::schema::{Schema, SchemaId};
     use p2panda_rs::test_utils::fixtures::key_pair;
     use p2panda_rs::test_utils::generate_random_bytes;
-    use p2panda_rs::test_utils::memory_store::helpers::{send_to_store, PopulateStoreConfig};
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
     use tokio::sync::broadcast;
 
@@ -324,8 +325,9 @@ mod tests {
     use crate::replication::strategies::log_height::{retrieve_entries, SortedIndex};
     use crate::replication::{LogHeightStrategy, LogHeights, Message, SchemaIdSet};
     use crate::test_utils::{
-        add_blob, add_schema_and_documents, populate_and_materialize, populate_store_config,
-        test_runner_with_manager, TestNode, TestNodeManager,
+        add_blob, add_schema_and_documents, generate_key_pairs, populate_and_materialize,
+        populate_store_config, test_runner_with_manager, PopulateStoreConfig, TestNode,
+        TestNodeManager,
     };
 
     // Helper for retrieving operations ordered as expected for replication and testing the result.
@@ -380,21 +382,21 @@ mod tests {
     #[rstest]
     fn retrieves_and_sorts_entries(
         #[from(populate_store_config)]
-        #[with(3, 1, 2)]
+        #[with(3, 1, generate_key_pairs(2))]
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             // Create one node and materialize some documents on it.
             let mut node = manager.create().await;
-            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let schema = config.schema.clone();
 
             // Collect the values for the two authors and documents.
-            let key_pair_a = key_pairs.get(0).unwrap();
-            let key_pair_b = key_pairs.get(1).unwrap();
+            let key_pair_a = config.authors.get(0).unwrap();
+            let key_pair_b = config.authors.get(1).unwrap();
 
-            let document_a = document_ids.get(0).unwrap();
-            let document_b = document_ids.get(1).unwrap();
+            let document_a = documents.get(0).unwrap().id();
+            let document_b = documents.get(1).unwrap().id();
 
             // Compose the list of logs the a remote might need.
             let mut remote_needs_all = vec![
@@ -501,7 +503,7 @@ mod tests {
     #[rstest]
     fn entry_responses_can_be_ingested(
         #[from(populate_store_config)]
-        #[with(5, 2, 1)]
+        #[with(5, 2, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
@@ -547,14 +549,15 @@ mod tests {
     #[rstest]
     fn calculates_log_heights(
         #[from(populate_store_config)]
-        #[with(5, 2, 1)]
+        #[with(5, 2, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
-
             let mut node_a = manager.create().await;
-            let (key_pairs, document_ids) = populate_and_materialize(&mut node_a, &config).await;
+            let documents = populate_and_materialize(&mut node_a, &config).await;
+            let document_ids: Vec<DocumentId> =
+                documents.iter().map(AsDocument::id).cloned().collect();
             let strategy_a =
                 LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
 
@@ -562,7 +565,8 @@ mod tests {
                 .local_log_heights(&node_a.context.store, &document_ids)
                 .await;
 
-            let expected_log_heights = key_pairs
+            let expected_log_heights = config
+                .authors
                 .into_iter()
                 .map(|key_pair| {
                     (

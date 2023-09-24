@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use log::{debug, info};
-use p2panda_rs::document::{DocumentId, DocumentViewId};
-use p2panda_rs::entry::traits::AsEncodedEntry;
+use p2panda_rs::api::helpers::get_skiplink_for_entry;
+use p2panda_rs::document::traits::AsDocument;
+use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
+use p2panda_rs::entry::encode::{encode_entry, sign_entry};
+use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
+use p2panda_rs::entry::{LogId, SeqNum};
+use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::KeyPair;
+use p2panda_rs::operation::encode::encode_operation;
 use p2panda_rs::operation::{OperationAction, OperationBuilder, OperationId, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
-use p2panda_rs::storage_provider::traits::OperationStore;
-use p2panda_rs::test_utils::memory_store::helpers::{
-    populate_store, send_to_store, PopulateStoreConfig,
-};
+use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
+use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
+use p2panda_rs::test_utils::memory_store::PublishedOperation;
 use rstest::fixture;
 use sqlx::query_scalar;
 
@@ -22,6 +27,45 @@ use crate::test_utils::{doggo_fields, doggo_schema};
 /// Test node which contains a context with an [`SqlStore`].
 pub struct TestNode {
     pub context: Context<SqlStore>,
+}
+
+/// Configuration used when populating the store for testing.
+#[derive(Debug)]
+pub struct PopulateStoreConfig {
+    /// Number of entries per log/document.
+    pub no_of_entries: usize,
+
+    /// Number of logs for each public key.
+    pub no_of_logs: usize,
+
+    /// Number of public keys, each with logs populated as defined above.
+    pub authors: Vec<KeyPair>,
+
+    /// A boolean flag for wether all logs should contain a delete operation.
+    pub with_delete: bool,
+
+    /// The schema used for all operations in the db.
+    pub schema: Schema,
+
+    /// The fields used for every CREATE operation.
+    pub create_operation_fields: Vec<(&'static str, OperationValue)>,
+
+    /// The fields used for every UPDATE operation.
+    pub update_operation_fields: Vec<(&'static str, OperationValue)>,
+}
+
+impl Default for PopulateStoreConfig {
+    fn default() -> Self {
+        Self {
+            no_of_entries: 0,
+            no_of_logs: 0,
+            authors: vec![],
+            with_delete: false,
+            schema: doggo_schema(),
+            create_operation_fields: doggo_fields(),
+            update_operation_fields: doggo_fields(),
+        }
+    }
 }
 
 /// Fixture for constructing a `PopulateStoreConfig` with default values for aquadoggo tests.
@@ -44,8 +88,8 @@ pub fn populate_store_config(
     // Number of logs for each public key
     #[default(0)] no_of_logs: usize,
 
-    // Number of authors, each with logs populated as defined above
-    #[default(0)] no_of_public_keys: usize,
+    // Key pairs used in data generation
+    #[default(vec![])] authors: Vec<KeyPair>,
 
     // A boolean flag for wether all logs should contain a delete operation
     #[default(false)] with_delete: bool,
@@ -62,62 +106,12 @@ pub fn populate_store_config(
     PopulateStoreConfig {
         no_of_entries,
         no_of_logs,
-        no_of_public_keys,
+        authors,
         with_delete,
         schema,
         create_operation_fields,
         update_operation_fields,
     }
-}
-
-/// Populate the store of a `TestNode` with entries and operations according to the passed config
-/// and materialise the resulting documents. Additionally adds the relevant schema to the schema
-/// provider.
-///
-/// Returns the key pairs of authors who published to the node and id's for all documents that were
-/// materialised.
-pub async fn populate_and_materialize(
-    node: &mut TestNode,
-    config: &PopulateStoreConfig,
-) -> (Vec<KeyPair>, Vec<DocumentId>) {
-    // Populate the store based with entries and operations based on the passed config.
-    let (key_pairs, document_ids) = populate_store(&node.context.store, config).await;
-
-    // Add the passed schema to the schema store.
-    //
-    // Note: The entries and operations which would normally exist for this schema will NOT be
-    // present in the store, however the node will behave as expect as we directly inserted it into
-    // the schema provider.
-    let _ = node
-        .context
-        .schema_provider
-        .update(config.schema.clone())
-        .await;
-
-    // Iterate over document id's and materialize into the store.
-    for document_id in document_ids.clone() {
-        // Create reduce task input.
-        let input = TaskInput::DocumentId(document_id);
-        // Run reduce task and collect returned dependency tasks.
-        let next_tasks = reduce_task(node.context.clone(), input.clone())
-            .await
-            .expect("Reduce document");
-
-        // Run dependency tasks.
-        if let Some(tasks) = next_tasks {
-            // We only want to issue dependency tasks.
-            let dependency_tasks = tasks
-                .iter()
-                .filter(|task| task.worker_name() == "depenedency");
-
-            for task in dependency_tasks {
-                dependency_task(node.context.clone(), task.input().to_owned())
-                    .await
-                    .expect("Run dependency task");
-            }
-        }
-    }
-    (key_pairs, document_ids)
 }
 
 /// Publish a document and materialise it in a given `TestNode`.
@@ -415,4 +409,183 @@ pub async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
 
     assert!(result.is_ok(), "{:#?}", result);
     assert_eq!(result.unwrap().len(), expected_len, "{:?}", sql);
+}
+
+/// Helper method for populating the store with test data.
+///
+/// Passed parameters define what the store should contain. The first entry in each log contains a
+/// valid CREATE operation following entries contain UPDATE operations. If the with_delete flag is set
+/// to true the last entry in all logs contain be a DELETE operation.
+pub async fn populate_store(store: &SqlStore, config: &PopulateStoreConfig) -> Vec<Document> {
+    let mut documents: Vec<Document> = Vec::new();
+    for key_pair in &config.authors {
+        for log_id in 0..config.no_of_logs {
+            let log_id = LogId::new(log_id as u64);
+            let mut backlink: Option<Hash> = None;
+            let mut previous: Option<DocumentViewId> = None;
+            let mut current_document = None::<Document>;
+
+            for seq_num in 1..config.no_of_entries + 1 {
+                // Create an operation based on the current seq_num and whether this document should
+                // contain a DELETE operation
+                let operation = match seq_num {
+                    // First operation is CREATE
+                    1 => OperationBuilder::new(config.schema.id())
+                        .fields(&config.create_operation_fields)
+                        .build()
+                        .expect("Error building operation"),
+                    // Last operation is DELETE if the with_delete flag is set
+                    seq if seq == (config.no_of_entries) && config.with_delete => {
+                        OperationBuilder::new(config.schema.id())
+                            .action(OperationAction::Delete)
+                            .previous(&previous.expect("Previous should be set"))
+                            .build()
+                            .expect("Error building operation")
+                    }
+                    // All other operations are UPDATE
+                    _ => OperationBuilder::new(config.schema.id())
+                        .action(OperationAction::Update)
+                        .fields(&config.update_operation_fields)
+                        .previous(&previous.expect("Previous should be set"))
+                        .build()
+                        .expect("Error building operation"),
+                };
+
+                // Encode the operation.
+                let encoded_operation =
+                    encode_operation(&operation).expect("Failed encoding operation");
+
+                // We need to calculate the skiplink.
+                let seq_num = SeqNum::new(seq_num as u64).unwrap();
+                let skiplink =
+                    get_skiplink_for_entry(store, &seq_num, &log_id, &key_pair.public_key())
+                        .await
+                        .expect("Failed to get skiplink entry");
+
+                // Construct and sign the entry.
+                let entry = sign_entry(
+                    &log_id,
+                    &seq_num,
+                    skiplink.as_ref(),
+                    backlink.as_ref(),
+                    &encoded_operation,
+                    key_pair,
+                )
+                .expect("Failed signing entry");
+
+                // Encode the entry.
+                let encoded_entry = encode_entry(&entry).expect("Failed encoding entry");
+
+                // Retrieve or derive the current document id.
+                let document_id = match current_document.as_ref() {
+                    Some(document) => document.id().to_owned(),
+                    None => encoded_entry.hash().into(),
+                };
+
+                // Now we insert values into the database.
+
+                // If the entries' seq num is 1 we insert a new log here.
+                if entry.seq_num().is_first() {
+                    store
+                        .insert_log(
+                            entry.log_id(),
+                            entry.public_key(),
+                            &config.schema.id(),
+                            &document_id,
+                        )
+                        .await
+                        .expect("Failed inserting log into store");
+                }
+
+                // Insert the entry into the store.
+                store
+                    .insert_entry(&entry, &encoded_entry, Some(&encoded_operation))
+                    .await
+                    .expect("Failed inserting entry into store");
+
+                // Insert the operation into the store.
+                store
+                    .insert_operation(
+                        &encoded_entry.hash().into(),
+                        entry.public_key(),
+                        &operation,
+                        &document_id,
+                    )
+                    .await
+                    .expect("Failed inserting operation into store");
+
+                // Update the operations sorted index.
+                store
+                    .update_operation_index(
+                        &encoded_entry.hash().into(),
+                        seq_num.as_u64() as i32 - 1,
+                    )
+                    .await
+                    .expect("Failed updating operation index");
+
+                // Now we commit any changes to the document we are creating.
+                let published_operation = PublishedOperation(
+                    encoded_entry.hash().into(),
+                    operation,
+                    key_pair.public_key(),
+                    document_id,
+                );
+
+                // Conditionally create or update the document.
+                if let Some(mut document) = current_document {
+                    document
+                        .commit(&published_operation)
+                        .expect("Failed updating document");
+                    current_document = Some(document);
+                } else {
+                    current_document = Some(
+                        DocumentBuilder::from(&vec![published_operation])
+                            .build()
+                            .expect("Failed to build document"),
+                    );
+                }
+
+                // Set values used in the next iteration.
+                backlink = Some(encoded_entry.hash());
+                previous = Some(DocumentViewId::from(encoded_entry.hash()));
+            }
+            // Push the final document to the documents vec.
+            documents.push(current_document.unwrap());
+        }
+    }
+    documents
+}
+
+/// Populate the store of a `TestNode` with entries and operations according to the passed config
+/// and materialise the resulting documents. Additionally adds the relevant schema to the schema
+/// provider.
+///
+/// Returns the documents that were materialised.
+pub async fn populate_and_materialize(
+    node: &mut TestNode,
+    config: &PopulateStoreConfig,
+) -> Vec<Document> {
+    // Populate the store based with entries and operations based on the passed config.
+    let documents = populate_store(&node.context.store, config).await;
+
+    // Add the passed schema to the schema store.
+    //
+    // Note: The entries and operations which would normally exist for this schema will NOT be
+    // present in the store, however the node will behave as expect as we directly inserted it into
+    // the schema provider.
+    let _ = node
+        .context
+        .schema_provider
+        .update(config.schema.clone())
+        .await;
+
+    // Iterate over documents and insert to the store.
+    for document in documents.iter() {
+        node.context
+            .store
+            .insert_document(document)
+            .await
+            .expect("Failed inserting document");
+    }
+    documents
 }

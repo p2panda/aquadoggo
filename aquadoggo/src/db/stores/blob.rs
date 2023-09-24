@@ -377,13 +377,12 @@ mod tests {
     use p2panda_rs::schema::SchemaId;
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
     use p2panda_rs::test_utils::generate_random_bytes;
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
     use crate::db::errors::BlobStoreError;
     use crate::test_utils::{
         add_blob, add_document, add_schema_and_documents, assert_query, populate_and_materialize,
-        populate_store_config, test_runner, update_document, TestNode,
+        populate_store_config, test_runner, update_document, PopulateStoreConfig, TestNode,
     };
 
     use super::BlobStream;
@@ -572,7 +571,7 @@ mod tests {
     #[rstest]
     fn purge_blob_only_purges_blobs(
         #[from(populate_store_config)]
-        #[with(1, 1, 1)]
+        #[with(1, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
         key_pair: KeyPair,
     ) {

@@ -129,12 +129,11 @@ mod tests {
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::schema::{FieldType, SchemaId, SchemaName};
     use p2panda_rs::test_utils::fixtures::{key_pair, random_document_view_id};
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
     use crate::test_utils::{
         add_document, add_schema, populate_and_materialize, populate_store_config, test_runner,
-        TestNode,
+        PopulateStoreConfig, TestNode,
     };
 
     #[rstest]
@@ -257,7 +256,7 @@ mod tests {
     fn test_get_schema_for_missing_view(
         random_document_view_id: DocumentViewId,
         #[from(populate_store_config)]
-        #[with(2, 10, 1)]
+        #[with(2, 10, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {

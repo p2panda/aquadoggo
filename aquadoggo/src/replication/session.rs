@@ -179,15 +179,15 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
+    use p2panda_rs::identity::KeyPair;
     use rstest::rstest;
 
     use crate::replication::manager::INITIAL_SESSION_ID;
     use crate::replication::{Message, Mode, SchemaIdSet, SessionState};
     use crate::test_utils::helpers::random_schema_id_set;
     use crate::test_utils::{
-        populate_and_materialize, populate_store_config, test_runner, test_runner_with_manager,
-        TestNode, TestNodeManager,
+        populate_and_materialize, populate_store, populate_store_config, test_runner,
+        test_runner_with_manager, PopulateStoreConfig, TestNode, TestNodeManager,
     };
 
     use super::Session;
@@ -224,7 +224,7 @@ mod tests {
     #[rstest]
     fn correct_strategy_messages(
         #[from(populate_store_config)]
-        #[with(5, 2, 1)]
+        #[with(5, 2, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {

@@ -118,7 +118,6 @@ mod tests {
         entry_signed_encoded_unvalidated, key_pair, operation_fields, random_hash,
         update_operation,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::{fixture, rstest};
     use serde_json::json;
     use tokio::sync::broadcast;
@@ -128,7 +127,7 @@ mod tests {
     use crate::http::HttpServiceContext;
     use crate::test_utils::{
         add_schema, doggo_fields, doggo_schema, http_test_client, populate_and_materialize,
-        populate_store_config, test_runner, TestNode,
+        populate_store_config, test_runner, PopulateStoreConfig, TestNode,
     };
 
     // Schema used in some of the tests in this module, it only has one field so it's easy to
@@ -222,7 +221,7 @@ mod tests {
     #[rstest]
     fn publish_entry(
         #[from(populate_store_config)]
-        #[with(0, 0, 0, false, test_schema())]
+        #[with(0, 0, vec![], false, test_schema())]
         config: PopulateStoreConfig,
         publish_request: Request,
     ) {
@@ -262,7 +261,7 @@ mod tests {
     #[rstest]
     fn publish_entry_with_empty_relation_list(
         #[from(populate_store_config)]
-        #[with(0, 0, 0, false, test_schema())]
+        #[with(0, 0, vec![], false, test_schema())]
         config: PopulateStoreConfig,
         key_pair: KeyPair,
     ) {
@@ -320,7 +319,7 @@ mod tests {
     #[rstest]
     fn sends_message_on_communication_bus(
         #[from(populate_store_config)]
-        #[with(0, 0, 0, false, test_schema())]
+        #[with(0, 0, vec![], false, test_schema())]
         config: PopulateStoreConfig,
         publish_request: Request,
     ) {
@@ -357,7 +356,7 @@ mod tests {
     #[rstest]
     fn post_gql_mutation(
         #[from(populate_store_config)]
-        #[with(0, 0, 0, false, test_schema())]
+        #[with(0, 0, vec![], false, test_schema())]
         config: PopulateStoreConfig,
         publish_request: Request,
     ) {
@@ -568,7 +567,7 @@ mod tests {
         #[case] encoded_operation: &[u8],
         #[case] expected_error_message: &str,
         #[from(populate_store_config)]
-        #[with(0, 0, 0, false, test_schema())]
+        #[with(0, 0, vec![], false, test_schema())]
         config: PopulateStoreConfig,
     ) {
         // Test that encoded entries and operations are correctly validated when passed into
@@ -697,7 +696,7 @@ mod tests {
         #[case] encoded_operation: &[u8],
         #[case] expected_error_message: &str,
         #[from(populate_store_config)]
-        #[with(10, 1, 1, false, test_schema(), vec![("message", OperationValue::String("Hello!".to_string()))], vec![("message", OperationValue::String("Hello!".to_string()))])]
+        #[with(10, 1, vec![key_pair(PRIVATE_KEY)], false, test_schema(), vec![("message", OperationValue::String("Hello!".to_string()))], vec![("message", OperationValue::String("Hello!".to_string()))])]
         config: PopulateStoreConfig,
     ) {
         // Test that entries and operations passed into the qraphql publish endpoint adhere to the
@@ -740,7 +739,7 @@ mod tests {
     #[rstest]
     fn publish_many_entries(
         #[from(populate_store_config)]
-        #[with(0, 0, 0, false, doggo_schema())]
+        #[with(0, 0, vec![], false, doggo_schema())]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
@@ -832,13 +831,13 @@ mod tests {
     #[rstest]
     fn duplicate_publishing_of_entries(
         #[from(populate_store_config)]
-        #[with(1, 1, 1, false, doggo_schema())]
+        #[with(1, 1, vec![KeyPair::new()], false, doggo_schema())]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populates the node with entries, operations and schemas.
-            let (key_pairs, _) = populate_and_materialize(&mut node, &config).await;
-            let public_key = key_pairs[0].public_key();
+            let _ = populate_and_materialize(&mut node, &config).await;
+            let public_key = config.authors[0].public_key();
 
             // Init the test client.
             let client = http_test_client(&node).await;
