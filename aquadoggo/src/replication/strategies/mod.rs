@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 mod common;
-#[cfg(test)]
-mod tests;
 mod diff;
 mod log_height;
 pub mod set_reconciliation;
+#[cfg(test)]
+mod tests;
 
 pub use common::{has_blob_relation, included_document_ids};
 pub use diff::diff_log_heights;
