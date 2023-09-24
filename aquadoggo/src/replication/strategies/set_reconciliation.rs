@@ -281,7 +281,6 @@ mod tests {
 
     use p2panda_rs::operation::OperationId;
     use p2panda_rs::storage_provider::traits::OperationStore;
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use p2panda_rs::Human;
     use rstest::rstest;
     use tokio::sync::broadcast;
@@ -291,7 +290,7 @@ mod tests {
     use crate::replication::{Mode, SchemaIdSet, SyncIngest};
     use crate::test_utils::{
         doggo_schema, populate_and_materialize, populate_store_config, test_runner_with_manager,
-        TestNodeManager,
+        TestNodeManager, generate_key_pairs, PopulateStoreConfig,
     };
 
     use super::OperationIdItem;
@@ -364,7 +363,7 @@ mod tests {
         // default test author (the operations will be the same on each node) and one is a random
         // different author (the operations will not match).
         #[from(populate_store_config)]
-        #[with(10, 10, 2)]
+        #[with(10, 10, generate_key_pairs(2))]
         config_200: PopulateStoreConfig,
     ) {
         let peer_id_a: Peer = Peer::new("a");
