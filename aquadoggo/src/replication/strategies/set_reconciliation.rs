@@ -117,6 +117,9 @@ pub struct SetReconciliationStrategy {
 
     /// The initiated state of this session.
     is_initiated: bool,
+
+    /// Flag to show if we sent the remote their entries already.
+    entries_sent: bool,
 }
 
 impl SetReconciliationStrategy {
@@ -128,6 +131,7 @@ impl SetReconciliationStrategy {
             object_store: BTreeMap::new(),
             send_operation_ids: Vec::new(),
             is_initiated: false,
+            entries_sent: false
         }
     }
 }
@@ -220,7 +224,7 @@ impl Strategy for SetReconciliationStrategy {
         result.messages.push(Message::SetReconciliation(response));
 
         // If the session has finished, we can send all payloads (entry+operation) now as well.
-        if is_end {
+        if is_end && !self.entries_sent {
             // We iterate over all the operation ids in this session in order to send any wanted ones
             // in the order a remote would expect (otherwise it might not pass validation).
             for operation_id in self.topo_sorted_operations.iter() {
@@ -242,6 +246,7 @@ impl Strategy for SetReconciliationStrategy {
 
             // Flip the `is_local_done` flag as we are done!
             result.is_local_done = true;
+            self.entries_sent = true; 
         }
 
         Ok(result)
