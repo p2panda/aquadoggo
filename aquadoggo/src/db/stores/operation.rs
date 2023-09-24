@@ -413,7 +413,7 @@ mod tests {
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId};
-    use p2panda_rs::identity::{PublicKey, KeyPair};
+    use p2panda_rs::identity::{KeyPair, PublicKey};
     use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
     use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder, OperationId};
     use p2panda_rs::schema::SchemaId;

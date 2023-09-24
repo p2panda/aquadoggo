@@ -381,8 +381,9 @@ mod tests {
 
     use crate::db::errors::BlobStoreError;
     use crate::test_utils::{
-        add_blob, add_document, add_schema_and_documents, assert_query, populate_and_materialize_unchecked,
-        populate_store_config, test_runner, update_document, TestNode, PopulateStoreConfig,
+        add_blob, add_document, add_schema_and_documents, assert_query,
+        populate_and_materialize_unchecked, populate_store_config, test_runner, update_document,
+        PopulateStoreConfig, TestNode,
     };
 
     use super::BlobStream;

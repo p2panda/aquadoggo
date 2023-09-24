@@ -92,10 +92,7 @@ fn parse_arguments(
 #[cfg(test)]
 mod tests {
     use async_graphql::{value, Response};
-    use p2panda_rs::{
-        identity::KeyPair,
-        test_utils::{constants, fixtures}, document::traits::AsDocument,
-    };
+    use p2panda_rs::{document::traits::AsDocument, identity::KeyPair, test_utils::constants};
     use rstest::rstest;
     use serde_json::json;
 

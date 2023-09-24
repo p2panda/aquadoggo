@@ -767,9 +767,9 @@ mod tests {
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{
-        add_schema_and_documents, assert_query, build_document, populate_and_materialize_unchecked,
+        add_schema_and_documents, assert_query, doggo_schema, populate_and_materialize_unchecked,
         populate_store_config, populate_store_unchecked, test_runner, PopulateStoreConfig,
-        TestNode, doggo_schema,
+        TestNode,
     };
 
     #[rstest]

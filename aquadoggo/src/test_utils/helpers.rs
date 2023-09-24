@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
-
-use p2panda_rs::document::{Document, DocumentId};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::KeyPair;
 use p2panda_rs::operation::{
     OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
 use p2panda_rs::schema::{Schema, SchemaId, SchemaName};
-use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::test_utils::constants;
 use p2panda_rs::test_utils::fixtures::{random_document_view_id, schema, schema_fields};
 use rstest::fixture;
@@ -95,18 +91,6 @@ pub fn doggo_fields() -> Vec<(&'static str, OperationValue)> {
             OperationValue::PinnedRelationList(PinnedRelationList::new(vec![])),
         ),
     ]
-}
-
-/// Build a document from it's stored operations specified by it's document id.
-pub async fn build_document<S: OperationStore>(store: &S, document_id: &DocumentId) -> Document {
-    // We retrieve the operations.
-    let document_operations = store
-        .get_operations_by_document_id(document_id)
-        .await
-        .expect("Get operations");
-
-    // Then we construct the document.
-    Document::try_from(&document_operations).expect("Build the document")
 }
 
 /// Helper for constructing a schema from a vec of field values.

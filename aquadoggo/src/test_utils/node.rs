@@ -6,19 +6,15 @@ use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::entry::encode::{encode_entry, sign_entry};
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
-use p2panda_rs::entry::{EncodedEntry, LogId, SeqNum};
+use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::hash::Hash;
 use p2panda_rs::identity::KeyPair;
 use p2panda_rs::operation::encode::encode_operation;
-use p2panda_rs::operation::{
-    Operation, OperationAction, OperationBuilder, OperationId, OperationValue,
-};
+use p2panda_rs::operation::{OperationAction, OperationBuilder, OperationId, OperationValue};
 use p2panda_rs::schema::{FieldType, Schema, SchemaId, SchemaName};
 use p2panda_rs::storage_provider::traits::{EntryStore, LogStore, OperationStore};
-use p2panda_rs::test_utils::fixtures::public_key;
-use p2panda_rs::test_utils::memory_store::helpers::{populate_store, send_to_store};
+use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
 use p2panda_rs::test_utils::memory_store::PublishedOperation;
-use p2panda_rs::WithId;
 use rstest::fixture;
 use sqlx::query_scalar;
 
@@ -92,7 +88,7 @@ pub fn populate_store_config(
     // Number of logs for each public key
     #[default(0)] no_of_logs: usize,
 
-    // Number of authors, each with logs populated as defined above
+    // Key pairs used in data generation
     #[default(vec![])] authors: Vec<KeyPair>,
 
     // A boolean flag for wether all logs should contain a delete operation
@@ -117,56 +113,6 @@ pub fn populate_store_config(
         update_operation_fields,
     }
 }
-//
-// /// Populate the store of a `TestNode` with entries and operations according to the passed config
-// /// and materialise the resulting documents. Additionally adds the relevant schema to the schema
-// /// provider.
-// ///
-// /// Returns the key pairs of authors who published to the node and id's for all documents that were
-// /// materialised.
-// pub async fn populate_and_materialize_unchecked(
-//     node: &mut TestNode,
-//     config: &PopulateStoreConfig,
-// ) -> (Vec<KeyPair>, Vec<DocumentId>) {
-//     // Populate the store based with entries and operations based on the passed config.
-//     let (key_pairs, document_ids) = populate_store(&node.context.store, config).await;
-//
-//     // Add the passed schema to the schema store.
-//     //
-//     // Note: The entries and operations which would normally exist for this schema will NOT be
-//     // present in the store, however the node will behave as expect as we directly inserted it into
-//     // the schema provider.
-//     let _ = node
-//         .context
-//         .schema_provider
-//         .update(config.schema.clone())
-//         .await;
-//
-//     // Iterate over document id's and materialize into the store.
-//     for document_id in document_ids.clone() {
-//         // Create reduce task input.
-//         let input = TaskInput::DocumentId(document_id);
-//         // Run reduce task and collect returned dependency tasks.
-//         let next_tasks = reduce_task(node.context.clone(), input.clone())
-//             .await
-//             .expect("Reduce document");
-//
-//         // Run dependency tasks.
-//         if let Some(tasks) = next_tasks {
-//             // We only want to issue dependency tasks.
-//             let dependency_tasks = tasks
-//                 .iter()
-//                 .filter(|task| task.worker_name() == "dependency");
-//
-//             for task in dependency_tasks {
-//                 dependency_task(node.context.clone(), task.input().to_owned())
-//                     .await
-//                     .expect("Run dependency task");
-//             }
-//         }
-//     }
-//     (key_pairs, document_ids)
-// }
 
 /// Publish a document and materialise it in a given `TestNode`.
 ///

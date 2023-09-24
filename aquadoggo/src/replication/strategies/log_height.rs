@@ -556,7 +556,8 @@ mod tests {
             let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
             let mut node_a = manager.create().await;
             let documents = populate_and_materialize_unchecked(&mut node_a, &config).await;
-            let document_ids: Vec<DocumentId> = documents.iter().map(AsDocument::id).cloned().collect();
+            let document_ids: Vec<DocumentId> =
+                documents.iter().map(AsDocument::id).cloned().collect();
             let strategy_a =
                 LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
 

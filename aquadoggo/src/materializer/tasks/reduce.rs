@@ -289,13 +289,10 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{
-        Document, DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId,
-        DocumentViewValue,
+        DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue,
     };
     use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
