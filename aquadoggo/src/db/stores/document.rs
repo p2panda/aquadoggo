@@ -767,8 +767,8 @@ mod tests {
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{
-        add_schema_and_documents, assert_query, doggo_schema, populate_and_materialize_unchecked,
-        populate_store_config, populate_store_unchecked, test_runner, PopulateStoreConfig,
+        add_schema_and_documents, assert_query, doggo_schema, populate_and_materialize,
+        populate_store_config, populate_store, test_runner, PopulateStoreConfig,
         TestNode,
     };
 
@@ -780,7 +780,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document = documents.get(0).expect("At least one document");
 
             // Get the operations and build the document.
@@ -925,7 +925,7 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document = documents.get(0).expect("At least one document");
 
             // The document is successfully inserted into the database, this relies on the
@@ -983,7 +983,7 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document = documents.get(0).expect("At least one document");
 
             // Get the view id.
@@ -1026,7 +1026,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document = documents.get(0).expect("At least one document");
 
             // Insert the document, this is possible even though it has been deleted.
@@ -1052,7 +1052,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document = documents.get(0).expect("At least one document");
 
             // Get the operations for this document and sort them into linear order.
@@ -1131,7 +1131,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Retrieve these documents by their schema id.
             let schema_documents = node
@@ -1154,7 +1154,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let document = documents[0].clone();
             let first_document_view_id: DocumentViewId = document.id().as_str().parse().unwrap();
 
@@ -1224,7 +1224,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let document = documents[0].clone();
             let first_document_view_id: DocumentViewId = document.id().as_str().parse().unwrap();
 
@@ -1277,7 +1277,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let document = documents[0].clone();
 
             // Attempt to prune the current document view.
@@ -1309,7 +1309,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let document_id = documents[0].id();
 
             // There is one document in the database which contains an CREATE and UPDATE operation
@@ -1344,7 +1344,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let document_id = documents[0].id();
 
             // There are two documents in the database which each contain a single CREATE operation
@@ -1380,7 +1380,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let document_id = documents[0].id();
             let public_key = config.authors[0].public_key();
 

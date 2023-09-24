@@ -132,7 +132,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::test_utils::{
-        add_document, add_schema, populate_and_materialize_unchecked, populate_store_config,
+        add_document, add_schema, populate_and_materialize, populate_store_config,
         test_runner, PopulateStoreConfig, TestNode,
     };
 
@@ -261,7 +261,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             let result = node
                 .context

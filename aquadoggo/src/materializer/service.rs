@@ -160,7 +160,7 @@ mod tests {
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
     use crate::test_utils::{
-        doggo_fields, doggo_schema, populate_store_config, populate_store_unchecked, test_runner,
+        doggo_fields, doggo_schema, populate_store_config, populate_store, test_runner,
         PopulateStoreConfig, TestNode,
     };
     use crate::Configuration;
@@ -176,7 +176,7 @@ mod tests {
         // Prepare database which inserts data for one document
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             // We can infer the id of the first operation from the document id
@@ -253,7 +253,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             // Store a pending "reduce" task from last runtime in the database so it gets picked up by
@@ -326,7 +326,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
             let key_pair = &config.authors[0];
 

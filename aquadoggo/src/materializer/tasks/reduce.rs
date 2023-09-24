@@ -311,7 +311,7 @@ mod tests {
     use crate::materializer::TaskInput;
     use crate::test_utils::{
         doggo_fields, doggo_schema, generate_key_pairs, populate_store_config,
-        populate_store_unchecked, test_runner, PopulateStoreConfig, TestNode,
+        populate_store, test_runner, PopulateStoreConfig, TestNode,
     };
 
     #[rstest]
@@ -330,7 +330,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
 
             for document in &documents {
                 let input = TaskInput::DocumentId(document.id().clone());
@@ -370,7 +370,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
             let key_pair = &config.authors[0];
 
@@ -429,7 +429,7 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             // Get the operations
@@ -508,7 +508,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
 
             for document in &documents {
                 let input = TaskInput::DocumentId(document.id().clone());
@@ -551,7 +551,7 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             let input = TaskInput::DocumentId(document_id.clone());
@@ -594,7 +594,7 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             // Get the operations and build the document
@@ -637,7 +637,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
             let key_pair = &config.authors[0];
 

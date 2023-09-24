@@ -262,7 +262,7 @@ mod tests {
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::{Task, TaskInput};
     use crate::test_utils::{
-        add_document, add_schema, doggo_schema, populate_store_config, populate_store_unchecked,
+        add_document, add_schema, doggo_schema, populate_store_config, populate_store,
         schema_from_fields, test_runner, test_runner_with_manager, PopulateStoreConfig, TestNode,
         TestNodeManager,
     };
@@ -405,7 +405,7 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
 
             for document in &documents {
                 let input = TaskInput::DocumentId(document.id().clone());
@@ -447,7 +447,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             let input = TaskInput::DocumentId(document_id.clone());
@@ -566,7 +566,7 @@ mod tests {
     fn fails_on_deleted_documents(#[case] config: PopulateStoreConfig) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             let input = TaskInput::DocumentId(document_id.clone());
@@ -604,7 +604,7 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let document_id = documents[0].id();
 
             // Materialise the schema field definition.
@@ -684,7 +684,7 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let documents = populate_store(&node.context.store, &config).await;
             let schema_field_document_id = documents[0].id();
 
             // Materialise the schema field definition.

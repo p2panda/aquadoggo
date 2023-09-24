@@ -302,7 +302,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::test_utils::{
-        populate_store_config, populate_store_unchecked, test_runner, PopulateStoreConfig, TestNode,
+        populate_store_config, populate_store, test_runner, PopulateStoreConfig, TestNode,
     };
 
     #[rstest]
@@ -355,7 +355,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let _ = populate_store_unchecked(&node.context.store, &config).await;
+            let _ = populate_store(&node.context.store, &config).await;
 
             // The key pair of the author who published to the note.
             let key_pair = config.authors.get(0).expect("At least one key pair");
@@ -398,7 +398,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let _ = populate_store_unchecked(&node.context.store, &config).await;
+            let _ = populate_store(&node.context.store, &config).await;
 
             // The public key of the author who published to the node.
             let public_key_in_db = config
@@ -449,7 +449,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let _ = populate_store_unchecked(&node.context.store, &config).await;
+            let _ = populate_store(&node.context.store, &config).await;
             // The public key of the author who published to the node.
             let public_key = config
                 .authors
@@ -524,7 +524,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let _ = populate_store_unchecked(&node.context.store, &config).await;
+            let _ = populate_store(&node.context.store, &config).await;
 
             // The public key of the author who published to the node.
             let public_key = config
@@ -580,7 +580,7 @@ mod tests {
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let _ = populate_store_unchecked(&node.context.store, &config).await;
+            let _ = populate_store(&node.context.store, &config).await;
             let public_key = config.authors[0].public_key();
             let entries = node
                 .context

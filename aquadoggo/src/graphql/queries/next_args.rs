@@ -97,7 +97,7 @@ mod tests {
     use serde_json::json;
 
     use crate::test_utils::{
-        http_test_client, populate_and_materialize_unchecked, populate_store_config, test_runner,
+        http_test_client, populate_and_materialize, populate_store_config, test_runner,
         PopulateStoreConfig, TestNode,
     };
 
@@ -148,7 +148,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populates the store and materialises documents and schema.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
 
             let client = http_test_client(&node).await;
             let document_id = documents[0].id();

@@ -427,7 +427,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::test_utils::{
-        doggo_fields, populate_and_materialize_unchecked, populate_store_config, test_runner,
+        doggo_fields, populate_and_materialize, populate_store_config, test_runner,
         PopulateStoreConfig, TestNode,
     };
 
@@ -588,7 +588,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store with some entries and operations and materialize documents.
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let document_id = documents.get(0).expect("At least one document id").id();
 
             let operations_by_document_id = node

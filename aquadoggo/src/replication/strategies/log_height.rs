@@ -325,7 +325,7 @@ mod tests {
     use crate::replication::strategies::log_height::{retrieve_entries, SortedIndex};
     use crate::replication::{LogHeightStrategy, LogHeights, Message, SchemaIdSet};
     use crate::test_utils::{
-        add_blob, add_schema_and_documents, generate_key_pairs, populate_and_materialize_unchecked,
+        add_blob, add_schema_and_documents, generate_key_pairs, populate_and_materialize,
         populate_store_config, test_runner_with_manager, PopulateStoreConfig, TestNode,
         TestNodeManager,
     };
@@ -388,7 +388,7 @@ mod tests {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             // Create one node and materialize some documents on it.
             let mut node = manager.create().await;
-            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let documents = populate_and_materialize(&mut node, &config).await;
             let schema = config.schema.clone();
 
             // Collect the values for the two authors and documents.
@@ -511,7 +511,7 @@ mod tests {
             let target_set = SchemaIdSet::new(&vec![schema.id().to_owned()]);
 
             let mut node_a = manager.create().await;
-            populate_and_materialize_unchecked(&mut node_a, &config).await;
+            populate_and_materialize(&mut node_a, &config).await;
 
             let node_b = manager.create().await;
             let schema_provider = node_b.context.schema_provider.clone();
@@ -555,7 +555,7 @@ mod tests {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
             let mut node_a = manager.create().await;
-            let documents = populate_and_materialize_unchecked(&mut node_a, &config).await;
+            let documents = populate_and_materialize(&mut node_a, &config).await;
             let document_ids: Vec<DocumentId> =
                 documents.iter().map(AsDocument::id).cloned().collect();
             let strategy_a =

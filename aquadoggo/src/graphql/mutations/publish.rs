@@ -127,7 +127,7 @@ mod tests {
     use crate::http::HttpServiceContext;
     use crate::test_utils::{
         add_schema, doggo_fields, doggo_schema, http_test_client,
-        populate_and_materialize_unchecked, populate_store_config, test_runner,
+        populate_and_materialize, populate_store_config, test_runner,
         PopulateStoreConfig, TestNode,
     };
 
@@ -228,7 +228,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             let (tx, _rx) = broadcast::channel(120);
             let manager = GraphQLSchemaManager::new(
@@ -268,7 +268,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             let schema = add_schema(
                 &mut node,
@@ -326,7 +326,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
             let (tx, mut rx) = broadcast::channel(120);
             let manager = GraphQLSchemaManager::new(
                 node.context.store.clone(),
@@ -363,7 +363,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = http_test_client(&node).await;
@@ -582,7 +582,7 @@ mod tests {
 
         test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client
             let client = http_test_client(&node).await;
@@ -710,7 +710,7 @@ mod tests {
 
         test_runner(|mut node: TestNode| async move {
             // Populates the node with entries, operations and schemas.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = http_test_client(&node).await;
@@ -745,7 +745,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Adds the test_schema to the store and schema provider.
-            populate_and_materialize_unchecked(&mut node, &config).await;
+            populate_and_materialize(&mut node, &config).await;
 
             // Init the test client.
             let client = http_test_client(&node).await;
@@ -837,7 +837,7 @@ mod tests {
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populates the node with entries, operations and schemas.
-            let _ = populate_and_materialize_unchecked(&mut node, &config).await;
+            let _ = populate_and_materialize(&mut node, &config).await;
             let public_key = config.authors[0].public_key();
 
             // Init the test client.

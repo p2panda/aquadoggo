@@ -382,7 +382,7 @@ mod tests {
     use crate::db::errors::BlobStoreError;
     use crate::test_utils::{
         add_blob, add_document, add_schema_and_documents, assert_query,
-        populate_and_materialize_unchecked, populate_store_config, test_runner, update_document,
+        populate_and_materialize, populate_store_config, test_runner, update_document,
         PopulateStoreConfig, TestNode,
     };
 
@@ -577,7 +577,7 @@ mod tests {
         key_pair: KeyPair,
     ) {
         test_runner(|mut node: TestNode| async move {
-            let _ = populate_and_materialize_unchecked(&mut node, &config).await;
+            let _ = populate_and_materialize(&mut node, &config).await;
 
             let blob_data = "Hello, World!".as_bytes();
             let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;

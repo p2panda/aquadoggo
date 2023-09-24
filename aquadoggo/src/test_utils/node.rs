@@ -71,7 +71,7 @@ impl Default for PopulateStoreConfig {
 /// Fixture for constructing a `PopulateStoreConfig` with default values for aquadoggo tests.
 ///
 /// Is passed to `p2panda_rs::test_utils::populate_store` or
-/// `crate::test_utils::populate_and_materialize_unchecked` to populate a store or node with the specified
+/// `crate::test_utils::populate_and_materialize` to populate a store or node with the specified
 /// values.
 ///
 /// Passed parameters define what the we want the store to contain. The first entry in each log
@@ -416,7 +416,7 @@ pub async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
 /// Passed parameters define what the store should contain. The first entry in each log contains a
 /// valid CREATE operation following entries contain UPDATE operations. If the with_delete flag is set
 /// to true the last entry in all logs contain be a DELETE operation.
-pub async fn populate_store_unchecked(
+pub async fn populate_store(
     store: &SqlStore,
     config: &PopulateStoreConfig,
 ) -> Vec<Document> {
@@ -564,12 +564,12 @@ pub async fn populate_store_unchecked(
 /// provider.
 ///
 /// Returns the documents that were materialised.
-pub async fn populate_and_materialize_unchecked(
+pub async fn populate_and_materialize(
     node: &mut TestNode,
     config: &PopulateStoreConfig,
 ) -> Vec<Document> {
     // Populate the store based with entries and operations based on the passed config.
-    let documents = populate_store_unchecked(&node.context.store, config).await;
+    let documents = populate_store(&node.context.store, config).await;
 
     // Add the passed schema to the schema store.
     //
