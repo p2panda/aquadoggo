@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 mod common;
+#[cfg(test)]
+mod tests;
 mod diff;
 mod log_height;
 pub mod set_reconciliation;
