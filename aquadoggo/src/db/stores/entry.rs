@@ -299,10 +299,11 @@ mod tests {
     use p2panda_rs::operation::EncodedOperation;
     use p2panda_rs::storage_provider::traits::EntryStore;
     use p2panda_rs::test_utils::fixtures::{encoded_entry, encoded_operation, entry, random_hash};
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use rstest::rstest;
 
-    use crate::test_utils::{populate_store_config, test_runner, TestNode};
+    use crate::test_utils::{
+        populate_store_config, populate_store_unchecked, test_runner, PopulateStoreConfig, TestNode,
+    };
 
     #[rstest]
     fn insert_entry(
@@ -349,15 +350,15 @@ mod tests {
     #[rstest]
     fn try_insert_non_unique_entry(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            let _ = populate_store_unchecked(&node.context.store, &config).await;
 
             // The key pair of the author who published to the note.
-            let key_pair = key_pairs.get(0).expect("At least one key pair");
+            let key_pair = config.authors.get(0).expect("At least one key pair");
 
             // We get back the first entry.
             let first_entry = node
@@ -392,15 +393,16 @@ mod tests {
     #[rstest]
     fn latest_entry(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            let _ = populate_store_unchecked(&node.context.store, &config).await;
 
             // The public key of the author who published to the node.
-            let public_key_in_db = key_pairs
+            let public_key_in_db = config
+                .authors
                 .get(0)
                 .expect("At least one key pair")
                 .public_key();
@@ -442,14 +444,15 @@ mod tests {
     #[rstest]
     fn entry_by_seq_number(
         #[from(populate_store_config)]
-        #[with(10, 1, 1)]
+        #[with(10, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            let _ = populate_store_unchecked(&node.context.store, &config).await;
             // The public key of the author who published to the node.
-            let public_key = key_pairs
+            let public_key = config
+                .authors
                 .get(0)
                 .expect("At least one key pair")
                 .public_key();
@@ -516,15 +519,16 @@ mod tests {
     #[rstest]
     fn get_entry(
         #[from(populate_store_config)]
-        #[with(20, 1, 1)]
+        #[with(20, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
+            let _ = populate_store_unchecked(&node.context.store, &config).await;
 
             // The public key of the author who published to the node.
-            let public_key = key_pairs
+            let public_key = config
+                .authors
                 .get(0)
                 .expect("At least one key pair")
                 .public_key();
@@ -571,13 +575,13 @@ mod tests {
     #[rstest]
     fn get_entries_from(
         #[from(populate_store_config)]
-        #[with(20, 2, 1)]
+        #[with(20, 2, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, _) = populate_store(&node.context.store, &config).await;
-            let public_key = key_pairs[0].public_key();
+            let _ = populate_store_unchecked(&node.context.store, &config).await;
+            let public_key = config.authors[0].public_key();
             let entries = node
                 .context
                 .store

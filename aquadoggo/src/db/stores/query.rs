@@ -1488,7 +1488,6 @@ mod tests {
     use p2panda_rs::schema::{FieldType, Schema, SchemaId};
     use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::fixtures::{key_pair, schema_id};
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use rstest::rstest;
 
     use crate::db::models::{OptionalOwner, QueryRow};
@@ -1499,7 +1498,8 @@ mod tests {
     use crate::db::types::StorageDocument;
     use crate::test_utils::{
         add_document, add_schema, add_schema_and_documents, doggo_fields, doggo_schema,
-        populate_and_materialize, populate_store_config, test_runner, TestNode,
+        populate_and_materialize_unchecked, populate_store_config, test_runner,
+        PopulateStoreConfig, TestNode,
     };
 
     use super::{convert_rows, PaginationCursor, Query};
@@ -2632,14 +2632,14 @@ mod tests {
         #[from(populate_store_config)]
         // This config will populate the store with 10 documents which each have their username
         // field updated from "bubu" (doggo_schema) to "me"
-        #[with(2, 10, 1, false, doggo_schema(), doggo_fields(),
+        #[with(2, 10, vec![KeyPair::new()], false, doggo_schema(), doggo_fields(),
                vec![("username", OperationValue::String("me".to_string()))]
         )]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            populate_and_materialize(&mut node, &config).await;
+            populate_and_materialize_unchecked(&mut node, &config).await;
 
             let schema = doggo_schema();
 

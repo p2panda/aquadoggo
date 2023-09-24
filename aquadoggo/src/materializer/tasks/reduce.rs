@@ -297,6 +297,7 @@ mod tests {
         Document, DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId,
         DocumentViewValue,
     };
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::traits::AsOperation;
     use p2panda_rs::operation::OperationValue;
     use p2panda_rs::schema::Schema;
@@ -305,16 +306,15 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{
         operation, operation_fields, random_document_id, random_document_view_id, schema,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::{
-        populate_store, send_to_store, PopulateStoreConfig,
-    };
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{
-        doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
+        doggo_fields, doggo_schema, generate_key_pairs, populate_store_config,
+        populate_store_unchecked, test_runner, PopulateStoreConfig, TestNode,
     };
 
     #[rstest]
@@ -323,7 +323,7 @@ mod tests {
         #[with(
             2,
             1,
-            20,
+            generate_key_pairs(20),
             false,
             doggo_schema(),
             doggo_fields(),
@@ -333,15 +333,20 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
 
-            for document_id in &document_ids {
-                let input = TaskInput::DocumentId(document_id.clone());
+            for document in &documents {
+                let input = TaskInput::DocumentId(document.id().clone());
                 assert!(reduce_task(node.context.clone(), input).await.is_ok());
             }
 
-            for document_id in &document_ids {
-                let document = node.context.store.get_document(document_id).await.unwrap();
+            for document in &documents {
+                let document = node
+                    .context
+                    .store
+                    .get_document(document.id())
+                    .await
+                    .unwrap();
 
                 assert_eq!(
                     document.unwrap().get("username").unwrap(),
@@ -358,7 +363,7 @@ mod tests {
         #[with(
             1,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             constants::schema(),
             constants::test_fields(),
@@ -368,14 +373,9 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids
-                .get(0)
-                .expect("There should be at least one document id");
-
-            let key_pair = key_pairs
-                .get(0)
-                .expect("There should be at least one key_pair");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
+            let key_pair = &config.authors[0];
 
             let input = TaskInput::DocumentId(document_id.clone());
 
@@ -397,7 +397,7 @@ mod tests {
                     schema.id().to_owned(),
                 ),
                 &schema,
-                key_pair,
+                &key_pair,
             )
             .await
             .unwrap();
@@ -421,7 +421,7 @@ mod tests {
         #[with(
             2,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             doggo_schema(),
             doggo_fields(),
@@ -432,10 +432,8 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids
-                .get(0)
-                .expect("There should be at least one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             // Get the operations
             let document_operations = node
@@ -508,48 +506,45 @@ mod tests {
     #[rstest]
     fn deleted_documents_have_no_view(
         #[from(populate_store_config)]
-        #[with(3, 1, 2, true)]
+        #[with(3, 1, generate_key_pairs(2), true)]
         config: PopulateStoreConfig,
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
 
-            for document_id in &document_ids {
-                let input = TaskInput::DocumentId(document_id.clone());
+            for document in &documents {
+                let input = TaskInput::DocumentId(document.id().clone());
                 let tasks = reduce_task(node.context.clone(), input).await.unwrap();
                 assert_eq!(tasks.unwrap().len(), 1);
             }
 
-            for document_id in &document_ids {
-                let document = node.context.store.get_document(document_id).await.unwrap();
-                assert!(document.is_none())
+            for document in &documents {
+                let retrieved_document = node
+                    .context
+                    .store
+                    .get_document(document.id())
+                    .await
+                    .unwrap();
+
+                assert!(retrieved_document.is_none());
+
+                let input = TaskInput::DocumentViewId(document.view_id().clone());
+                let tasks = reduce_task(node.context.clone(), input).await.unwrap();
+
+                assert!(tasks.is_none());
             }
-
-            let document_operations = node
-                .context
-                .store
-                .get_operations_by_document_id(&document_ids[0])
-                .await
-                .unwrap();
-
-            let document = Document::try_from(&document_operations).unwrap();
-
-            let input = TaskInput::DocumentViewId(document.view_id().clone());
-            let tasks = reduce_task(node.context.clone(), input).await.unwrap();
-
-            assert!(tasks.is_none());
         });
     }
 
     #[rstest]
     #[case(
-        populate_store_config(3, 1, 1, false, doggo_schema(), doggo_fields(), doggo_fields()),
+        populate_store_config(3, 1, vec![KeyPair::new()], false, doggo_schema(), doggo_fields(), doggo_fields()),
         vec!["garbage_collection".to_string(), "dependency".to_string()]
     )]
     // This document is deleted, it shouldn't spawn a dependency task.
     #[case(
-        populate_store_config(3, 1, 1, true, doggo_schema(), doggo_fields(), doggo_fields()),
+        populate_store_config(3, 1, vec![KeyPair::new()], true, doggo_schema(), doggo_fields(), doggo_fields()),
         vec!["garbage_collection".to_string()]
     )]
     fn returns_correct_dependency_and_prune_tasks(
@@ -559,10 +554,8 @@ mod tests {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids
-                .get(0)
-                .expect("There should be at least one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             let input = TaskInput::DocumentId(document_id.clone());
             let next_tasks = reduce_task(node.context.clone(), input)
@@ -598,14 +591,14 @@ mod tests {
     #[rstest]
     fn duplicate_document_view_insertions(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("At least one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             // Get the operations and build the document
             let operations = node
@@ -637,7 +630,7 @@ mod tests {
         #[with(
             3,
             1,
-            1,
+            vec![KeyPair::new()],
             false,
             constants::schema(),
             constants::test_fields(),
@@ -647,14 +640,9 @@ mod tests {
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids
-                .get(0)
-                .expect("There should be at least one document id");
-
-            let key_pair = key_pairs
-                .get(0)
-                .expect("There should be at least one key_pair");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
+            let key_pair = &config.authors[0];
 
             // Now we create and insert an UPDATE operation for this document which is pointing at
             // the root CREATE operation.
@@ -669,7 +657,7 @@ mod tests {
                     schema.id().to_owned(),
                 ),
                 &schema,
-                key_pair,
+                &key_pair,
             )
             .await
             .unwrap();

@@ -4,6 +4,7 @@ use std::convert::TryFrom;
 
 use p2panda_rs::document::{Document, DocumentId};
 use p2panda_rs::hash::Hash;
+use p2panda_rs::identity::KeyPair;
 use p2panda_rs::operation::{
     OperationValue, PinnedRelation, PinnedRelationList, Relation, RelationList,
 };
@@ -127,4 +128,8 @@ pub fn random_schema_id_set() -> SchemaIdSet {
     let schema_id_2 =
         SchemaId::new_application(&SchemaName::new("events").unwrap(), &document_view_id_2);
     SchemaIdSet::new(&[system_schema_id, schema_id_1, schema_id_2])
+}
+
+pub fn generate_key_pairs(num: u64) -> Vec<KeyPair> {
+    (0..num).map(|_| KeyPair::new()).collect()
 }

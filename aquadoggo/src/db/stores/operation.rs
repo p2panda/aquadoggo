@@ -411,8 +411,9 @@ impl From<&DocumentViewFieldRow> for OperationCursor {
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::materialization::build_graph;
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId};
-    use p2panda_rs::identity::PublicKey;
+    use p2panda_rs::identity::{PublicKey, KeyPair};
     use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
     use p2panda_rs::operation::{Operation, OperationAction, OperationBuilder, OperationId};
     use p2panda_rs::schema::SchemaId;
@@ -422,12 +423,12 @@ mod tests {
         document_id, operation, operation_id, operation_with_schema, public_key,
         random_document_view_id, random_operation_id, random_previous_operations, schema_id,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use p2panda_rs::WithId;
     use rstest::rstest;
 
     use crate::test_utils::{
-        doggo_fields, populate_and_materialize, populate_store_config, test_runner, TestNode,
+        doggo_fields, populate_and_materialize_unchecked, populate_store_config, test_runner,
+        PopulateStoreConfig, TestNode,
     };
 
     use super::OperationCursor;
@@ -582,13 +583,13 @@ mod tests {
     #[rstest]
     fn get_operations_by_document_id(
         #[from(populate_store_config)]
-        #[with(10, 1, 1)]
+        #[with(10, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store with some entries and operations and materialize documents.
-            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
-            let document_id = document_ids.get(0).expect("At least one document id");
+            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let document_id = documents.get(0).expect("At least one document id").id();
 
             let operations_by_document_id = node
                 .context

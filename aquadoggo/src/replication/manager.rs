@@ -528,7 +528,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::test_utils::memory_store::helpers::PopulateStoreConfig;
     use p2panda_rs::Human;
     use rstest::rstest;
     use tokio::sync::broadcast;
@@ -541,8 +540,8 @@ mod tests {
     use crate::schema::SchemaProvider;
     use crate::test_utils::helpers::random_schema_id_set;
     use crate::test_utils::{
-        populate_and_materialize, populate_store_config, test_runner, test_runner_with_manager,
-        TestNode, TestNodeManager,
+        generate_key_pairs, populate_and_materialize_unchecked, populate_store_config, test_runner,
+        test_runner_with_manager, PopulateStoreConfig, TestNode, TestNodeManager,
     };
 
     use super::{SyncManager, INITIAL_SESSION_ID};
@@ -1069,7 +1068,7 @@ mod tests {
     #[rstest]
     fn sync_lifetime(
         #[from(populate_store_config)]
-        #[with(2, 1, 3)]
+        #[with(2, 1, generate_key_pairs(3))]
         config_a: PopulateStoreConfig,
         #[from(populate_store_config)] config_b: PopulateStoreConfig,
     ) {
@@ -1080,8 +1079,8 @@ mod tests {
             let mut node_a = manager.create().await;
             let mut node_b = manager.create().await;
 
-            populate_and_materialize(&mut node_a, &config_a).await;
-            populate_and_materialize(&mut node_b, &config_b).await;
+            populate_and_materialize_unchecked(&mut node_a, &config_a).await;
+            populate_and_materialize_unchecked(&mut node_b, &config_b).await;
 
             let (tx, _rx) = broadcast::channel(8);
             let target_set = SchemaIdSet::new(&[config_a.schema.id().to_owned()]);

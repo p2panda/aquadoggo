@@ -179,15 +179,15 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
+    use p2panda_rs::identity::KeyPair;
     use rstest::rstest;
 
     use crate::replication::manager::INITIAL_SESSION_ID;
     use crate::replication::{Message, Mode, SchemaIdSet, SessionState};
     use crate::test_utils::helpers::random_schema_id_set;
     use crate::test_utils::{
-        populate_and_materialize, populate_store_config, test_runner, test_runner_with_manager,
-        TestNode, TestNodeManager,
+        populate_and_materialize_unchecked, populate_store_config, populate_store_unchecked,
+        test_runner, test_runner_with_manager, PopulateStoreConfig, TestNode, TestNodeManager,
     };
 
     use super::Session;
@@ -224,13 +224,13 @@ mod tests {
     #[rstest]
     fn correct_strategy_messages(
         #[from(populate_store_config)]
-        #[with(5, 2, 1)]
+        #[with(5, 2, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let mut node_a = manager.create().await;
             let schema_provider = node_a.context.schema_provider.clone();
-            populate_and_materialize(&mut node_a, &config).await;
+            populate_and_materialize_unchecked(&mut node_a, &config).await;
 
             let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
             let mut session = Session::new(
@@ -264,7 +264,7 @@ mod tests {
             );
 
             let node_b: TestNode = manager.create().await;
-            populate_store(&node_b.context.store, &config).await;
+            populate_store_unchecked(&node_b.context.store, &config).await;
 
             let response_messages = session
                 .handle_message(&node_b.context.store, &Message::Have(vec![]))

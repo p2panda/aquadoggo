@@ -760,7 +760,6 @@ mod tests {
     use p2panda_rs::test_utils::fixtures::{
         key_pair, operation, random_document_id, random_document_view_id, random_operation_id,
     };
-    use p2panda_rs::test_utils::memory_store::helpers::{populate_store, PopulateStoreConfig};
     use p2panda_rs::WithId;
     use rstest::rstest;
 
@@ -768,26 +767,27 @@ mod tests {
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::test_utils::{
-        add_schema_and_documents, assert_query, build_document, populate_and_materialize,
-        populate_store_config, test_runner, TestNode,
+        add_schema_and_documents, assert_query, build_document, populate_and_materialize_unchecked,
+        populate_store_config, populate_store_unchecked, test_runner, PopulateStoreConfig,
+        TestNode, doggo_schema,
     };
 
     #[rstest]
     fn insert_and_get_one_document_view(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("At least one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document = documents.get(0).expect("At least one document");
 
             // Get the operations and build the document.
             let operations = node
                 .context
                 .store
-                .get_operations_by_document_id(&document_id)
+                .get_operations_by_document_id(document.id())
                 .await
                 .unwrap();
 
@@ -859,7 +859,7 @@ mod tests {
             let retrieved_document = node
                 .context
                 .store
-                .get_document(&document_id)
+                .get_document(document.id())
                 .await
                 .unwrap()
                 .unwrap();
@@ -919,21 +919,18 @@ mod tests {
     #[rstest]
     fn inserts_gets_document(
         #[from(populate_store_config)]
-        #[with(1, 1, 1)]
+        #[with(1, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("At least one document id");
-
-            // Build the document.
-            let document = build_document(&node.context.store, &document_id).await;
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document = documents.get(0).expect("At least one document");
 
             // The document is successfully inserted into the database, this relies on the
             // operations already being present and would fail if they were not.
-            let result = node.context.store.insert_document(&document).await;
+            let result = node.context.store.insert_document(document).await;
             assert!(result.is_ok());
 
             // We can retrieve the most recent document view for this document by its id.
@@ -980,17 +977,15 @@ mod tests {
     #[rstest]
     fn no_view_when_document_deleted(
         #[from(populate_store_config)]
-        #[with(10, 1, 1, true)]
+        #[with(10, 1, vec![KeyPair::new()], true)]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("At least one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document = documents.get(0).expect("At least one document");
 
-            // Get the operations and build the document.
-            let document = build_document(&node.context.store, &document_id).await;
             // Get the view id.
             let view_id = document.view_id();
 
@@ -998,7 +993,7 @@ mod tests {
             assert!(document.view().is_none());
 
             // Here we insert the document. This action also sets its most recent view.
-            let result = node.context.store.insert_document(&document).await;
+            let result = node.context.store.insert_document(document).await;
             assert!(result.is_ok());
 
             // We retrieve the most recent view for this document by its document id, but as the
@@ -1026,26 +1021,23 @@ mod tests {
     #[rstest]
     fn get_documents_by_schema_deleted_document(
         #[from(populate_store_config)]
-        #[with(10, 1, 1, true)]
+        #[with(10, 1, vec![KeyPair::new()], true)]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("At least one document id");
-
-            // Get the operations and build the document.
-            let document = build_document(&node.context.store, &document_id).await;
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document = documents.get(0).expect("At least one document");
 
             // Insert the document, this is possible even though it has been deleted.
-            let result = node.context.store.insert_document(&document).await;
+            let result = node.context.store.insert_document(document).await;
             assert!(result.is_ok());
 
             // When we try to retrieve it by schema id we should NOT get it back.
             let document_views = node
                 .context
                 .store
-                .get_documents_by_schema(constants::schema().id())
+                .get_documents_by_schema(doggo_schema().id())
                 .await
                 .unwrap();
             assert!(document_views.is_empty());
@@ -1055,19 +1047,19 @@ mod tests {
     #[rstest]
     fn updates_a_document(
         #[from(populate_store_config)]
-        #[with(10, 1, 1)]
+        #[with(10, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("At least one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document = documents.get(0).expect("At least one document");
 
             // Get the operations for this document and sort them into linear order.
             let operations = node
                 .context
                 .store
-                .get_operations_by_document_id(&document_id)
+                .get_operations_by_document_id(document.id())
                 .await
                 .unwrap();
             let document_builder = DocumentBuilder::from(&operations);
@@ -1134,12 +1126,12 @@ mod tests {
     #[rstest]
     fn gets_documents_by_schema(
         #[from(populate_store_config)]
-        #[with(2, 10, 1)]
+        #[with(2, 10, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            populate_and_materialize(&mut node, &config).await;
+            populate_and_materialize_unchecked(&mut node, &config).await;
 
             // Retrieve these documents by their schema id.
             let schema_documents = node
@@ -1157,17 +1149,22 @@ mod tests {
     #[rstest]
     fn prunes_document_view(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
-            let document_id = document_ids[0].clone();
-            let first_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let document = documents[0].clone();
+            let first_document_view_id: DocumentViewId = document.id().as_str().parse().unwrap();
 
             // Get the current document from the store.
-            let current_document = node.context.store.get_document(&document_id).await.unwrap();
+            let current_document = node
+                .context
+                .store
+                .get_document(document.id())
+                .await
+                .unwrap();
 
             // Get the current view id.
             let current_document_view_id = current_document.unwrap().view_id().to_owned();
@@ -1221,15 +1218,15 @@ mod tests {
     #[rstest]
     fn does_not_prune_pinned_views(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
         key_pair: KeyPair,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
-            let document_id = document_ids[0].clone();
-            let first_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let document = documents[0].clone();
+            let first_document_view_id: DocumentViewId = document.id().as_str().parse().unwrap();
 
             // Reduce a historic view of an existing document.
             let _ = reduce_task(
@@ -1275,20 +1272,19 @@ mod tests {
     #[rstest]
     fn does_not_prune_current_view(
         #[from(populate_store_config)]
-        #[with(1, 1, 1)]
+        #[with(1, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
-            let document_id = document_ids[0].clone();
-            let current_document_view_id: DocumentViewId = document_id.as_str().parse().unwrap();
+            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let document = documents[0].clone();
 
             // Attempt to prune the current document view.
             let result = node
                 .context
                 .store
-                .prune_document_view(&current_document_view_id)
+                .prune_document_view(document.view_id())
                 .await;
             assert!(result.is_ok());
             // Returns `false` when pruning failed.
@@ -1298,7 +1294,7 @@ mod tests {
             let document = node
                 .context
                 .store
-                .get_document_by_view_id(&current_document_view_id)
+                .get_document_by_view_id(&document.view_id())
                 .await
                 .unwrap();
             assert!(document.is_some());
@@ -1308,13 +1304,13 @@ mod tests {
     #[rstest]
     fn purge_document(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
-            let document_id = document_ids[0].clone();
+            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let document_id = documents[0].id();
 
             // There is one document in the database which contains an CREATE and UPDATE operation
             // which were both published by the same author. These are the number of rows we
@@ -1328,7 +1324,7 @@ mod tests {
             assert_query(&node, "SELECT name FROM document_view_fields", 11).await;
 
             // Purge this document from the database, we now expect all tables to be empty.
-            let result = node.context.store.purge_document(&document_id).await;
+            let result = node.context.store.purge_document(document_id).await;
             assert!(result.is_ok(), "{:#?}", result);
             assert_query(&node, "SELECT entry_hash FROM entries", 0).await;
             assert_query(&node, "SELECT operation_id FROM operations_v1", 0).await;
@@ -1343,13 +1339,13 @@ mod tests {
     #[rstest]
     fn purging_only_effects_target_document(
         #[from(populate_store_config)]
-        #[with(1, 2, 1)]
+        #[with(1, 2, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let (_, document_ids) = populate_and_materialize(&mut node, &config).await;
-            let document_id = document_ids[0].clone();
+            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let document_id = documents[0].id();
 
             // There are two documents in the database which each contain a single CREATE operation
             // and they were published by the same author. These are the number of rows we expect
@@ -1379,14 +1375,14 @@ mod tests {
     #[rstest]
     fn next_args_after_purge(
         #[from(populate_store_config)]
-        #[with(2, 1, 1)]
+        #[with(2, 1, vec![KeyPair::new()])]
         config: PopulateStoreConfig,
     ) {
         test_runner(|mut node: TestNode| async move {
             // Populate the store and materialize all documents.
-            let (key_pairs, document_ids) = populate_and_materialize(&mut node, &config).await;
-            let document_id = document_ids[0].clone();
-            let public_key = key_pairs[0].public_key();
+            let documents = populate_and_materialize_unchecked(&mut node, &config).await;
+            let document_id = documents[0].id();
+            let public_key = config.authors[0].public_key();
 
             let _ = node.context.store.purge_document(&document_id).await;
 

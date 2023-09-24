@@ -151,9 +151,7 @@ mod tests {
     use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::constants::SCHEMA_ID;
     use p2panda_rs::test_utils::fixtures::{key_pair, operation, operation_fields, schema};
-    use p2panda_rs::test_utils::memory_store::helpers::{
-        populate_store, send_to_store, PopulateStoreConfig,
-    };
+    use p2panda_rs::test_utils::memory_store::helpers::send_to_store;
     use rstest::rstest;
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
@@ -162,7 +160,8 @@ mod tests {
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
     use crate::test_utils::{
-        doggo_fields, doggo_schema, populate_store_config, test_runner, TestNode,
+        doggo_fields, doggo_schema, populate_store_config, populate_store_unchecked, test_runner,
+        PopulateStoreConfig, TestNode,
     };
     use crate::Configuration;
 
@@ -171,14 +170,14 @@ mod tests {
     #[rstest]
     fn materialize_document_from_bus(
         #[from(populate_store_config)]
-        #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
+        #[with(1, 1, vec![KeyPair::new()], false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
         config: PopulateStoreConfig,
     ) {
         // Prepare database which inserts data for one document
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("Should be one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             // We can infer the id of the first operation from the document id
             let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
@@ -249,13 +248,13 @@ mod tests {
     #[rstest]
     fn materialize_document_from_last_runtime(
         #[from(populate_store_config)]
-        #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
+        #[with(1, 1, vec![KeyPair::new()], false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
         config: PopulateStoreConfig,
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (_, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("Should be one document id");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
 
             // Store a pending "reduce" task from last runtime in the database so it gets picked up by
             // the materializer service
@@ -322,14 +321,14 @@ mod tests {
     #[rstest]
     fn materialize_update_document(
         #[from(populate_store_config)]
-        #[with(1, 1, 1, false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
+        #[with(1, 1, vec![KeyPair::new()], false, schema(vec![("name".to_string(), FieldType::String)], SCHEMA_ID.parse().unwrap(), "A test schema"), vec![("name", OperationValue::String("panda".into()))])]
         config: PopulateStoreConfig,
     ) {
         test_runner(move |node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
-            let (key_pairs, document_ids) = populate_store(&node.context.store, &config).await;
-            let document_id = document_ids.get(0).expect("Should be one document id");
-            let key_pair = key_pairs.get(0).expect("Should be one key pair");
+            let documents = populate_store_unchecked(&node.context.store, &config).await;
+            let document_id = documents[0].id();
+            let key_pair = &config.authors[0];
 
             // We can infer the id of the first operation from the document id
             let first_operation_id: OperationId = document_id.to_string().parse().unwrap();
@@ -387,7 +386,7 @@ mod tests {
                     SCHEMA_ID.parse().unwrap(),
                     "A test schema",
                 ),
-                key_pair,
+                &key_pair,
             )
             .await
             .expect("Publish entry");
