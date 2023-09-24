@@ -186,8 +186,8 @@ mod tests {
     use crate::replication::{Message, Mode, SchemaIdSet, SessionState};
     use crate::test_utils::helpers::random_schema_id_set;
     use crate::test_utils::{
-        populate_and_materialize, populate_store_config, populate_store,
-        test_runner, test_runner_with_manager, PopulateStoreConfig, TestNode, TestNodeManager,
+        populate_and_materialize, populate_store, populate_store_config, test_runner,
+        test_runner_with_manager, PopulateStoreConfig, TestNode, TestNodeManager,
     };
 
     use super::Session;

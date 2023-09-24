@@ -416,10 +416,7 @@ pub async fn assert_query(node: &TestNode, sql: &str, expected_len: usize) {
 /// Passed parameters define what the store should contain. The first entry in each log contains a
 /// valid CREATE operation following entries contain UPDATE operations. If the with_delete flag is set
 /// to true the last entry in all logs contain be a DELETE operation.
-pub async fn populate_store(
-    store: &SqlStore,
-    config: &PopulateStoreConfig,
-) -> Vec<Document> {
+pub async fn populate_store(store: &SqlStore, config: &PopulateStoreConfig) -> Vec<Document> {
     let mut documents: Vec<Document> = Vec::new();
     for key_pair in &config.authors {
         for log_id in 0..config.no_of_logs {

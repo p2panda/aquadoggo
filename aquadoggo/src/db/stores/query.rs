@@ -1498,8 +1498,8 @@ mod tests {
     use crate::db::types::StorageDocument;
     use crate::test_utils::{
         add_document, add_schema, add_schema_and_documents, doggo_fields, doggo_schema,
-        populate_and_materialize, populate_store_config, test_runner,
-        PopulateStoreConfig, TestNode,
+        populate_and_materialize, populate_store_config, test_runner, PopulateStoreConfig,
+        TestNode,
     };
 
     use super::{convert_rows, PaginationCursor, Query};

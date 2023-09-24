@@ -126,9 +126,8 @@ mod tests {
     use crate::graphql::GraphQLSchemaManager;
     use crate::http::HttpServiceContext;
     use crate::test_utils::{
-        add_schema, doggo_fields, doggo_schema, http_test_client,
-        populate_and_materialize, populate_store_config, test_runner,
-        PopulateStoreConfig, TestNode,
+        add_schema, doggo_fields, doggo_schema, http_test_client, populate_and_materialize,
+        populate_store_config, test_runner, PopulateStoreConfig, TestNode,
     };
 
     // Schema used in some of the tests in this module, it only has one field so it's easy to

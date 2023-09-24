@@ -302,7 +302,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::test_utils::{
-        populate_store_config, populate_store, test_runner, PopulateStoreConfig, TestNode,
+        populate_store, populate_store_config, test_runner, PopulateStoreConfig, TestNode,
     };
 
     #[rstest]

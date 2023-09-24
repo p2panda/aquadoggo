@@ -132,8 +132,8 @@ mod tests {
     use rstest::rstest;
 
     use crate::test_utils::{
-        add_document, add_schema, populate_and_materialize, populate_store_config,
-        test_runner, PopulateStoreConfig, TestNode,
+        add_document, add_schema, populate_and_materialize, populate_store_config, test_runner,
+        PopulateStoreConfig, TestNode,
     };
 
     #[rstest]
