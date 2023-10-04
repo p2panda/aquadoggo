@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
 use std::num::NonZeroU8;
 use std::time::Duration;
 
@@ -53,7 +52,7 @@ pub async fn network_service(
 
         // Start listening on tcp address.
         let listen_addr_tcp = Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::from(context.config.bind_address))
             .with(Protocol::Tcp(0));
         swarm.listen_on(listen_addr_tcp)?;
 
@@ -65,12 +64,12 @@ pub async fn network_service(
 
     // Start listening on QUIC address. Pick a random one if the given is taken already.
     let listen_addr_quic = Multiaddr::empty()
-        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+        .with(Protocol::from(context.config.bind_address))
         .with(Protocol::Udp(network_config.quic_port))
         .with(Protocol::QuicV1);
     if swarm.listen_on(listen_addr_quic).is_err() {
         let random_port_addr = Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::from(context.config.bind_address))
             .with(Protocol::Udp(0))
             .with(Protocol::QuicV1);
         println!(
@@ -318,7 +317,7 @@ struct EventLoop {
     rx: BroadcastStream<ServiceMessage>,
     relay_addresses: HashMap<PeerId, Multiaddr>,
     shutdown_handler: ShutdownHandler,
-    learned_port: bool,
+    learned_listen_address: bool,
 }
 
 impl EventLoop {
@@ -336,7 +335,7 @@ impl EventLoop {
             tx,
             relay_addresses,
             shutdown_handler,
-            learned_port: false,
+            learned_listen_address: false,
         }
     }
 
@@ -367,15 +366,15 @@ impl EventLoop {
                     let event = event.expect("Swarm stream to be infinite");
                     match event {
                         SwarmEvent::NewListenAddr { address, .. } => {
-                            if self.learned_port {
+                            if self.learned_listen_address {
                                 continue;
                             }
 
                             // Show only one QUIC address during the runtime of the node, otherwise
                             // it might get too spammy
                             if let Some(address) = utils::to_quic_address(&address) {
-                                println!("Node is listening on 0.0.0.0:{}", address.port());
-                                self.learned_port = true;
+                                println!("Node is listening on {}:{}", address.ip(), address.port());
+                                self.learned_listen_address = true;
                             }
                         }
                         SwarmEvent::Behaviour(Event::Identify(event)) => self.handle_identify_events(&event).await,

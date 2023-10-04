@@ -80,9 +80,20 @@ allow_schema_ids = "*"
 #
 database_max_connections = 32
 
-# ﾟ･｡+☆
-# PORTS
-# ﾟ･｡+☆
+# ﾟ･｡+☆+｡･ﾟ･｡+☆+
+# ADDRESS & PORT
+# ﾟ･｡+☆+｡･ﾟ･｡+☆+
+
+# IPv4 address this node listens to for networking with other nodes. Defaults
+# to localhost or 127.0.0.1.
+#
+# Depending on this bind address other nodes will or will not be able to reach
+# out to you.
+#
+# Set address to 0.0.0.0 (catch-all) if you want your node to listen on all
+# networking interfaces. This might expose your node to the internet.
+#
+bind_address = "127.0.0.1"
 
 # HTTP port, serving the GraphQL API (for example hosted under
 # http://localhost:2020/graphql). This API is used for client-node
