@@ -401,6 +401,7 @@ impl SqlStore {
         &self,
         document_view_id: &DocumentViewId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
+        // Collect all ids or view ids of children related to from the passed document view.
         let children_ids: Vec<String> = query_scalar(
             "
             SELECT
@@ -440,6 +441,7 @@ impl SqlStore {
             .collect::<Vec<String>>()
             .join(",");
 
+        // Query for any document included in the list of children.
         let document_ids: Vec<String> = query_scalar(&format!(
             "
             SELECT DISTINCT
