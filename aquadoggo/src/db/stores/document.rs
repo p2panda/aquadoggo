@@ -429,6 +429,11 @@ impl SqlStore {
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
+        // If no children were found return now already with an empty vec.
+        if children_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
         let args = children_ids
             .iter()
             .map(|id| format!("'{id}'"))
