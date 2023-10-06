@@ -379,6 +379,8 @@ impl SqlStore {
                 document_views
             WHERE
                 document_views.document_id = $1
+            ORDER BY
+                document_views.document_id
             ",
         )
         .bind(document_id.as_str())
@@ -422,7 +424,7 @@ impl SqlStore {
                     'relation_list'
                 )
             AND
-                document_view_fields.document_view_id = $1;
+                document_view_fields.document_view_id = $1
         ",
         )
         .bind(document_view_id.to_string())
@@ -452,6 +454,8 @@ impl SqlStore {
                 document_views.document_view_id IN ({})
             OR
                 document_views.document_id IN ({})
+            ORDER BY
+                document_views.document_id ASC
             ",
             args, args
         ))

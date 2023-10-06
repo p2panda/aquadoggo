@@ -193,7 +193,7 @@ mod tests {
     fn e2e_pruning(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             // Publish some documents which we will later point relations at.
-            let (child_schema, child_document_view_ids) = add_schema_and_documents(
+            let (child_schema, mut child_document_view_ids) = add_schema_and_documents(
                 &mut node,
                 "schema_for_child",
                 vec![
@@ -203,6 +203,8 @@ mod tests {
                 &key_pair,
             )
             .await;
+
+            child_document_view_ids.sort();
 
             // Create some parent documents which contain a pinned relation list pointing to the
             // children created above.
