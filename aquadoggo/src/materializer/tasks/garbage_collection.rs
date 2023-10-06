@@ -58,22 +58,27 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
 
                 debug!("Current view: {}", is_current_view);
 
-                let mut pinned_children = vec![];
+                let mut child_relations = vec![];
                 let mut view_deleted = false;
 
                 // Skip this step if this is the current view as this shouldn't be garbage
                 // collected in any case (blobs are an exception which we deal with below).
                 if !is_current_view {
-                    // Before attempting to delete this view we need to fetch the ids of any child documents
-                    // which might have views that could become unpinned as a result of this delete. These
-                    // will be returned if the deletion is successful.
-                    pinned_children = context
+                    // Before attempting to delete this view we need to fetch the ids of any child
+                    // documents which might have views which would become unpinned as a result of
+                    // this delete. New garbage collection tasks will be issued for each document if
+                    // the deletion of this view is successful.
+                    //
+                    // We include children referred to by "regular" relation here as well in order
+                    // to correctly issue garbage collection tasks for any documents (for example
+                    // `blob` documents) which should be purged entirely if no relation to them exists.
+                    child_relations = context
                         .store
                         .get_child_document_ids(document_view_id)
                         .await
                         .map_err(|err| TaskError::Critical(err.to_string()))?;
 
-                    for document_id in pinned_children.iter() {
+                    for document_id in child_relations.iter() {
                         debug!("Child relation: {}", document_id);
                     }
 
@@ -89,7 +94,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 if view_deleted {
                     debug!("Deleted view: {}", document_view_id);
                     deleted_views.push(document_view_id);
-                    effected_child_documents.extend(pinned_children);
+                    effected_child_documents.extend(child_relations);
                 } else {
                     debug!("Did not delete view: {}", document_view_id);
                     remaining_views.push(document_view_id);
