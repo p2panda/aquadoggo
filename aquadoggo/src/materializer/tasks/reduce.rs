@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::convert::TryFrom;
-
 use log::{debug, trace};
-use p2panda_rs::document::materialization::build_graph;
 use p2panda_rs::document::traits::AsDocument;
-use p2panda_rs::document::{Document, DocumentBuilder, DocumentId, DocumentViewId};
+use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
 use p2panda_rs::operation::OperationId;
 use p2panda_rs::storage_provider::traits::{DocumentStore, EntryStore, LogStore, OperationStore};
@@ -135,8 +132,8 @@ async fn reduce_document_view<O: AsOperation + WithId<OperationId> + WithPublicK
 
     // Materialize document view
     let document_builder: DocumentBuilder = operations.into();
-    let document = match document_builder.build_to_view_id(Some(document_view_id.to_owned())) {
-        Ok(document) => {
+    let document = match document_builder.build_to_view_id(document_view_id.to_owned()) {
+        Ok((document, _operations)) => {
             // If the document was deleted, then we return nothing
             debug!(
                 "Document materialized to view with id: {}",
@@ -193,8 +190,8 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
     context: &Context,
     operations: &Vec<O>,
 ) -> Result<Option<Vec<Task<TaskInput>>>, TaskError> {
-    match Document::try_from(operations) {
-        Ok(document) => {
+    match DocumentBuilder::from(operations).build() {
+        Ok((document, operations)) => {
             // Make sure to not materialize and store document view twice
             // @TODO: This can be a more efficient storage method. See issue:
             // https://github.com/p2panda/aquadoggo/issues/431
@@ -209,13 +206,9 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                 return Ok(None);
             };
 
-            // @TODO: Make sorted operations available after building the document above so we can skip this step.
-            let operations = DocumentBuilder::from(operations).operations();
-            let sorted_operations = build_graph(&operations).unwrap().sort().unwrap().sorted();
-
             // Iterate over the sorted document operations and update their sorted index on the
             // operations_v1 table.
-            for (index, (operation_id, _, _)) in sorted_operations.iter().enumerate() {
+            for (index, (operation_id, _, _)) in operations.iter().enumerate() {
                 context
                     .store
                     .update_operation_index(operation_id, index as i32)
@@ -289,7 +282,6 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{
         DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId, DocumentViewValue,
@@ -442,11 +434,7 @@ mod tests {
 
             // Sort the operations into their ready for reducing order
             let document_builder = DocumentBuilder::from(&document_operations);
-            let sorted_document_operations = build_graph(&document_builder.operations())
-                .unwrap()
-                .sort()
-                .unwrap()
-                .sorted();
+            let (_, sorted_document_operations) = document_builder.build().unwrap();
 
             // Reduce document to its current view and insert into database
             let input = TaskInput::DocumentId(document_id.clone());
@@ -607,7 +595,7 @@ mod tests {
 
             // Build the document from the operations
             let document_builder = DocumentBuilder::from(&operations);
-            let document = document_builder.build().unwrap();
+            let (document, _) = document_builder.build().unwrap();
 
             // Issue a reduce task for the document, which also inserts the current view
             let input = TaskInput::DocumentId(document_id.clone());
