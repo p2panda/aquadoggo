@@ -114,7 +114,9 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
 #[cfg(test)]
 mod tests {
+    use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::identity::KeyPair;
+    use p2panda_rs::storage_provider::traits::DocumentStore;
     use p2panda_rs::test_utils::fixtures::key_pair;
     use rstest::rstest;
     use tokio::fs;
@@ -153,6 +155,43 @@ mod tests {
             // It should match the complete published blob data
             assert!(retrieved_blob_data.is_ok(), "{:?}", retrieved_blob_data);
             assert_eq!(blob_data, retrieved_blob_data.unwrap());
+        })
+    }
+
+    #[rstest]
+    fn rejects_incorrect_schema(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish blob
+            let blob_data = "Hello, World!";
+            let blob_view_id =
+                add_blob(&mut node, blob_data.as_bytes(), 5, "plain/text", &key_pair).await;
+
+            // Get the blob document back again.
+            let blob_document = node
+                .context
+                .store
+                .get_document_by_view_id(&blob_view_id)
+                .await
+                .unwrap()
+                .unwrap();
+
+            // Get the view id of the first piece of this blob.
+            let blob_piece_view_id = match blob_document.get("pieces").unwrap() {
+                p2panda_rs::operation::OperationValue::PinnedRelationList(list) => {
+                    list.iter().next().unwrap()
+                }
+                _ => unreachable!(),
+            };
+
+            // Run blob task but the input is the document view id of a blob_piece_v1 document.
+            let result = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_piece_view_id.clone()),
+            )
+            .await;
+
+            // It should fail
+            assert!(result.is_err());
         })
     }
 }
