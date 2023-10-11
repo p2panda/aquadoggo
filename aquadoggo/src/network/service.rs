@@ -161,7 +161,7 @@ pub async fn network_service(
 
     // Dial all nodes we want to directly connect to.
     for direct_node_address in &network_config.direct_node_addresses {
-        let address = utils::to_multiaddress(&direct_node_address);
+        let address = utils::to_multiaddress(direct_node_address);
         info!("Connecting to node @ {}", address);
 
         let opts = DialOpts::unknown_peer_id().address(address.clone()).build();
