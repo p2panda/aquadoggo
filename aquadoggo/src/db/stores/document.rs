@@ -379,6 +379,8 @@ impl SqlStore {
                 document_views
             WHERE
                 document_views.document_id = $1
+            ORDER BY
+                document_views.document_id
             ",
         )
         .bind(document_id.as_str())
@@ -401,38 +403,67 @@ impl SqlStore {
         &self,
         document_view_id: &DocumentViewId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
-        let document_view_ids: Vec<String> = query_scalar(
+        // Collect all ids or view ids of children related to from the passed document view.
+        let children_ids: Vec<String> = query_scalar(
             "
-            SELECT DISTINCT
-                document_views.document_id
+            SELECT
+                operation_fields_v1.value
             FROM
-                document_views
+                document_view_fields
+            LEFT JOIN
+                operation_fields_v1
+            ON
+                document_view_fields.operation_id = operation_fields_v1.operation_id
+            AND
+                document_view_fields.name = operation_fields_v1.name
             WHERE
-                document_views.document_view_id
-            IN (
-                SELECT
-                    operation_fields_v1.value
-                FROM
-                    document_view_fields
-                LEFT JOIN
-                    operation_fields_v1
-                ON
-                    document_view_fields.operation_id = operation_fields_v1.operation_id
-                AND
-                    document_view_fields.name = operation_fields_v1.name
-                WHERE
-                    operation_fields_v1.field_type IN ('pinned_relation', 'pinned_relation_list')
-                AND
-                    document_view_fields.document_view_id = $1
-            )
-            ",
+                operation_fields_v1.field_type IN (
+                    'pinned_relation', 
+                    'pinned_relation_list', 
+                    'relation', 
+                    'relation_list'
+                )
+            AND
+                document_view_fields.document_view_id = $1
+        ",
         )
         .bind(document_view_id.to_string())
         .fetch_all(&self.pool)
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
 
-        Ok(document_view_ids
+        // If no children were found return now already with an empty vec.
+        if children_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let args = children_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect::<Vec<String>>()
+            .join(",");
+
+        // Query for any document included in the list of children.
+        let document_ids: Vec<String> = query_scalar(&format!(
+            "
+            SELECT DISTINCT
+                document_views.document_id
+            FROM
+                document_views
+            WHERE
+                document_views.document_view_id IN ({})
+            OR
+                document_views.document_id IN ({})
+            ORDER BY
+                document_views.document_id ASC
+            ",
+            args, args
+        ))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        Ok(document_ids
             .iter()
             .map(|document_id_str| {
                 document_id_str
@@ -503,8 +534,12 @@ impl SqlStore {
     ) -> Result<bool, DocumentStorageError> {
         let document_view_id: Option<String> = query_scalar(
             "
-            SELECT documents.document_view_id FROM documents
-            WHERE documents.document_view_id = $1
+            SELECT 
+                documents.document_view_id 
+            FROM 
+                documents
+            WHERE 
+                documents.document_view_id = $1
             ",
         )
         .bind(document_view_id.to_string())

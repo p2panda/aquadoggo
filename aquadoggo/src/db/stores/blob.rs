@@ -176,13 +176,14 @@ impl SqlStore {
     }
 
     /// Purge blob data from the node _if_ it is not related to from another document.
-    pub async fn purge_blob(&self, document_id: &DocumentId) -> Result<(), SqlStoreError> {
+    pub async fn purge_blob(&self, document_id: &DocumentId) -> Result<bool, SqlStoreError> {
         // Collect the view id of any existing document views which contain a relation to the blob
         // which is the purge target.
         let blob_reverse_relations = reverse_relations(&self.pool, document_id, None).await?;
 
         // If there are no documents referring to the blob then we continue with the purge.
-        if blob_reverse_relations.is_empty() {
+        let should_purge = blob_reverse_relations.is_empty();
+        if should_purge {
             // Collect the document view ids of all pieces this blob has ever referred to in its
             // `pieces`
             let blob_piece_ids: Vec<String> = query_scalar(
@@ -227,7 +228,7 @@ impl SqlStore {
             }
         }
 
-        Ok(())
+        Ok(should_purge)
     }
 
     /// Get ids for all blob documents which are related to from any view of the passed document.

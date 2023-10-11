@@ -308,23 +308,52 @@ pub async fn update_document(
         .expect("Can get document id");
 
     let input = TaskInput::DocumentId(document_id);
-    let next_tasks = reduce_task(node.context.clone(), input.clone())
+    let _next_tasks = reduce_task(node.context.clone(), input.clone())
         .await
         .expect("Reduce document");
 
-    // Run dependency tasks
-    if let Some(tasks) = next_tasks {
-        // We only want to issue dependency tasks.
-        let dependency_tasks = tasks
-            .iter()
-            .filter(|task| task.worker_name() == "dependency");
+    DocumentViewId::from(entry_signed.hash())
+}
 
-        for task in dependency_tasks {
-            dependency_task(node.context.clone(), task.input().to_owned())
-                .await
-                .expect("Run dependency task");
-        }
-    }
+/// Helper method for deleting documents.
+pub async fn delete_document(
+    node: &mut TestNode,
+    schema_id: &SchemaId,
+    previous: &DocumentViewId,
+    key_pair: &KeyPair,
+) -> DocumentViewId {
+    // Get requested schema from store.
+    let schema = node
+        .context
+        .schema_provider
+        .get(schema_id)
+        .await
+        .expect("Schema not found");
+
+    // Build, publish and reduce an update operation for document.
+    let delete_op = OperationBuilder::new(schema.id())
+        .action(OperationAction::Delete)
+        .previous(previous)
+        .build()
+        .expect("Build operation");
+
+    let (entry_signed, _) = send_to_store(&node.context.store, &delete_op, &schema, key_pair)
+        .await
+        .expect("Publish UPDATE operation");
+
+    let document_id = node
+        .context
+        .store
+        .get_document_id_by_operation_id(&OperationId::from(entry_signed.hash()))
+        .await
+        .expect("No db errors")
+        .expect("Can get document id");
+
+    let input = TaskInput::DocumentId(document_id);
+    let _next_tasks = reduce_task(node.context.clone(), input.clone())
+        .await
+        .expect("Reduce document");
+
     DocumentViewId::from(entry_signed.hash())
 }
 
