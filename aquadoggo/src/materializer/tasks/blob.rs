@@ -9,7 +9,6 @@ use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
 use crate::context::Context;
-use crate::db::types::StorageDocument;
 use crate::materializer::worker::{TaskError, TaskResult};
 use crate::materializer::TaskInput;
 
@@ -33,11 +32,31 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
     match blob_document {
         Some(blob_document) => {
-            // This document should be a blob document, if it isn't critically fail the task now. 
+            // This document should be a blob document, if it isn't critically fail the task now.
             if !matches!(blob_document.schema_id(), SchemaId::Blob(_)) {
                 return Err(TaskError::Critical(format!(
                     "Unexpected system schema id: {}",
                     blob_document.schema_id()
+                )));
+            }
+
+            // Determine a path for this blob file on the file system
+            let blob_view_path = context
+                .config
+                .blobs_base_path
+                .join(blob_document.view_id().to_string());
+
+            // Check if the blob has already been materialized and return early from this task
+            // with an error if it has.
+            let is_blob_materialized = OpenOptions::new()
+                .read(true)
+                .open(&blob_view_path)
+                .await
+                .is_ok();
+            if is_blob_materialized {
+                return Err(TaskError::Failure(format!(
+                    "Blob file already exists at {}",
+                    blob_view_path.display()
                 )));
             }
 
@@ -50,12 +69,6 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                 // error, for example when not all blob pieces are available yet for materialisation
                 .map_err(|err| TaskError::Failure(err.to_string()))?
                 .expect("Blob data exists at this point");
-
-            // Determine a path for this blob file on the file system
-            let blob_view_path = context
-                .config
-                .blobs_base_path
-                .join(blob_document.view_id().to_string());
 
             // Write the blob to the filesystem
             info!("Creating blob at path {}", blob_view_path.display());
@@ -146,6 +159,16 @@ mod tests {
             // It should match the complete published blob data
             assert!(retrieved_blob_data.is_ok(), "{:?}", retrieved_blob_data);
             assert_eq!(blob_data, retrieved_blob_data.unwrap());
+
+            // Run the blob task again, it should return an error as the blob was already
+            // materialized once.
+            let result = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await;
+
+            assert!(result.is_err(), "{:?}", result,);
         })
     }
 
