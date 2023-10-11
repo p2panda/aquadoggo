@@ -131,9 +131,8 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
                     TaskInput::DocumentViewId(document_view.id().clone()),
                 ));
             }
-            // Start `blob` task when a blob or blob_piece view is completed with
-            // dependencies.
-            SchemaId::Blob(_) | SchemaId::BlobPiece(_) => {
+            // Start `blob` task when a blob view is completed with dependencies.
+            SchemaId::Blob(_) => {
                 next_tasks.push(Task::new(
                     "blob",
                     TaskInput::DocumentViewId(document_view.id().clone()),
