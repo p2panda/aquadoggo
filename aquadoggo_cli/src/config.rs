@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -13,8 +13,7 @@ use colored::Colorize;
 use directories::ProjectDirs;
 use figment::providers::{Env, Format, Serialized, Toml};
 use figment::Figment;
-use libp2p::multiaddr::Protocol;
-use libp2p::{Multiaddr, PeerId};
+use libp2p::PeerId;
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::TempDir;
@@ -377,33 +376,15 @@ impl TryFrom<Configuration> for NodeConfiguration {
             network: NetworkConfiguration {
                 quic_port: value.quic_port,
                 mdns: value.mdns,
-                direct_node_addresses: value
-                    .direct_node_addresses
-                    .into_iter()
-                    .map(to_multiaddress)
-                    .collect(),
+                direct_node_addresses: value.direct_node_addresses,
                 allow_peer_ids,
                 block_peer_ids: value.block_peer_ids,
-                relay_addresses: value
-                    .relay_addresses
-                    .into_iter()
-                    .map(to_multiaddress)
-                    .collect(),
+                relay_addresses: value.relay_addresses,
                 relay_mode: value.relay_mode,
                 ..Default::default()
             },
         })
     }
-}
-
-fn to_multiaddress(socket_address: SocketAddr) -> Multiaddr {
-    let mut multiaddr = match socket_address.ip() {
-        IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
-        IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
-    };
-    multiaddr.push(Protocol::Udp(socket_address.port()));
-    multiaddr.push(Protocol::QuicV1);
-    multiaddr
 }
 
 fn try_determine_config_file_path() -> Option<PathBuf> {

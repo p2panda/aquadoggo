@@ -93,16 +93,15 @@ pub async fn network_service(
         // replication sessions, which could leave the node in a strange state.
         swarm.behaviour_mut().peers.disable();
 
-        for mut relay_address in network_config.relay_addresses.clone() {
-            if let Some(address) = utils::to_quic_address(&relay_address) {
-                info!("Connecting to relay node {}", address);
-            }
+        for relay_address in network_config.relay_addresses.clone() {
+            let mut address = utils::to_multiaddress(&relay_address);
+            info!("Connecting to relay node {}", address);
 
             // Attempt to connect to the relay node, we give this a 5 second timeout so as not to
             // get stuck if one relay is unreachable.
             if let Ok(result) = tokio::time::timeout(
                 RELAY_CONNECT_TIMEOUT,
-                connect_to_relay(&mut swarm, &mut relay_address),
+                connect_to_relay(&mut swarm, &mut address),
             )
             .await
             {
@@ -162,13 +161,10 @@ pub async fn network_service(
 
     // Dial all nodes we want to directly connect to.
     for direct_node_address in &network_config.direct_node_addresses {
-        if let Some(address) = utils::to_quic_address(direct_node_address) {
-            info!("Connecting to node @ {}", address);
-        }
+        let address = utils::to_multiaddress(direct_node_address);
+        info!("Connecting to node @ {}", address);
 
-        let opts = DialOpts::unknown_peer_id()
-            .address(direct_node_address.clone())
-            .build();
+        let opts = DialOpts::unknown_peer_id().address(address.clone()).build();
 
         match swarm.dial(opts) {
             Ok(_) => (),
