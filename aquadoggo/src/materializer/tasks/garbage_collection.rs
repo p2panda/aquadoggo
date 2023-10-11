@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::fs::remove_file;
+use tokio::fs::remove_file;
 
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
@@ -140,7 +140,7 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
                 for view_id in deleted_views {
                     // Delete this blob view from the filesystem also.
                     let blob_view_path = context.config.blobs_base_path.join(view_id.to_string());
-                    remove_file(blob_view_path.clone())
+                    remove_file(blob_view_path.clone()).await
                         .map_err(|err| TaskError::Critical(err.to_string()))?;
                     debug!("Deleted blob view from filesystem: {}", view_id);
                 }
