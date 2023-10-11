@@ -25,31 +25,22 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
         _ => return Err(TaskError::Critical("Invalid task input".into())),
     };
 
-    // Determine the schema of the updated view id.
-    let schema = context
+    let blob_document = context
         .store
-        .get_schema_by_document_view(&input_view_id)
+        .get_document_by_view_id(&input_view_id)
         .await
-        .map_err(|err| TaskError::Critical(err.to_string()))?
-        .unwrap();
-
-    let blob_document: Option<StorageDocument> = match schema {
-        // Check the schema is correct and retrieve the blob document.
-        SchemaId::Blob(_) => context
-            .store
-            .get_document_by_view_id(&input_view_id)
-            .await
-            .map_err(|err| TaskError::Failure(err.to_string()))?,
-        _ => {
-            return Err(TaskError::Critical(format!(
-                "Unexpected system schema id: {}",
-                schema
-            )))
-        }
-    };
+        .map_err(|err| TaskError::Failure(err.to_string()))?;
 
     match blob_document {
         Some(blob_document) => {
+            // This document should be a blob document, if it isn't critically fail the task now. 
+            if !matches!(blob_document.schema_id(), SchemaId::Blob(_)) {
+                return Err(TaskError::Critical(format!(
+                    "Unexpected system schema id: {}",
+                    blob_document.schema_id()
+                )));
+            }
+
             // Get a stream of raw blob data
             let mut blob_stream = context
                 .store
