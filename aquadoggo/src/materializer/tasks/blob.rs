@@ -14,7 +14,7 @@ use crate::materializer::TaskInput;
 
 /// A blob task assembles and persists blobs to the filesystem.
 ///
-/// Blob tasks are dispatched whenever a blob document has it's dependencies (pieces) available in
+/// Blob tasks are dispatched whenever a blob document has its dependencies (pieces) available in
 /// the store.
 pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInput> {
     debug!("Working on {}", input);
@@ -32,7 +32,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
     match blob_document {
         Some(blob_document) => {
-            // This document should be a blob document, if it isn't critically fail the task now.
+            // This document should be a blob document. If it isn't, critically fail the task now
             if !matches!(blob_document.schema_id(), SchemaId::Blob(_)) {
                 return Err(TaskError::Critical(format!(
                     "Unexpected system schema id: {}",
