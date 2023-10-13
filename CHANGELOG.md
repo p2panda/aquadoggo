@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deduplicate generated schema field by key in proptests [#558](https://github.com/p2panda/aquadoggo/pull/558)
 - Do not panic when blob does not have all pieces yet [#563](https://github.com/p2panda/aquadoggo/pull/563)
 - Fix `blob` tasks being triggered too often [#578](https://github.com/p2panda/aquadoggo/pull/578)
+- Fix `schema` tasks being triggered too often [#581](https://github.com/p2panda/aquadoggo/pull/581)
 
 ## [0.5.0]
 
