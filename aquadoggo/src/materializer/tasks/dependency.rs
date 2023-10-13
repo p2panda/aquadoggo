@@ -123,9 +123,9 @@ pub async fn dependency_task(context: Context, input: TaskInput) -> TaskResult<T
     let child_dependencies_met = next_tasks.is_empty();
     if child_dependencies_met {
         match document.schema_id() {
-            // Start `schema` task when a schema (field) definition view is completed with
+            // Start `schema` task when a schema definition view is completed with
             // dependencies
-            SchemaId::SchemaDefinition(_) | SchemaId::SchemaFieldDefinition(_) => {
+            SchemaId::SchemaDefinition(_) => {
                 next_tasks.push(Task::new(
                     "schema",
                     TaskInput::DocumentViewId(document_view.id().clone()),
@@ -588,46 +588,6 @@ mod tests {
             let result = dependency_task(node.context.clone(), input).await;
 
             assert!(result.is_err())
-        });
-    }
-
-    #[rstest]
-    fn dispatches_schema_tasks_for_field_definitions(
-        #[from(populate_store_config)]
-        #[with(1, 1, vec![KeyPair::new()], false, Schema::get_system(SchemaId::SchemaFieldDefinition(1)).unwrap().to_owned(), vec![
-            ("name", OperationValue::String("field_name".to_string())),
-            ("type", FieldType::String.into()),
-        ])]
-        config: PopulateStoreConfig,
-    ) {
-        test_runner(|node: TestNode| async move {
-            // Populate the store with some entries and operations but DON'T materialise any
-            // resulting documents.
-            let documents = populate_store(&node.context.store, &config).await;
-            let document_id = documents[0].id();
-
-            // Materialise the schema field definition.
-            let input = TaskInput::DocumentId(document_id.to_owned());
-            reduce_task(node.context.clone(), input.clone())
-                .await
-                .unwrap();
-
-            // Parse the document_id into a document_view_id.
-            let document_view_id = document_id.as_str().parse().unwrap();
-
-            // Dispatch a dependency task for this document_view_id.
-            let input = TaskInput::DocumentViewId(document_view_id);
-            let tasks = dependency_task(node.context.clone(), input)
-                .await
-                .unwrap()
-                .unwrap();
-
-            // Inserting a schema field definition, we expect a schema task because schema field
-            // definitions have no dependencies - every new completed field definition could be the
-            // last puzzle piece for a new schema.
-            let schema_tasks = tasks.iter().filter(|t| t.worker_name() == "schema").count();
-
-            assert_eq!(schema_tasks, 1);
         });
     }
 
