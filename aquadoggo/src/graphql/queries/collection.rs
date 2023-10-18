@@ -214,56 +214,204 @@ mod tests {
             "lyrics",
             vec![
                 // X-ray Spex : Oh Bondage Up Yours!
-                vec![("line", "Bind me, tie me, chain me to the wall".into(), None)],
-                vec![("line", "I wanna be a slave to you all".into(), None)],
-                vec![("line", "Oh bondage, up yours".into(), None)],
-                vec![("line", "Oh bondage, no more".into(), None)],
-                vec![(
-                    "line",
-                    "Chain-store chainsmoke, I consume you all".into(),
-                    None,
-                )],
-                vec![(
-                    "line",
-                    "Chain-gang chainmail, I don't think at all".into(),
-                    None,
-                )],
-                vec![(
-                    "line",
-                    "Thrash, me crush me, beat me till I fall".into(),
-                    None,
-                )],
-                vec![("line", "I wanna be a victim for you all".into(), None)],
-                vec![("line", "Bind me, tie me, chain me to the wall".into(), None)],
-                vec![("line", "I wanna be a slave to you all        ".into(), None)],
-                vec![("line", "Oh bondage, no more!".into(), None)],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 0.into(), None),
+                    ("line", "Bind me, tie me, chain me to the wall".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 1.into(), None),
+                    ("line", "I wanna be a slave to you all".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 2.into(), None),
+                    ("line", "Oh bondage, up yours".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 3.into(), None),
+                    ("line", "Oh bondage, no more".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 4.into(), None),
+                    (
+                        "line",
+                        "Chain-store chainsmoke, I consume you all".into(),
+                        None,
+                    ),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 5.into(), None),
+                    (
+                        "line",
+                        "Chain-gang chainmail, I don't think at all".into(),
+                        None,
+                    ),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 6.into(), None),
+                    (
+                        "line",
+                        "Thrash, me crush me, beat me till I fall".into(),
+                        None,
+                    ),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 7.into(), None),
+                    ("line", "I wanna be a victim for you all".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 8.into(), None),
+                    ("line", "Bind me, tie me, chain me to the wall".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 9.into(), None),
+                    ("line", "I wanna be a slave to you all        ".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 10.into(), None),
+                    ("line", "Oh bondage, no more!".into(), None),
+                ],
                 // Gang of Four : Natural's Not In
-                vec![("line", "The problem of leisure".into(), None)],
-                vec![("line", "What to do for pleasure".into(), None)],
-                vec![("line", "Ideal love, a new purchase".into(), None)],
-                vec![("line", "A market of the senses".into(), None)],
-                vec![("line", "Dream of the perfect life".into(), None)],
-                vec![("line", "Economic circumstances".into(), None)],
-                vec![("line", "The body is good business".into(), None)],
-                vec![("line", "Sell out, maintain the interest".into(), None)],
-                vec![("line", "Remember Lot's wife".into(), None)],
-                vec![("line", "Renounce all sin and vice".into(), None)],
-                vec![("line", "Dream of the perfect life".into(), None)],
-                vec![("line", "This heaven gives me migraine".into(), None)],
-                vec![("line", "The problem of leisure".into(), None)],
-                vec![("line", "What to do for pleasure".into(), None)],
-                vec![("line", "Coercion of the senses".into(), None)],
-                vec![("line", "We're not so gullible".into(), None)],
-                vec![("line", "Our great expectations".into(), None)],
-                vec![("line", "A future for the good".into(), None)],
-                vec![("line", "Fornication makes you happy".into(), None)],
-                vec![("line", "No escape from society".into(), None)],
-                vec![("line", "Natural is not in it".into(), None)],
-                vec![("line", "Your relations are of power".into(), None)],
-                vec![("line", "We all have good intentions".into(), None)],
-                vec![("line", "But all with strings attached".into(), None)],
-                vec![("line", "Repackaged sex (keeps) your interest".into(), None)],
-                vec![("line", "This heaven gives me migraine".into(), None)],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 11.into(), None),
+                    ("line", "The problem of leisure".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 12.into(), None),
+                    ("line", "What to do for pleasure".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 13.into(), None),
+                    ("line", "Ideal love, a new purchase".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 14.into(), None),
+                    ("line", "A market of the senses".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 15.into(), None),
+                    ("line", "Dream of the perfect life".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 16.into(), None),
+                    ("line", "Economic circumstances".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 17.into(), None),
+                    ("line", "The body is good business".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 18.into(), None),
+                    ("line", "Sell out, maintain the interest".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 19.into(), None),
+                    ("line", "Remember Lot's wife".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 20.into(), None),
+                    ("line", "Renounce all sin and vice".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 21.into(), None),
+                    ("line", "Dream of the perfect life".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 22.into(), None),
+                    ("line", "This heaven gives me migraine".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 23.into(), None),
+                    ("line", "The problem of leisure".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 24.into(), None),
+                    ("line", "What to do for pleasure".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 25.into(), None),
+                    ("line", "Coercion of the senses".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 26.into(), None),
+                    ("line", "We're not so gullible".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 27.into(), None),
+                    ("line", "Our great expectations".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 28.into(), None),
+                    ("line", "A future for the good".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 29.into(), None),
+                    ("line", "Fornication makes you happy".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 30.into(), None),
+                    ("line", "No escape from society".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 31.into(), None),
+                    ("line", "Natural is not in it".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 32.into(), None),
+                    ("line", "Your relations are of power".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 33.into(), None),
+                    ("line", "We all have good intentions".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 34.into(), None),
+                    ("line", "But all with strings attached".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 35.into(), None),
+                    ("line", "Repackaged sex (keeps) your interest".into(), None),
+                ],
+                vec![
+                    ("font", "comic-sans".into(), None),
+                    ("index", 36.into(), None),
+                    ("line", "This heaven gives me migraine".into(), None),
+                ],
             ],
             key_pair,
         )
@@ -1178,6 +1326,74 @@ mod tests {
             )
             .await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 0);
+        })
+    }
+
+    #[rstest]
+    fn paginated_query_with_ordering_and_filtering(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            async fn next_page(
+                client: &TestClient,
+                schema: &Schema,
+                first: usize,
+                end_cursor: Option<&String>,
+                filter_value: &String,
+            ) -> (usize, usize, String, bool) {
+                let after = if let Some(end_cursor) = end_cursor {
+                    format!("after: {end_cursor}, ")
+                } else {
+                    String::new()
+                };
+
+                let data = query_lyrics(
+                    client,
+                    schema.id(),
+                    &format!("(first: {first}, {after} orderBy: line, orderDirection: DESC, filter: {{ line: {{ contains: \"{filter_value}\" }} }})"),
+                )
+                .await;
+
+                let documents = data["query"]["documents"].as_array().unwrap().len();
+                let total_count = data["query"]["totalCount"].clone().as_i64().unwrap();
+                let end_cursor = data["query"]["endCursor"].clone().to_string();
+                let has_next_page = data["query"]["hasNextPage"].clone().as_bool().unwrap();
+                return (documents, total_count as usize, end_cursor, has_next_page);
+            }
+
+            // Publish some lyrics to the node.
+            let (lyric_schema, _) = here_be_some_lyrics(&mut node, &key_pair).await;
+
+            // Init a GraphQL client we'll use to query the node.
+            let client = http_test_client(&node).await;
+
+            // We're making paginated queries and filtering by a string value.
+            let page_size = 3;
+            let filter_value = String::from("m");
+            let mut acc = 0;
+
+            // Make the initial paginated request.
+            let (mut page_count, mut total_count, mut end_cursor, mut has_next_page) =
+                next_page(&client, &lyric_schema, page_size, None, &filter_value).await;
+
+            // Add the page count to the accumulator.
+            acc += page_count;
+
+            // Now while there is a next page we keep querying.
+            while has_next_page {
+                (page_count, total_count, end_cursor, has_next_page) = next_page(
+                    &client,
+                    &lyric_schema,
+                    page_size,
+                    Some(&end_cursor),
+                    &filter_value,
+                )
+                .await;
+
+                // Add the page count to the accumulator.
+                acc += page_count;
+            }
+
+            // We should have received the same number of documents as the total count.
+            assert_eq!(acc, total_count);
         })
     }
 
