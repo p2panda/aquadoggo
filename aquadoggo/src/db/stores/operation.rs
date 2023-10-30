@@ -410,7 +410,6 @@ impl From<&DocumentViewFieldRow> for OperationCursor {
 
 #[cfg(test)]
 mod tests {
-    use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId};
     use p2panda_rs::identity::{KeyPair, PublicKey};
@@ -602,11 +601,17 @@ mod tests {
             assert_eq!(operations_by_document_id.len(), 10);
 
             // The operations should be in their topologically sorted order.
-            let operations = DocumentBuilder::from(&operations_by_document_id).operations();
-            let expected_operation_order =
-                build_graph(&operations).unwrap().sort().unwrap().sorted();
+            let document_builder = DocumentBuilder::from(&operations_by_document_id);
+            let (_, expected_operation_order) = document_builder.build().unwrap();
 
-            assert_eq!(operations, expected_operation_order);
+            assert_eq!(
+                operations_by_document_id.len(),
+                expected_operation_order.len()
+            );
+            for i in 0..operations_by_document_id.len() {
+                let operation_id: &OperationId = operations_by_document_id[i].id();
+                assert_eq!(operation_id, &expected_operation_order[i].0)
+            }
         });
     }
 
