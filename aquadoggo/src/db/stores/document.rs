@@ -783,7 +783,6 @@ async fn insert_document(
 #[cfg(test)]
 mod tests {
     use p2panda_rs::api::next_args;
-    use p2panda_rs::document::materialization::build_graph;
     use p2panda_rs::document::traits::AsDocument;
     use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewFields, DocumentViewId};
     use p2panda_rs::entry::{LogId, SeqNum};
@@ -827,7 +826,7 @@ mod tests {
 
             // Build the document from the operations.
             let document_builder = DocumentBuilder::from(&operations);
-            let document = document_builder.build().unwrap();
+            let (document, _) = document_builder.build().unwrap();
 
             // Insert the document into the store
             let result = node.context.store.insert_document(&document).await;
@@ -843,8 +842,8 @@ mod tests {
             .to_owned();
 
             // Build the document with just the first operation.
-            let document_at_view_1 = document_builder
-                .build_to_view_id(Some(create_operation.into()))
+            let (document_at_view_1, _) = document_builder
+                .build_to_view_id(create_operation.into())
                 .unwrap();
 
             // Insert it into the store as well.
@@ -1097,11 +1096,7 @@ mod tests {
                 .await
                 .unwrap();
             let document_builder = DocumentBuilder::from(&operations);
-            let sorted_operations = build_graph(&document_builder.operations())
-                .unwrap()
-                .sort()
-                .unwrap()
-                .sorted();
+            let (_, sorted_operations) = document_builder.build().unwrap();
 
             // We want to test that a document is updated.
             let mut current_operations = Vec::new();
@@ -1112,7 +1107,7 @@ mod tests {
                 current_operations.push(operation.clone());
 
                 // We build each document.
-                let document = DocumentBuilder::new(current_operations.clone())
+                let (document, _) = DocumentBuilder::new(current_operations.clone())
                     .build()
                     .expect("Build document");
 

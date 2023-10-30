@@ -3171,8 +3171,9 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "p2panda-rs"
-version = "0.7.1"
-source = "git+https://github.com/p2panda/p2panda?rev=06b2fee74b40c779d85a0ef3b37bab8386b164ca#06b2fee74b40c779d85a0ef3b37bab8386b164ca"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cacd81a36e7fb04d4b6fcea3023885f65fc9f97cfb1739b7e5c9d1c183a83d44"
 dependencies = [
  "arrayvec 0.5.2",
  "async-trait",

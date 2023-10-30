@@ -563,15 +563,15 @@ pub async fn populate_store(store: &SqlStore, config: &PopulateStoreConfig) -> V
                 // Conditionally create or update the document.
                 if let Some(mut document) = current_document {
                     document
-                        .commit(&published_operation)
+                        .commit(&published_operation.0, &published_operation)
                         .expect("Failed updating document");
                     current_document = Some(document);
                 } else {
-                    current_document = Some(
-                        DocumentBuilder::from(&vec![published_operation])
-                            .build()
-                            .expect("Failed to build document"),
-                    );
+                    let (document, _) = DocumentBuilder::from(&vec![published_operation])
+                        .build()
+                        .expect("Failed to build document");
+
+                    current_document = Some(document);
                 }
 
                 // Set values used in the next iteration.
