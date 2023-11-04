@@ -93,7 +93,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
 
             while let Some(value) = stream.next().await {
                 match value {
-                    Ok(buf) => file.write(&buf).await.map_err(|err| {
+                    Ok(buf) => file.write_all(&buf).await.map_err(|err| {
                         TaskError::Critical(format!(
                             "Error occurred when writing to blob file @ {}: {}",
                             blob_view_path.display(),
@@ -169,6 +169,46 @@ mod tests {
             .await;
 
             assert!(result.is_err(), "{:?}", result,);
+        })
+    }
+
+    #[rstest]
+    fn materializes_larger_blob_to_filesystem(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish blob
+            let length = 10e6 as u32; // 5MB
+            let blob_data: Vec<u8> = (0..length).map(|_| rand::random::<u8>()).collect();
+            let blob_view_id = add_blob(
+                &mut node,
+                &blob_data,
+                256 * 1000,
+                "application/octet-stream",
+                &key_pair,
+            )
+            .await;
+
+            // Run blob task
+            let result = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await;
+
+            // It shouldn't fail
+            assert!(result.is_ok());
+            // It should return no extra tasks
+            assert!(result.unwrap().is_none());
+
+            // Construct the expected path to the blob view file
+            let base_path = &node.context.config.blobs_base_path;
+            let blob_path = base_path.join(blob_view_id.to_string());
+
+            // Read from this file
+            let retrieved_blob_data = fs::read(blob_path).await;
+
+            // Number of bytes for the publish and materialized blob should be the same
+            assert!(retrieved_blob_data.is_ok());
+            assert_eq!(blob_data.len(), retrieved_blob_data.unwrap().len());
         })
     }
 
