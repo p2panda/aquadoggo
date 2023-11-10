@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::fmt::Display;
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use p2panda_rs::document::DocumentId;
@@ -368,6 +369,53 @@ impl SqlStore {
             .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
 
         Ok(())
+    }
+
+    /// Get all operations that are part of a given document.
+    pub async fn get_operation_ids_by_document_id_batch(
+        &self,
+        document_ids: &[DocumentId],
+    ) -> Result<Vec<OperationId>, OperationStorageError> {
+        // already return here if an empty vec of document ids was passed.
+        if document_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let args = document_ids
+            .iter()
+            .map(|id| format!("'{id}'"))
+            .collect::<Vec<String>>()
+            .join(",");
+
+        let operation_ids: Vec<String> = query_scalar(
+            &format!("
+            SELECT
+                operations_v1.operation_id
+            FROM
+                operations_v1
+            WHERE
+                operations_v1.document_id IN ( {args} )
+            ORDER BY
+                -- order the operations by document, their index when topologically sorted, in the case 
+                -- where this may not be set yet we fall back to ordering by operation id. In both cases
+                -- we additionally order by list index.
+                operations_v1.document_id ASC, 
+                operations_v1.sorted_index ASC, 
+                operations_v1.operation_id ASC
+            "),
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        if operation_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        Ok(operation_ids
+            .iter()
+            .map(|id_str| OperationId::from_str(id_str).expect("Values from database are valid"))
+            .collect())
     }
 }
 

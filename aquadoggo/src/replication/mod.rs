@@ -29,6 +29,7 @@ pub const ANNOUNCE_TYPE: MessageType = 0;
 pub const SYNC_REQUEST_TYPE: MessageType = 1;
 pub const ENTRY_TYPE: MessageType = 2;
 pub const SYNC_DONE_TYPE: MessageType = 3;
+pub const SET_RECONCILIATION_TYPE: MessageType = 4;
 pub const HAVE_TYPE: MessageType = 10;
 
 /// Currently supported p2panda replication protocol version.

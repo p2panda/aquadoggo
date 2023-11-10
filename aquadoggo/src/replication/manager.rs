@@ -17,7 +17,7 @@ use crate::replication::{
 
 pub const INITIAL_SESSION_ID: SessionId = 0;
 
-pub const SUPPORTED_MODES: [Mode; 1] = [Mode::LogHeight];
+pub const SUPPORTED_MODES: [Mode; 2] = [Mode::LogHeight, Mode::SetReconciliation];
 
 pub const SUPPORT_LIVE_MODE: bool = false;
 
@@ -1029,14 +1029,14 @@ mod tests {
             let result = manager.handle_message(&peer_id_remote, &message).await;
             assert!(result.is_ok());
 
-            // Should fail when requesting unsupported replication mode
+            // Now also supported replication mode!
             let mut manager = SyncManager::new(node.context.store.clone(), ingest, peer_id_local);
             let message = SyncMessage::new(
                 INITIAL_SESSION_ID,
                 Message::SyncRequest(Mode::SetReconciliation, target_set.clone()),
             );
             let result = manager.handle_message(&peer_id_remote, &message).await;
-            assert!(result.is_err());
+            assert!(result.is_ok());
         })
     }
 

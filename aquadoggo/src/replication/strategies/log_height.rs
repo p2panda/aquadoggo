@@ -5,41 +5,23 @@ use std::collections::HashMap;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::trace;
-use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::DocumentId;
 use p2panda_rs::entry::traits::{AsEncodedEntry, AsEntry};
 use p2panda_rs::entry::{LogId, SeqNum};
 use p2panda_rs::identity::PublicKey;
-use p2panda_rs::schema::{Schema, SchemaId};
-use p2panda_rs::storage_provider::traits::{DocumentStore, OperationStore};
+use p2panda_rs::storage_provider::traits::OperationStore;
 use p2panda_rs::Human;
 
 use crate::db::types::StorageEntry;
 use crate::db::SqlStore;
 use crate::replication::errors::ReplicationError;
 use crate::replication::strategies::diff_log_heights;
+use crate::replication::strategies::included_document_ids;
 use crate::replication::traits::Strategy;
 use crate::replication::{LogHeights, Message, Mode, SchemaIdSet, StrategyResult};
 use crate::schema::SchemaProvider;
 
 type SortedIndex = i32;
-
-fn has_blob_relation(schema: &Schema) -> bool {
-    for (_, field_type) in schema.fields().iter() {
-        match field_type {
-            p2panda_rs::schema::FieldType::Relation(schema_id)
-            | p2panda_rs::schema::FieldType::RelationList(schema_id)
-            | p2panda_rs::schema::FieldType::PinnedRelation(schema_id)
-            | p2panda_rs::schema::FieldType::PinnedRelationList(schema_id) => {
-                if schema_id == &SchemaId::Blob(1) {
-                    return true;
-                }
-            }
-            _ => (),
-        }
-    }
-    false
-}
 
 /// Retrieve entries from the store, group the result by document id and then sub-order them by
 /// their sorted index.
@@ -102,88 +84,6 @@ impl LogHeightStrategy {
         }
     }
 
-    /// Calculate the documents which should be included in this replication session.
-    ///
-    /// This is based on the schema ids included in the target set and any document dependencies
-    /// which we have on our local node. Documents which are of type `blob_v1` are only included
-    /// if the `blob_v1` schema is included in the target set _and_ the blob document is related
-    /// to from another document (also of a schema included in the target set). The same is true
-    /// of `blob_piece_v1` documents. These are only included if a blob document is also included
-    /// which relates to them.
-    ///
-    /// For example, a target set including the schema id `[img_0020, blob_v1]` would look at all
-    /// `img_0020` documents and only include blobs which they relate to.
-    async fn included_document_ids(&self, store: &SqlStore) -> Vec<DocumentId> {
-        let wants_blobs = self.target_set().contains(&SchemaId::Blob(1));
-        let wants_blob_pieces = self.target_set().contains(&SchemaId::BlobPiece(1));
-        let mut all_target_documents = vec![];
-        let mut all_blob_documents = vec![];
-        let mut all_blob_piece_documents = vec![];
-        for schema_id in self.target_set().iter() {
-            // If the schema is `blob_v1` or `blob_piece_v1` we don't take any action and just
-            // move onto the next loop as these types of documents are only included as part of
-            // other application documents.
-            if schema_id == &SchemaId::Blob(1) || schema_id == &SchemaId::BlobPiece(1) {
-                continue;
-            }
-
-            // Check if documents of this type contain a relation to a blob document.
-            let has_blob_relation = match self.schema_provider.get(schema_id).await {
-                Some(schema) => has_blob_relation(&schema),
-                None => false,
-            };
-
-            // Get the ids of all documents of this schema.
-            let schema_documents: Vec<DocumentId> = store
-                .get_documents_by_schema(schema_id)
-                .await
-                .unwrap()
-                .iter()
-                .map(|document| document.id())
-                .cloned()
-                .collect();
-
-            let mut schema_blob_documents = vec![];
-
-            // If the target set included `blob_v1` schema_id then we collect any related blob documents.
-            if wants_blobs && has_blob_relation {
-                for document_id in &schema_documents {
-                    let blob_documents = store.get_blob_child_relations(document_id).await.unwrap();
-                    schema_blob_documents.extend(blob_documents)
-                }
-            }
-
-            // If `blob_piece_v1` is included in the target set.
-            if wants_blob_pieces && has_blob_relation {
-                for blob_id in &schema_blob_documents {
-                    // Get all existing views for this blob document.
-                    let blob_document_view_ids = store
-                        .get_all_document_view_ids(blob_id)
-                        .await
-                        .expect("Fatal database error");
-                    for blob_view_id in blob_document_view_ids {
-                        // Get all pieces for each blob view.
-                        let blob_piece_ids = store
-                            .get_child_document_ids(&blob_view_id)
-                            .await
-                            .expect("Fatal database error");
-                        all_blob_piece_documents.extend(blob_piece_ids)
-                    }
-                }
-            }
-
-            all_target_documents.extend(schema_documents);
-            all_blob_documents.extend(schema_blob_documents);
-        }
-
-        let mut all_included_document_ids = vec![];
-        all_included_document_ids.extend(all_target_documents);
-        all_included_document_ids.extend(all_blob_documents);
-        all_included_document_ids.extend(all_blob_piece_documents);
-
-        all_included_document_ids
-    }
-
     // Calculate the heights of all logs which contain contributions to documents in the current
     // `SchemaIdSet`.
     async fn local_log_heights(
@@ -210,7 +110,8 @@ impl LogHeightStrategy {
         remote_log_heights: &[LogHeights],
     ) -> Vec<Message> {
         // Calculate which documents should be included in the log height.
-        let included_document_ids = self.included_document_ids(store).await;
+        let included_document_ids =
+            included_document_ids(store, &self.schema_provider, &self.target_set()).await;
 
         // Get local log heights for the configured target set.
         let local_log_heights = self.local_log_heights(store, &included_document_ids).await;
@@ -252,7 +153,8 @@ impl Strategy for LogHeightStrategy {
 
     async fn initial_messages(&mut self, store: &SqlStore) -> StrategyResult {
         // Calculate which documents should be included in the log height.
-        let included_document_ids = self.included_document_ids(store).await;
+        let included_document_ids =
+            included_document_ids(store, &self.schema_provider, &self.target_set()).await;
 
         let log_heights = self.local_log_heights(store, &included_document_ids).await;
         self.sent_have = true;
@@ -322,6 +224,7 @@ mod tests {
     use crate::materializer::tasks::reduce_task;
     use crate::materializer::TaskInput;
     use crate::replication::ingest::SyncIngest;
+    use crate::replication::strategies::included_document_ids;
     use crate::replication::strategies::log_height::{retrieve_entries, SortedIndex};
     use crate::replication::{LogHeightStrategy, LogHeights, Message, SchemaIdSet};
     use crate::test_utils::{
@@ -639,9 +542,12 @@ mod tests {
             let strategy_a =
                 LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
 
-            let included_document_ids = strategy_a
-                .included_document_ids(&node_a.context.store)
-                .await;
+            let included_document_ids = included_document_ids(
+                &node_a.context.store,
+                &node_a.context.schema_provider,
+                &target_set,
+            )
+            .await;
 
             let log_heights = strategy_a
                 .local_log_heights(&node_a.context.store, &included_document_ids)
@@ -693,9 +599,12 @@ mod tests {
             let strategy_a =
                 LogHeightStrategy::new(&target_set, node_a.context.schema_provider.clone());
 
-            let included_document_ids = strategy_a
-                .included_document_ids(&node_a.context.store)
-                .await;
+            let included_document_ids = included_document_ids(
+                &node_a.context.store,
+                &node_a.context.schema_provider,
+                &target_set,
+            )
+            .await;
 
             assert!(included_document_ids.is_empty());
 
