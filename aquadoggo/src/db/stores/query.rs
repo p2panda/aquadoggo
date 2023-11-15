@@ -920,15 +920,15 @@ fn order_sql(
     // Order by document view id, except of if it was selected manually. We need this to assemble
     // the rows to documents correctly at the end
     let id_sql = {
-        // Skip this step when only one field was selected for this query to not mess with the
-        // order as soon as there are duplicate ordered fields
-        if fields.len() == 1 {
-            None
-        } else {
+        if fields.len() > 1 {
             match order.field {
                 Some(Field::Meta(MetaField::DocumentViewId)) => None,
                 _ => Some("documents.document_view_id ASC".to_string()),
             }
+        } else {
+            // Skip this step when none or only one field was selected for this query to not mess
+            // with the order as soon as there are duplicate ordered fields
+            None
         }
     };
 
