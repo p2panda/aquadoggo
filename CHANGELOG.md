@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use `libp2p` `0.5.3` [#570](https://github.com/p2panda/aquadoggo/pull/570)
 - Optimize test data generation methods [#572](https://github.com/p2panda/aquadoggo/pull/572)
 - Use `SocketAddr` in network config instead of `MultiAddr` [#576](https://github.com/p2panda/aquadoggo/pull/576)
+- Use `p2panda-rs` `0.8.0` [#585](https://github.com/p2panda/aquadoggo/pull/585)
 
 ## Fixed
 
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Do not panic when blob does not have all pieces yet [#563](https://github.com/p2panda/aquadoggo/pull/563)
 - Fix `blob` tasks being triggered too often [#578](https://github.com/p2panda/aquadoggo/pull/578)
 - Fix `schema` tasks being triggered too often [#581](https://github.com/p2panda/aquadoggo/pull/581)
+- Fix blobs getting corrupted when written to the file system [#587](https://github.com/p2panda/aquadoggo/pull/587)
 
 ## [0.5.0]
 
