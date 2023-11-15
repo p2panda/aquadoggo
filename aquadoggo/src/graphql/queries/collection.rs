@@ -274,7 +274,7 @@ mod tests {
                 vec![
                     ("font", "comic-sans".into(), None),
                     ("index", 9.into(), None),
-                    ("line", "I wanna be a slave to you all        ".into(), None),
+                    ("line", "I wanna be a slave to you all".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
@@ -559,7 +559,7 @@ mod tests {
                 "documents": [
                     {
                         "cursor": "27ECgmQpeuQwMKtCZxkbJUtCvkZDLuayQKv9zkV5uKx1xMHBeeSBasdhvoZwcgXLC5mnv7QR9HW11gjhH57D1mjs",
-                        "fields": { 
+                        "fields": {
                             "bool": false,
                             "data": "04050607",
                         },
@@ -571,7 +571,7 @@ mod tests {
                     },
                     {
                         "cursor": "32Zn29gCkVQfdCBqnau1WWu4xVKYjmU5F1SPgoZ3sW6GALcbY22EGxEL2K8aNRPQaxppPGfUjSR41Xg9NyayD613",
-                        "fields": { 
+                        "fields": {
                             "bool": true,
                             "data": "00010203"
                         },
@@ -627,7 +627,7 @@ mod tests {
                 "documents": [
                     {
                         "cursor": "32Zn29gCkVQfdCBqnau1WWu4xVKYjmU5F1SPgoZ3sW6GALcbY22EGxEL2K8aNRPQaxppPGfUjSR41Xg9NyayD613",
-                        "fields": { 
+                        "fields": {
                             "bool": true,
                             "data": "00010203",
                         },
@@ -1348,15 +1348,30 @@ mod tests {
                 let data = query_lyrics(
                     client,
                     schema.id(),
-                    &format!("(first: {first}, {after} orderBy: line, orderDirection: DESC, filter: {{ line: {{ contains: \"{filter_value}\" }} }})"),
+                    &format!(
+                        "(
+                            first: {first},
+                            {after}
+                            orderBy: line,
+                            orderDirection: DESC,
+                            filter: {{
+                                line: {{ contains: \"{filter_value}\" }}
+                            }}
+                        )"
+                    ),
                 )
                 .await;
 
-                let documents = data["query"]["documents"].as_array().unwrap().len();
+                let documents_len = data["query"]["documents"].as_array().unwrap().len();
                 let total_count = data["query"]["totalCount"].clone().as_i64().unwrap();
                 let end_cursor = data["query"]["endCursor"].clone().to_string();
                 let has_next_page = data["query"]["hasNextPage"].clone().as_bool().unwrap();
-                return (documents, total_count as usize, end_cursor, has_next_page);
+                return (
+                    documents_len,
+                    total_count as usize,
+                    end_cursor,
+                    has_next_page,
+                );
             }
 
             // Publish some lyrics to the node.
