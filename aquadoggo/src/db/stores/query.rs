@@ -926,8 +926,15 @@ fn order_sql(
                 _ => Some("documents.document_view_id ASC".to_string()),
             }
         } else {
-            // Skip this step when none or only one field was selected for this query to not mess
-            // with the order as soon as there are duplicate ordered fields
+            // Skip this step when only _one_ field was selected for this query to not mess with
+            // pagination.
+            //
+            // We're relying on the "cursor" being the tie-breaker for duplicates. If we would
+            // still order by document view id, this would become undesirably our tie-breaker
+            // instead - as every field is automatically another unique document when only one was
+            // selected hence we will never order by cursor on top of that.
+            //
+            // When no field was selected we just skip this ordering to simplify the query.
             None
         }
     };
