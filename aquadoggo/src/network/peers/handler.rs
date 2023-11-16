@@ -249,9 +249,11 @@ impl ConnectionHandler for Handler {
             return KeepAlive::Yes;
         }
 
+        #[allow(deprecated)]
         KeepAlive::Until(self.last_io_activity + IDLE_TIMEOUT)
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

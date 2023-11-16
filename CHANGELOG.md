@@ -28,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use `libp2p` `0.5.3` [#570](https://github.com/p2panda/aquadoggo/pull/570)
 - Optimize test data generation methods [#572](https://github.com/p2panda/aquadoggo/pull/572)
 - Use `SocketAddr` in network config instead of `MultiAddr` [#576](https://github.com/p2panda/aquadoggo/pull/576)
-- Use `p2panda-rs` `0.8.0` [#585](https://github.com/p2panda/aquadoggo/pull/585)
+- Update `p2panda-rs` to `0.8.0` [#585](https://github.com/p2panda/aquadoggo/pull/585)
+- Update `libp2p` to `0.52.4` [#596](https://github.com/p2panda/aquadoggo/pull/596)
 
 ## Fixed
 
