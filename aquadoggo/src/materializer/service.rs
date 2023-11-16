@@ -227,7 +227,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(500)).await;
 
             // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
+            assert!(!handle.is_finished());
 
             // Check database for materialized documents
             let document = node
@@ -300,7 +300,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
+            assert!(!handle.is_finished());
 
             // Check database for materialized documents
             let document = node
@@ -386,7 +386,7 @@ mod tests {
                     SCHEMA_ID.parse().unwrap(),
                     "A test schema",
                 ),
-                &key_pair,
+                key_pair,
             )
             .await
             .expect("Publish entry");
@@ -401,7 +401,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(500)).await;
 
             // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
+            assert!(!handle.is_finished());
 
             // Check database for materialized documents
             let document = node
@@ -473,7 +473,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(200)).await;
 
             // Make sure the service did not crash and is still running
-            assert_eq!(handle.is_finished(), false);
+            assert!(!handle.is_finished());
 
             // Check database for materialized documents
             let document = node

@@ -592,7 +592,7 @@ mod tests {
             let announcement = Announcement::new(supported_schema_ids.clone());
             manager
                 .handle_service_message(ServiceMessage::ReceivedMessage(
-                    remote_peer.clone(),
+                    remote_peer,
                     PeerMessage::Announce(AnnouncementMessage::new(announcement.clone())),
                 ))
                 .await;

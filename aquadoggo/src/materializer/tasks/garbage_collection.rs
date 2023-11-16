@@ -542,7 +542,7 @@ mod tests {
         test_runner(|mut node: TestNode| async move {
             // Create a blob document
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Run a blob task which persists the blob to the filesystem.
@@ -636,7 +636,7 @@ mod tests {
         test_runner(|mut node: TestNode| async move {
             // Create a blob document
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Run a blob task which persists the blob to the filesystem.
@@ -728,7 +728,7 @@ mod tests {
         test_runner(|mut node: TestNode| async move {
             // Create a blob document.
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let blob_document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Run a blob task which persists the blob to the filesystem.
@@ -823,7 +823,7 @@ mod tests {
             // Any type of relation can keep a blob alive, here we create one of each and run
             // garbage collection tasks for each blob.
 
-            let blob_view_id_1 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id_1 = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",
@@ -836,7 +836,7 @@ mod tests {
             )
             .await;
 
-            let blob_view_id_2 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id_2 = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",
@@ -849,7 +849,7 @@ mod tests {
             )
             .await;
 
-            let blob_view_id_3 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id_3 = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",
@@ -866,7 +866,7 @@ mod tests {
             )
             .await;
 
-            let blob_view_id_4 = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id_4 = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let _ = add_schema_and_documents(
                 &mut node,
                 "img",

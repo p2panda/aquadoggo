@@ -193,7 +193,7 @@ mod tests {
     fn responds_with_blob_in_http_body(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Make sure to materialize blob on file system
@@ -231,7 +231,7 @@ mod tests {
     fn document_route_responds_with_latest_view(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Make sure to materialize blob on file system
@@ -245,7 +245,7 @@ mod tests {
             // Update the blob
             let blob_data = "Hello, Panda!".as_bytes();
             let blob_view_id_2 =
-                update_blob(&mut node, &blob_data, 6, &blob_view_id, &key_pair).await;
+                update_blob(&mut node, blob_data, 6, &blob_view_id, &key_pair).await;
 
             blob_task(
                 node.context.clone(),
@@ -277,7 +277,7 @@ mod tests {
             .as_bytes();
             let blob_view_id = add_blob(
                 &mut node,
-                &blob_data,
+                blob_data,
                 MAX_BLOB_PIECE_LENGTH,
                 "image/svg+xml",
                 &key_pair,
@@ -313,7 +313,7 @@ mod tests {
     fn handles_etag_and_if_none_match_precondition(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Make sure to materialize blob on file system
@@ -350,7 +350,7 @@ mod tests {
             // 3. Update the blob
             let blob_data = "Hello, Panda!".as_bytes();
             let blob_view_id_2 =
-                update_blob(&mut node, &blob_data, 6, &blob_view_id, &key_pair).await;
+                update_blob(&mut node, blob_data, 6, &blob_view_id, &key_pair).await;
 
             // Make sure to materialize blob on file system
             blob_task(
