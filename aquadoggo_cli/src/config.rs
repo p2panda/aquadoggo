@@ -292,17 +292,24 @@ pub struct Configuration {
 
 impl Default for Configuration {
     fn default() -> Self {
-        // Give each in-memory SQLite database an unique name as we're observing funny issues with
-        // SQLite sharing data between processes (!) and breaking each others databases
-        // potentially.
-        //
-        // See related issue: https://github.com/p2panda/aquadoggo/issues/568
-        let db_name = format!("dbmem{}", rand::random::<u32>());
+        let database_url = {
+            // Give each in-memory SQLite database an unique name as we're observing funny issues with
+            // SQLite sharing data between processes (!) and breaking each others databases
+            // potentially.
+            //
+            // See related issue: https://github.com/p2panda/aquadoggo/issues/568
+            let db_name = format!("dbmem{}", rand::random::<u32>());
+
+            // Set "mode=memory" to enable SQLite running in-memory and set "cache=shared", as
+            // setting it to "private" would break SQLite in a multi-thread runtime (for unknown
+            // reasons so far, it seems to work in Rust tests which are single-threaded).
+            format!("sqlite://file:{db_name}?mode=memory&cache=shared")
+        };
 
         Self {
             log_level: "off".into(),
             allow_schema_ids: UncheckedAllowList::Wildcard,
-            database_url: format!("sqlite://{db_name}?mode=memory&cache=private"),
+            database_url,
             database_max_connections: 32,
             http_port: 2020,
             quic_port: 2022,
@@ -478,7 +485,9 @@ pub fn print_config(
         AllowList::Wildcard => format!("{WILDCARD} (any schema id)"),
     };
 
-    let database_url = if config.database_url == "sqlite::memory:" {
+    let database_url = if config.database_url == "sqlite::memory:"
+        || config.database_url.contains("mode=memory")
+    {
         "memory (data is not persisted)".into()
     } else if config.database_url.contains("sqlite:") {
         format!("SQLite: {}", config.database_url)
