@@ -292,10 +292,17 @@ pub struct Configuration {
 
 impl Default for Configuration {
     fn default() -> Self {
+        // Give each in-memory SQLite database an unique name as we're observing funny issues with
+        // SQLite sharing data between processes (!) and breaking each others databases
+        // potentially.
+        //
+        // See related issue: https://github.com/p2panda/aquadoggo/issues/568
+        let db_name = format!("dbmem{}", rand::random::<u32>());
+
         Self {
             log_level: "off".into(),
             allow_schema_ids: UncheckedAllowList::Wildcard,
-            database_url: "sqlite::memory:".into(),
+            database_url: format!("sqlite://{db_name}?mode=memory&cache=private"),
             database_max_connections: 32,
             http_port: 2020,
             quic_port: 2022,
