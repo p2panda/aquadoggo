@@ -301,8 +301,9 @@ impl Default for Configuration {
             let db_name = format!("dbmem{}", rand::random::<u32>());
 
             // Set "mode=memory" to enable SQLite running in-memory and set "cache=shared", as
-            // setting it to "private" would break SQLite in a multi-thread runtime (for unknown
-            // reasons so far, it seems to work in Rust tests which are single-threaded).
+            // setting it to "private" would break sqlx / SQLite.
+            //
+            // See related issue: https://github.com/launchbadge/sqlx/issues/2510
             format!("sqlite://file:{db_name}?mode=memory&cache=shared")
         };
 
