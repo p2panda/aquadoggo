@@ -25,7 +25,7 @@ impl Default for TestConfiguration {
         let db_name = format!("dbmem{}", rand::random::<u32>());
 
         Self {
-            /// SQLite database stored in memory.
+            // SQLite database stored in memory.
             database_url: format!("sqlite://{db_name}?mode=memory&cache=private"),
         }
     }

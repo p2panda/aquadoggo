@@ -230,6 +230,7 @@ impl NetworkBehaviour for Behaviour {
 #[cfg(test)]
 mod tests {
     use futures::FutureExt;
+    #[allow(deprecated)]
     use libp2p::swarm::{keep_alive, ConnectionId, Swarm};
     use libp2p_swarm_test::SwarmExt;
     use p2panda_rs::schema::SchemaId;
@@ -275,6 +276,7 @@ mod tests {
     async fn incompatible_network_behaviour() {
         // Create two swarms
         let mut swarm_1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
+        #[allow(deprecated)]
         let mut swarm_2 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
 
         // Listen on swarm_1 and connect from swarm_2, this should establish a bi-directional connection.
