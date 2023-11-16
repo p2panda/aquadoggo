@@ -386,7 +386,7 @@ mod tests {
                     schema.id().to_owned(),
                 ),
                 &schema,
-                &key_pair,
+                key_pair,
             )
             .await
             .unwrap();
@@ -642,7 +642,7 @@ mod tests {
                     schema.id().to_owned(),
                 ),
                 &schema,
-                &key_pair,
+                key_pair,
             )
             .await
             .unwrap();
@@ -652,7 +652,7 @@ mod tests {
             let pre_materialization_operations = node
                 .context
                 .store
-                .get_operations_by_document_id(&document_id)
+                .get_operations_by_document_id(document_id)
                 .await
                 .unwrap();
 
@@ -666,7 +666,7 @@ mod tests {
             let post_materialization_operations = node
                 .context
                 .store
-                .get_operations_by_document_id(&document_id)
+                .get_operations_by_document_id(document_id)
                 .await
                 .unwrap();
 

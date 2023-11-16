@@ -12,7 +12,7 @@ use crate::graphql::utils::{fields_name, graphql_type, with_collection_arguments
 pub fn build_document_fields_object(schema: &Schema) -> Object {
     // Construct the document fields object which will be named `<schema_id>Fields`
     let schema_field_name = fields_name(schema.id());
-    let mut document_schema_fields = Object::new(&schema_field_name);
+    let mut document_schema_fields = Object::new(schema_field_name);
 
     // For every field in the schema we create a type with a resolver
     for (name, field_type) in schema.fields().iter() {

@@ -461,7 +461,7 @@ mod tests {
             let child_document = node
                 .context
                 .store
-                .get_document(&document_id)
+                .get_document(document_id)
                 .await
                 .unwrap()
                 .unwrap();
@@ -574,7 +574,7 @@ mod tests {
             let document_operations = node
                 .context
                 .store
-                .get_operations_by_document_id(&document_id)
+                .get_operations_by_document_id(document_id)
                 .await
                 .unwrap();
 

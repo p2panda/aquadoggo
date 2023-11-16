@@ -1530,7 +1530,7 @@ mod tests {
             .fields()
             .expect("Expected document fields")
             .get(field)
-            .expect(&format!("Expected '{field}' field to exist in document"))
+            .unwrap_or_else(|| panic!("{}", "Expected '{field}' field to exist in document"))
             .value()
             .to_owned()
     }
@@ -1640,7 +1640,7 @@ mod tests {
                     ),
                 ],
             ],
-            &key_pair,
+            key_pair,
         )
         .await
     }
@@ -1867,9 +1867,9 @@ mod tests {
                 }
 
                 if view_ids.len() - 1 == index {
-                    assert_eq!(pagination_data.has_next_page, false);
+                    assert!(!pagination_data.has_next_page);
                 } else {
-                    assert_eq!(pagination_data.has_next_page, true);
+                    assert!(pagination_data.has_next_page);
                 }
 
                 assert_eq!(pagination_data.total_count, Some(view_ids.len() as u64));
@@ -1890,7 +1890,7 @@ mod tests {
 
             assert_eq!(pagination_data.total_count, Some(view_ids.len() as u64));
             assert_eq!(pagination_data.end_cursor, None);
-            assert_eq!(pagination_data.has_next_page, false);
+            assert!(!pagination_data.has_next_page);
             assert_eq!(documents.len(), 0);
         });
     }
@@ -1944,9 +1944,9 @@ mod tests {
                 }
 
                 if view_ids_len - 1 == index {
-                    assert_eq!(pagination_data.has_next_page, false);
+                    assert!(!pagination_data.has_next_page);
                 } else {
-                    assert_eq!(pagination_data.has_next_page, true);
+                    assert!(pagination_data.has_next_page);
                 }
 
                 assert_eq!(pagination_data.total_count, Some(5));
@@ -1967,7 +1967,7 @@ mod tests {
 
             assert_eq!(pagination_data.total_count, Some(5));
             assert_eq!(pagination_data.end_cursor, None);
-            assert_eq!(pagination_data.has_next_page, false);
+            assert!(!pagination_data.has_next_page);
             assert_eq!(documents.len(), 0);
         });
     }
@@ -2002,7 +2002,7 @@ mod tests {
             );
 
             // Select the pinned relation list "venues" of the first visited document
-            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues");
 
             let (pagination_data, documents) = node
                 .context
@@ -2023,7 +2023,7 @@ mod tests {
             );
 
             // Select the pinned relation list "venues" of the second visited document
-            let list = RelationList::new_pinned(&visited_view_ids[1], "venues".into());
+            let list = RelationList::new_pinned(&visited_view_ids[1], "venues");
 
             let (pagination_data, documents) = node
                 .context
@@ -2093,7 +2093,7 @@ mod tests {
             );
 
             // Select the pinned relation list "venues" for the visited document
-            let list = RelationList::new_pinned(&visited_view_id, "venues".into());
+            let list = RelationList::new_pinned(&visited_view_id, "venues");
 
             let (_, documents) = node
                 .context
@@ -2121,7 +2121,7 @@ mod tests {
             );
 
             // Select the pinned relation list "venues" for the visited document
-            let list = RelationList::new_pinned(&visited_view_id, "venues".into());
+            let list = RelationList::new_pinned(&visited_view_id, "venues");
 
             let (_, documents) = node
                 .context
@@ -2188,7 +2188,7 @@ mod tests {
             let mut cursor: Option<PaginationCursor> = None;
 
             // Select the pinned relation list "venues" of the second visited document
-            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues");
 
             let mut args = Query::new(
                 &Pagination::new(
@@ -2227,9 +2227,9 @@ mod tests {
                 }
 
                 if view_ids_len - 1 == index {
-                    assert_eq!(pagination_data.has_next_page, false);
+                    assert!(!pagination_data.has_next_page);
                 } else {
-                    assert_eq!(pagination_data.has_next_page, true);
+                    assert!(pagination_data.has_next_page);
                 }
 
                 assert_eq!(pagination_data.total_count, Some(7));
@@ -2250,7 +2250,7 @@ mod tests {
 
             assert_eq!(pagination_data.total_count, Some(7));
             assert_eq!(pagination_data.end_cursor, None);
-            assert_eq!(pagination_data.has_next_page, false);
+            assert!(!pagination_data.has_next_page);
             assert_eq!(documents.len(), 0);
         });
     }
@@ -2326,7 +2326,7 @@ mod tests {
             let mut cursor: Option<PaginationCursor> = None;
 
             // Select the pinned relation list "venues" of the first visited document
-            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues");
 
             let mut args = Query::new(
                 &Pagination::new(
@@ -2368,9 +2368,9 @@ mod tests {
 
                 // Check if `has_next_page` flag is correct
                 if documents_len - 1 == index as u64 {
-                    assert_eq!(pagination_data.has_next_page, false);
+                    assert!(!pagination_data.has_next_page);
                 } else {
-                    assert_eq!(pagination_data.has_next_page, true);
+                    assert!(pagination_data.has_next_page);
                 }
 
                 // Check if pagination info is correct
@@ -2396,7 +2396,7 @@ mod tests {
                 .await
                 .expect("Query failed");
 
-            assert_eq!(pagination_data.has_next_page, false);
+            assert!(!pagination_data.has_next_page);
             assert_eq!(pagination_data.total_count, Some(documents_len));
             assert_eq!(pagination_data.end_cursor, None);
             assert_eq!(documents.len(), 0);
@@ -2459,7 +2459,7 @@ mod tests {
             );
 
             // Select the pinned relation list "venues" of the first visited document
-            let list = RelationList::new_pinned(&visited_view_ids[0], "venues".into());
+            let list = RelationList::new_pinned(&visited_view_ids[0], "venues");
 
             let result = node
                 .context

@@ -229,7 +229,7 @@ mod tests {
     #[case::invalid_meta_field_type(
         Select::default(),
         Filter::new().meta_fields(&[
-            ("documentId".into(), &["test".into()])
+            ("documentId", &["test".into()])
         ]),
         Order::default(),
         "Filter type 'str' for field 'documentId' is not matching schema type 'relation(doggo_schema_0020b177ec1bf26dfb3b7010d473e6d44713b29b765b99c6e60ecbfae742de496543)'"
@@ -237,7 +237,7 @@ mod tests {
     #[case::invalid_field_type(
         Select::default(),
         Filter::new().fields(&[
-            ("username".into(), &[2020.into()])
+            ("username", &[2020.into()])
         ]),
         Order::default(),
         "Filter type 'int' for field 'username' is not matching schema type 'str'"
@@ -245,7 +245,7 @@ mod tests {
     #[case::invalid_interval(
         Select::default(),
         Filter::new().fields(&[
-            ("is_admin_in".into(), &[true.into(), false.into()])
+            ("is_admin_in", &[true.into(), false.into()])
         ]),
         Order::default(),
         "Can't apply set filter as field 'is_admin' is of type boolean"
@@ -253,7 +253,7 @@ mod tests {
     #[case::invalid_search(
         Select::default(),
         Filter::new().fields(&[
-            ("age_contains".into(), &[22.into()])
+            ("age_contains", &[22.into()])
         ]),
         Order::default(),
         "Can't apply search filter as field 'age' is not of type string"
@@ -261,7 +261,7 @@ mod tests {
     #[case::invalid_set_types(
         Select::default(),
         Filter::new().fields(&[
-            ("username_in".into(), &["bubu".into(), 2020.into()])
+            ("username_in", &["bubu".into(), 2020.into()])
         ]),
         Order::default(),
         "Filter type 'int' for field 'username' is not matching schema type 'str'"

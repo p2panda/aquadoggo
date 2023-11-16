@@ -104,7 +104,7 @@ mod tests {
     use p2panda_rs::entry::traits::AsEncodedEntry;
     use p2panda_rs::entry::{EncodedEntry, EntryBuilder, LogId, SeqNum};
     use p2panda_rs::hash::Hash;
-    use p2panda_rs::identity::{KeyPair, PublicKey};
+    use p2panda_rs::identity::KeyPair;
     use p2panda_rs::operation::encode::encode_operation;
     use p2panda_rs::operation::{
         EncodedOperation, OperationBuilder, OperationValue, PinnedRelationList,
@@ -617,7 +617,7 @@ mod tests {
             8,
             1,
             Some(HASH.parse().unwrap()),
-            Some(Hash::new_from_bytes(&vec![2, 3, 4])),
+            Some(Hash::new_from_bytes(&[2, 3, 4])),
             Some(EncodedOperation::from_bytes(&OPERATION_ENCODED)),
             key_pair(PRIVATE_KEY)
         ).to_string(),
@@ -704,7 +704,7 @@ mod tests {
         // public facing method so we should expect any junk data to arrive.
 
         let entry_encoded = entry_encoded.to_string();
-        let encoded_operation = hex::encode(encoded_operation.to_owned());
+        let encoded_operation = hex::encode(encoded_operation);
         let expected_error_message = expected_error_message.to_string();
 
         test_runner(|mut node: TestNode| async move {
@@ -757,7 +757,7 @@ mod tests {
             // Iterate over each key pair.
             for key_pair in &key_pairs {
                 let mut document_id: Option<DocumentId> = None;
-                let public_key = PublicKey::from(key_pair.public_key());
+                let public_key = key_pair.public_key();
 
                 // Iterate of the number of entries we want to publish.
                 for index in 0..num_of_entries {

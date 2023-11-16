@@ -543,7 +543,7 @@ mod tests {
                     ),
                 ],
             ],
-            &key_pair,
+            key_pair,
         )
         .await
     }
@@ -1366,12 +1366,12 @@ mod tests {
                 let total_count = data["query"]["totalCount"].clone().as_i64().unwrap();
                 let end_cursor = data["query"]["endCursor"].clone().to_string();
                 let has_next_page = data["query"]["hasNextPage"].clone().as_bool().unwrap();
-                return (
+                (
                     documents_len,
                     total_count as usize,
                     end_cursor,
                     has_next_page,
-                );
+                )
             }
 
             // Publish some lyrics to the node.

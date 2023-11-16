@@ -414,12 +414,12 @@ mod tests {
             filter.get(0).unwrap().by,
             FilterBy::Contains("Panda is the best".into())
         );
-        assert_eq!(filter.get(0).unwrap().exclusive, false,);
+        assert!(!filter.get(0).unwrap().exclusive,);
         assert_eq!(
             filter.get(1).unwrap().by,
             FilterBy::Contains("Llama".into())
         );
-        assert_eq!(filter.get(1).unwrap().exclusive, true);
+        assert!(filter.get(1).unwrap().exclusive);
     }
 
     #[test]
@@ -450,7 +450,7 @@ mod tests {
 
         assert_eq!(filter.len(), 1);
         assert_eq!(filter.get(0).unwrap().field, field);
-        assert_eq!(filter.get(0).unwrap().exclusive, false);
+        assert!(!filter.get(0).unwrap().exclusive);
         assert_eq!(
             filter.get(0).unwrap().by,
             FilterBy::Set(vec![panda, turtle, llama])
@@ -535,7 +535,7 @@ mod tests {
             filter.get(0).unwrap().by,
             FilterBy::Element(OperationValue::Boolean(false))
         );
-        assert_eq!(filter.get(0).unwrap().exclusive, false);
+        assert!(!filter.get(0).unwrap().exclusive);
 
         // Change exclusive filter manually
         filter.add_not(
@@ -549,7 +549,7 @@ mod tests {
             filter.get(0).unwrap().by,
             FilterBy::Element(OperationValue::Boolean(true))
         );
-        assert_eq!(filter.get(0).unwrap().exclusive, true);
+        assert!(filter.get(0).unwrap().exclusive);
 
         // Change filter manually again
         filter.add(
@@ -563,7 +563,7 @@ mod tests {
             filter.get(0).unwrap().by,
             FilterBy::Element(OperationValue::Boolean(false))
         );
-        assert_eq!(filter.get(0).unwrap().exclusive, false);
+        assert!(!filter.get(0).unwrap().exclusive);
     }
 
     #[test]
@@ -571,16 +571,10 @@ mod tests {
         let mut filter = Filter::new();
 
         // Add boolean filter
-        filter.add(
-            &Field::new("is_admin".into()),
-            &OperationValue::Boolean(true),
-        );
+        filter.add(&Field::new("is_admin"), &OperationValue::Boolean(true));
 
         // Overwrite the same filter with other value
-        filter.add(
-            &Field::new("is_admin".into()),
-            &OperationValue::Boolean(false),
-        );
+        filter.add(&Field::new("is_admin"), &OperationValue::Boolean(false));
 
         // .. check if it got correctly overwritten
         assert_eq!(filter.len(), 1);
@@ -588,13 +582,10 @@ mod tests {
             filter.get(0).unwrap().by,
             FilterBy::Element(OperationValue::Boolean(false))
         );
-        assert_eq!(filter.get(0).unwrap().exclusive, false);
+        assert!(!filter.get(0).unwrap().exclusive);
 
         // Overwrite it again, but with an exclusive filter
-        filter.add_not(
-            &Field::new("is_admin".into()),
-            &OperationValue::Boolean(false),
-        );
+        filter.add_not(&Field::new("is_admin"), &OperationValue::Boolean(false));
 
         // .. check if it got correctly overwritten
         assert_eq!(filter.len(), 1);
@@ -602,6 +593,6 @@ mod tests {
             filter.get(0).unwrap().by,
             FilterBy::Element(OperationValue::Boolean(false))
         );
-        assert_eq!(filter.get(0).unwrap().exclusive, true);
+        assert!(filter.get(0).unwrap().exclusive);
     }
 }

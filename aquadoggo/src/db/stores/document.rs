@@ -1323,7 +1323,7 @@ mod tests {
             let document = node
                 .context
                 .store
-                .get_document_by_view_id(&document.view_id())
+                .get_document_by_view_id(document.view_id())
                 .await
                 .unwrap();
             assert!(document.is_some());
@@ -1388,7 +1388,7 @@ mod tests {
             assert_query(&node, "SELECT name FROM document_view_fields", 22).await;
 
             // Purge one document from the database, we now expect half the rows to be remaining.
-            let result = node.context.store.purge_document(&document_id).await;
+            let result = node.context.store.purge_document(document_id).await;
             assert!(result.is_ok(), "{:#?}", result);
 
             assert_query(&node, "SELECT entry_hash FROM entries", 1).await;
@@ -1413,7 +1413,7 @@ mod tests {
             let document_id = documents[0].id();
             let public_key = config.authors[0].public_key();
 
-            let _ = node.context.store.purge_document(&document_id).await;
+            let _ = node.context.store.purge_document(document_id).await;
 
             let result = next_args(
                 &node.context.store,

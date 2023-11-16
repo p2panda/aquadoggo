@@ -235,7 +235,7 @@ pub async fn add_schema_and_documents(
     documents: Vec<Vec<(&str, OperationValue, Option<SchemaId>)>>,
     key_pair: &KeyPair,
 ) -> (Schema, Vec<DocumentViewId>) {
-    assert!(documents.len() > 0);
+    assert!(!documents.is_empty());
 
     // Look at first document to automatically derive schema
     let schema_fields = documents[0]
@@ -373,7 +373,7 @@ pub async fn add_blob_pieces(
             node,
             &SchemaId::BlobPiece(1),
             vec![("data", piece.into())],
-            &key_pair,
+            key_pair,
         )
         .await;
 
@@ -392,7 +392,7 @@ pub async fn add_blob(
 ) -> DocumentViewId {
     let blob_pieces_view_ids = add_blob_pieces(node, body, max_piece_length, key_pair).await;
 
-    let blob_view_id = add_document(
+    add_document(
         node,
         &SchemaId::Blob(1),
         vec![
@@ -400,11 +400,9 @@ pub async fn add_blob(
             ("mime_type", mime_type.into()),
             ("pieces", blob_pieces_view_ids.into()),
         ],
-        &key_pair,
+        key_pair,
     )
-    .await;
-
-    blob_view_id
+    .await
 }
 
 pub async fn update_blob(
@@ -416,19 +414,17 @@ pub async fn update_blob(
 ) -> DocumentViewId {
     let blob_pieces_view_ids = add_blob_pieces(node, body, max_piece_length, key_pair).await;
 
-    let blob_view_id = update_document(
+    update_document(
         node,
         &SchemaId::Blob(1),
         vec![
             ("length", { body.len() as i64 }.into()),
             ("pieces", blob_pieces_view_ids.into()),
         ],
-        &previous,
-        &key_pair,
+        previous,
+        key_pair,
     )
-    .await;
-
-    blob_view_id
+    .await
 }
 
 // Helper for asserting expected number of items yielded from a SQL query.
@@ -519,7 +515,7 @@ pub async fn populate_store(store: &SqlStore, config: &PopulateStoreConfig) -> V
                         .insert_log(
                             entry.log_id(),
                             entry.public_key(),
-                            &config.schema.id(),
+                            config.schema.id(),
                             &document_id,
                         )
                         .await
