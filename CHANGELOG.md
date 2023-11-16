@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update `p2panda-rs` to `0.8.0` [#585](https://github.com/p2panda/aquadoggo/pull/585)
 - Update `libp2p` to `0.52.4` [#596](https://github.com/p2panda/aquadoggo/pull/596)
 
-## Fixed
+### Fixed
 
 - Make sure temporary directory does not run out of scope [#557](https://github.com/p2panda/aquadoggo/pull/557)
 - Deduplicate generated schema field by key in proptests [#558](https://github.com/p2panda/aquadoggo/pull/558)
