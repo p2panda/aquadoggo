@@ -249,6 +249,7 @@ fn typecast_field_sql(
 }
 
 /// Values to bind to SQL query.
+#[derive(Debug)]
 enum BindArgument {
     String(String),
     Integer(i64),
@@ -864,7 +865,12 @@ async fn where_pagination_sql(
     }
 }
 
-fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> String {
+fn order_sql(
+    order: &Order,
+    schema: &Schema,
+    list: Option<&RelationList>,
+    fields: &ApplicationFields,
+) -> String {
     // Create custom ordering if query set one
     let custom = order
         .field
@@ -911,11 +917,26 @@ fn order_sql(order: &Order, schema: &Schema, list: Option<&RelationList>) -> Str
         _ => None,
     };
 
-    // Always order by document view id, except of if it was selected manually. We need this to
-    // assemble the rows to documents correctly at the end
-    let id_sql = match order.field {
-        Some(Field::Meta(MetaField::DocumentViewId)) => None,
-        _ => Some("documents.document_view_id ASC".to_string()),
+    // Order by document view id, except of if it was selected manually. We need this to assemble
+    // the rows to documents correctly at the end
+    let id_sql = {
+        if fields.len() > 1 {
+            match order.field {
+                Some(Field::Meta(MetaField::DocumentViewId)) => None,
+                _ => Some("documents.document_view_id ASC".to_string()),
+            }
+        } else {
+            // Skip this step when only _one_ field was selected for this query to not mess with
+            // pagination.
+            //
+            // We're relying on the "cursor" being the tie-breaker for duplicates. If we would
+            // still order by document view id, this would become undesirably our tie-breaker
+            // instead - as every field is automatically another unique document when only one was
+            // selected hence we will never order by cursor on top of that.
+            //
+            // When no field was selected we just skip this ordering to simplify the query.
+            None
+        }
     };
 
     // On top we sort always by the unique operation cursor in case the previous order value is
@@ -1169,7 +1190,7 @@ impl SqlStore {
         )
         .await?;
 
-        let order = order_sql(&args.order, schema, list);
+        let order = order_sql(&args.order, schema, list, &application_fields);
         let (page_size, limit) = limit_sql(&args.pagination, &application_fields);
 
         let sea_quel = format!(
