@@ -226,6 +226,7 @@ dependencies = [
  "log",
  "p2panda-rs",
  "path-clean",
+ "rand 0.8.5",
  "serde",
  "tempfile",
  "tokio",
