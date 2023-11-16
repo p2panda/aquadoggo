@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0]
+
 ### Added
 
-- Serve static files from `blobs` directory [#480](https://github.com/p2panda/aquadoggo/pull/480)
+- Serve static files from `blobs` directory [#480](https://github.com/p2panda/aquadoggo/pull/480) 🥞
 - Add method to store for pruning document views [#491](https://github.com/p2panda/aquadoggo/pull/491)
 - Introduce `BlobStore` [#484](https://github.com/p2panda/aquadoggo/pull/484)
-- Task for automatic garbage collection of unused documents and views [#500](https://github.com/p2panda/aquadoggo/pull/500)
+- Task for automatic garbage collection of unused documents and views [#500](https://github.com/p2panda/aquadoggo/pull/500) 🥞
 - Blobs directory configuration [#549](https://github.com/p2panda/aquadoggo/pull/549)
 - Integrate `Bytes` operation value [#554](https://github.com/p2panda/aquadoggo/pull/554/)
 - Implement dependency replication for `blob_v1` and `blob_piece_v1` documents [#514](https://github.com/p2panda/aquadoggo/pull/514)
@@ -261,7 +263,8 @@ Released on 2021-10-25: :package: [`crate`](https://crates.io/crates/aquadoggo/0
 - Use p2panda-rs 0.2.1 with fixed linter setting [#41](https://github.com/p2panda/aquadoggo/41)
 - Use `tide` for HTTP server and `jsonrpc-v2` for JSON RPC [#29](https://github.com/p2panda/aquadoggo/29)
 
-[unreleased]: https://github.com/p2panda/aquadoggo/compare/v0.5.0...HEAD
+[unreleased]: https://github.com/p2panda/aquadoggo/compare/v0.6.0...HEAD
+[0.5.0]: https://github.com/p2panda/aquadoggo/releases/tag/v0.6.0
 [0.5.0]: https://github.com/p2panda/aquadoggo/releases/tag/v0.5.0
 [0.4.0]: https://github.com/p2panda/aquadoggo/releases/tag/v0.4.0
 [0.3.0]: https://github.com/p2panda/aquadoggo/releases/tag/v0.3.0
