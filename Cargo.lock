@@ -2234,7 +2234,6 @@ dependencies = [
  "getrandom 0.2.10",
  "instant",
  "libp2p-allow-block-list",
- "libp2p-autonat",
  "libp2p-connection-limits",
  "libp2p-core",
  "libp2p-dcutr",
@@ -2246,7 +2245,6 @@ dependencies = [
  "libp2p-mdns",
  "libp2p-metrics",
  "libp2p-noise",
- "libp2p-ping",
  "libp2p-quic",
  "libp2p-relay",
  "libp2p-rendezvous",
@@ -2267,25 +2265,6 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "void",
-]
-
-[[package]]
-name = "libp2p-autonat"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e907be08be5e4152317a79d310a6f501a1b5c02a81dcb065dc865475bbae9498"
-dependencies = [
- "async-trait",
- "futures",
- "futures-timer",
- "instant",
- "libp2p-core",
- "libp2p-identity",
- "libp2p-request-response",
- "libp2p-swarm",
- "log",
- "quick-protobuf",
- "rand 0.8.5",
 ]
 
 [[package]]
@@ -2499,7 +2478,6 @@ dependencies = [
  "libp2p-dcutr",
  "libp2p-identify",
  "libp2p-identity",
- "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
  "once_cell",
@@ -2529,24 +2507,6 @@ dependencies = [
  "thiserror",
  "x25519-dalek",
  "zeroize",
-]
-
-[[package]]
-name = "libp2p-ping"
-version = "0.43.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cd5ee3270229443a2b34b27ed0cb7470ef6b4a6e45e54e89a8771fa683bab48"
-dependencies = [
- "either",
- "futures",
- "futures-timer",
- "instant",
- "libp2p-core",
- "libp2p-identity",
- "libp2p-swarm",
- "log",
- "rand 0.8.5",
- "void",
 ]
 
 [[package]]
