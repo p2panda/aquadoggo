@@ -6,6 +6,7 @@ use anyhow::Result;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
 use libp2p::identity::Keypair;
+#[allow(deprecated)]
 use libp2p::swarm::{Swarm, SwarmBuilder};
 use libp2p::PeerId;
 
@@ -20,6 +21,7 @@ fn build_swarm(
     peer_id: PeerId,
 ) -> Result<Swarm<P2pandaBehaviour>> {
     // Initialise a swarm with QUIC transports and our composed network behaviour
+    #[allow(deprecated)]
     let swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
         // This method expects a NonZeroU8 as input, hence the try_into conversion
         .dial_concurrency_factor(network_config.dial_concurrency_factor.try_into()?)
