@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix `blob` tasks being triggered too often [#578](https://github.com/p2panda/aquadoggo/pull/578)
 - Fix `schema` tasks being triggered too often [#581](https://github.com/p2panda/aquadoggo/pull/581)
 - Fix blobs getting corrupted when written to the file system [#587](https://github.com/p2panda/aquadoggo/pull/587)
+- Fix pagination bug when only one field is selected and sorted at the same time [#593](https://github.com/p2panda/aquadoggo/pull/593)
 
 ## [0.5.0]
 
