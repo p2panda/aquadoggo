@@ -24,7 +24,7 @@ async-graphql = { version = "5.0.6", features = ["dynamic-schema"] }
 async-graphql-axum = "5.0.6"
 async-stream = "0.3.5"
 async-trait = "0.1.64"
-asynchronous-codec = { version = "0.6.2", features = ["cbor"] }
+asynchronous-codec = { version = "0.7.0", features = ["cbor"] }
 axum = { version = "0.6.10", features = ["headers"] }
 bamboo-rs-core-ed25519-yasmf = "0.1.1"
 bs58 = "0.4.0"
@@ -36,7 +36,7 @@ dynamic-graphql = "0.7.3"
 futures = "0.3.23"
 hex = "0.4.3"
 http = "0.2.9"
-libp2p = { version = "0.52.3", features = [
+libp2p = { version = "0.52.4", features = [
     "dcutr",
     "identify",
     "macros",
