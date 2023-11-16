@@ -307,7 +307,7 @@ mod tests {
             Peer::new(swarm_2_peer_id, ConnectionId::new_unchecked(1)),
             PeerMessage::SyncMessage(SyncMessage::new(
                 0,
-                Message::SyncRequest(0.into(), SchemaIdSet::new(&vec![])),
+                Message::SyncRequest(0.into(), SchemaIdSet::new(&[])),
             )),
         );
 
@@ -323,8 +323,8 @@ mod tests {
 
     #[rstest]
     #[case(
-        SchemaIdSet::new(&vec![SchemaId::SchemaFieldDefinition(0)]),
-        SchemaIdSet::new(&vec![SchemaId::SchemaDefinition(0)]),
+        SchemaIdSet::new(&[SchemaId::SchemaFieldDefinition(0)]),
+        SchemaIdSet::new(&[SchemaId::SchemaDefinition(0)]),
     )]
     #[case(random_schema_id_set(), random_schema_id_set())]
     #[tokio::test]

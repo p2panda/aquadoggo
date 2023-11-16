@@ -337,7 +337,7 @@ mod tests {
         expected_entries: &Vec<(DocumentId, SortedIndex)>,
     ) {
         // Retrieve the entries.
-        let entries = retrieve_entries(&node.context.store, &remote_needs).await;
+        let entries = retrieve_entries(&node.context.store, remote_needs).await;
 
         // Map the returned value into a more easily testable form (we assume the entries are
         // correct, here we are testing the entry retrieval logic mainly)
@@ -459,7 +459,7 @@ mod tests {
                 &node,
                 &key_pair,
                 &schema,
-                &document_a,
+                document_a,
                 vec![("username", "よつば")],
             )
             .await;
@@ -469,7 +469,7 @@ mod tests {
                 &node,
                 &key_pair,
                 &schema,
-                &document_a,
+                document_a,
                 vec![("username", "ヂャンボ")],
             )
             .await;
@@ -508,7 +508,7 @@ mod tests {
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
             let schema = config.schema.clone();
-            let target_set = SchemaIdSet::new(&vec![schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&[schema.id().to_owned()]);
 
             let mut node_a = manager.create().await;
             populate_and_materialize(&mut node_a, &config).await;
@@ -553,7 +553,7 @@ mod tests {
         config: PopulateStoreConfig,
     ) {
         test_runner_with_manager(move |manager: TestNodeManager| async move {
-            let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&[config.schema.id().to_owned()]);
             let mut node_a = manager.create().await;
             let documents = populate_and_materialize(&mut node_a, &config).await;
             let document_ids: Vec<DocumentId> =
@@ -614,7 +614,7 @@ mod tests {
                 &mut node_a,
                 &generate_random_bytes(10),
                 5,
-                "text/plain".into(),
+                "text/plain",
                 &key_pair,
             )
             .await;
@@ -670,7 +670,7 @@ mod tests {
                 &mut node_a,
                 &generate_random_bytes(10),
                 2,
-                "text/plain".into(),
+                "text/plain",
                 &key_pair,
             )
             .await;

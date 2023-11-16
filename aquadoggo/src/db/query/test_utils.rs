@@ -138,6 +138,6 @@ mod tests {
         #[case] value: &[OperationValue],
         #[case] expected: (String, FilterBy, bool),
     ) {
-        assert_eq!(parse_str(key, &value).expect("Should succeed"), expected);
+        assert_eq!(parse_str(key, value).expect("Should succeed"), expected);
     }
 }

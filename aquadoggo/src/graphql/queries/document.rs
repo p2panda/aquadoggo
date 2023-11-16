@@ -262,7 +262,7 @@ mod test {
             // Publish document on node.
             let view_id = add_document(
                 &mut node,
-                &schema.id(),
+                schema.id(),
                 vec![("bool", true.into())],
                 &key_pair,
             )

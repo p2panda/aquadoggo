@@ -410,7 +410,7 @@ mod tests {
     fn get_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 6, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 6, "text/plain", &key_pair).await;
             let document_id: DocumentId = blob_view_id.to_string().parse().unwrap();
 
             // Get blob by document id
@@ -537,7 +537,7 @@ mod tests {
     fn purge_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 7, "text/plain", &key_pair).await;
 
             // There is one blob and two blob pieces in database.
             //
@@ -580,7 +580,7 @@ mod tests {
             let _ = populate_and_materialize(&mut node, &config).await;
 
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 7, "text/plain", &key_pair).await;
 
             // There is one blob and two blob pieces in database.
             //
@@ -614,7 +614,7 @@ mod tests {
     fn does_not_purge_blob_if_still_pinned(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 7, "text/plain", &key_pair).await;
 
             let _ = add_schema_and_documents(
                 &mut node,
@@ -658,7 +658,7 @@ mod tests {
     fn purge_all_pieces_of_updated_blob(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             let blob_data = "Hello, World!".as_bytes();
-            let blob_view_id = add_blob(&mut node, &blob_data, 7, "text/plain", &key_pair).await;
+            let blob_view_id = add_blob(&mut node, blob_data, 7, "text/plain", &key_pair).await;
 
             // Create a new blob piece.
             let new_blob_pieces = add_document(

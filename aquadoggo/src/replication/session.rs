@@ -232,7 +232,7 @@ mod tests {
             let schema_provider = node_a.context.schema_provider.clone();
             populate_and_materialize(&mut node_a, &config).await;
 
-            let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&[config.schema.id().to_owned()]);
             let mut session = Session::new(
                 &INITIAL_SESSION_ID,
                 &target_set,
@@ -253,7 +253,7 @@ mod tests {
             // 1x Have + 10x Entry + 1x SyncDone = 12 messages
             assert_eq!(response_messages.len(), 12);
 
-            let target_set = SchemaIdSet::new(&vec![config.schema.id().to_owned()]);
+            let target_set = SchemaIdSet::new(&[config.schema.id().to_owned()]);
             let mut session = Session::new(
                 &INITIAL_SESSION_ID,
                 &target_set,

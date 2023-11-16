@@ -23,7 +23,7 @@ use crate::graphql::utils::filter_name;
 pub fn build_filter_input_object(schema: &Schema) -> InputObject {
     // Construct the document fields object which will be named `<schema_id>Filter`
     let schema_field_name = filter_name(schema.id());
-    let mut filter_input = InputObject::new(&schema_field_name);
+    let mut filter_input = InputObject::new(schema_field_name);
 
     // For every field in the schema we create a type with a resolver
     for (name, field_type) in schema.fields().iter() {
