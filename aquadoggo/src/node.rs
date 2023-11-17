@@ -40,17 +40,9 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 /// Main runtime managing the p2panda node process.
 #[allow(missing_debug_implementations)]
 pub struct Node {
-    /// SQL database connection pool.
     pool: Pool,
-
-    /// Service manager with communication bus.
     manager: ServiceManager<Context, ServiceMessage>,
-
-    /// Interface to interact with the node in a programmatic, "low-level" way.
-    ///
-    /// Through this interface access to the internal store or service communication bus is
-    /// possible.
-    pub api: NodeInterface,
+    api: NodeInterface,
 }
 
 impl Node {
