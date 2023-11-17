@@ -206,6 +206,13 @@ where
         rx_ready
     }
 
+    /// Returns a sender for allowing communication on the service bus.
+    ///
+    /// Can also be used to subscribe to the bus.
+    pub fn get_sender(&self) -> Sender<M> {
+        return self.tx.clone();
+    }
+
     /// Future which resolves as soon as a service returned an error, panicked or stopped.
     pub async fn on_exit(&self) {
         self.exit_handle.clone().await;
