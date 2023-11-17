@@ -25,7 +25,7 @@ where
     S: OperationStore + EntryStore + LogStore,
 {
     let mut committed_operations = Vec::new();
-    let commits = lock_file.commits.unwrap_or(Vec::new());
+    let commits = lock_file.commits.unwrap_or_default();
 
     for commit in commits {
         let planned_entry = decode_entry(&commit.entry)

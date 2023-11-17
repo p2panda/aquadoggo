@@ -210,7 +210,7 @@ where
     ///
     /// Can also be used to subscribe to the bus.
     pub fn get_sender(&self) -> Sender<M> {
-        return self.tx.clone();
+        self.tx.clone()
     }
 
     /// Future which resolves as soon as a service returned an error, panicked or stopped.
