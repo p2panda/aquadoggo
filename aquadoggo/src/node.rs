@@ -3,6 +3,7 @@
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
 
+use crate::api::NodeInterface;
 use crate::bus::ServiceMessage;
 use crate::config::Configuration;
 use crate::context::Context;
@@ -14,6 +15,7 @@ use crate::materializer::materializer_service;
 use crate::network::network_service;
 use crate::replication::replication_service;
 use crate::schema::SchemaProvider;
+use crate::LockFile;
 
 /// Capacity of the internal broadcast channel used to communicate between services.
 const SERVICE_BUS_CAPACITY: usize = 512_000;
@@ -40,6 +42,7 @@ async fn initialize_db(config: &Configuration) -> Result<Pool> {
 pub struct Node {
     pool: Pool,
     manager: ServiceManager<Context, ServiceMessage>,
+    api: NodeInterface,
 }
 
 impl Node {
@@ -65,7 +68,7 @@ impl Node {
         // Create service manager with shared data between services
         let context = Context::new(store, key_pair, config, schema_provider);
         let mut manager =
-            ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context);
+            ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context.clone());
 
         // Start materializer service
         if manager
@@ -95,7 +98,11 @@ impl Node {
             panic!("Failed starting replication service");
         }
 
-        Self { pool, manager }
+        // Create a low-level interface which can be exposed so developers can interact with the
+        // internal store and service bus
+        let api = NodeInterface::new(context, manager.get_sender());
+
+        Self { pool, manager, api }
     }
 
     /// This future resolves when at least one system service stopped.
@@ -113,5 +120,15 @@ impl Node {
 
         // Close connection pool
         self.pool.close().await;
+    }
+
+    /// Utility method to publish multiple operations and entries in the node database.
+    ///
+    /// This method is especially useful for migrating schemas or seeding initial data. Lock files
+    /// with schema data can be created with the p2panda command line tool `fishy`.
+    ///
+    /// Returns `true` if migration took place or `false` if no migration was required.
+    pub async fn migrate(&self, lock_file: LockFile) -> Result<bool> {
+        self.api.migrate(lock_file).await
     }
 }
