@@ -12,6 +12,7 @@
     unused_qualifications
 )]
 #![allow(clippy::uninlined_format_args)]
+mod api;
 mod bus;
 mod config;
 mod context;
@@ -31,6 +32,7 @@ mod test_utils;
 #[cfg(test)]
 mod tests;
 
+pub use crate::api::LockFile;
 pub use crate::config::{AllowList, Configuration};
 pub use crate::network::NetworkConfiguration;
 pub use node::Node;

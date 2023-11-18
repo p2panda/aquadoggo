@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Introduce a `migrate` API on the Node to allow publishing data programmatically [#598](https://github.com/p2panda/aquadoggo/pull/598)
+
 ## [0.6.0]
 
 ### Added
