@@ -548,7 +548,7 @@ mod tests {
             key_pair(PRIVATE_KEY)
         ).to_string(),
         &UPDATE_OPERATION_NO_PREVIOUS_OPS,
-        "invalid type: map, expected array"
+        "invalid type: map, expected document view id as array or in string representation"
     )]
     #[case::delete_operation_no_previous_operations(
         &entry_signed_encoded_unvalidated(
