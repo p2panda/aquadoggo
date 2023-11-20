@@ -1,0 +1,27 @@
+FROM --platform=$BUILDPLATFORM ubuntu:jammy AS FETCHER
+
+ARG RELEASE=v0.5.0
+ARG DOWNLOAD_DIR=https://github.com/p2panda/aquadoggo/releases/download/
+
+# These args are supplied automatically by docker buildx
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+
+WORKDIR /app
+RUN apt update
+RUN apt install -y wget
+
+# Fetch the files for each platform we care about, and name them so they will match our args
+RUN wget -O aquadoggo-linux-amd64-.tar.gz ${DOWNLOAD_DIR}${RELEASE}/aquadoggo-${RELEASE}-x86_64-unknown-linux-gnu.tar.gz
+RUN wget -O aquadoggo-linux-arm-v7.tar.gz ${DOWNLOAD_DIR}${RELEASE}/aquadoggo-${RELEASE}-armv7-unknown-linux-gnueabihf.tar.gz
+
+# Unzip only the file matching our target platform args, which will result in a file called aquadoggo
+RUN tar -xvzf aquadoggo-${TARGETOS}-${TARGETARCH}-${TARGETVARIANT}.tar.gz
+RUN chmod a+x aquadoggo
+
+# A fresh image for the release
+FROM ubuntu:jammy
+COPY --from=FETCHER /app/aquadoggo /usr/local/bin/
+
+CMD /usr/local/bin/aquadoggo
