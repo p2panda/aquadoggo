@@ -52,7 +52,7 @@ impl SyncIngest {
         // If the node has been configured with an allow-list of supported schema ids, check that
         // the sent operation follows one of our supported schema
         if self.schema_provider.is_allow_list_active()
-            && self
+            && !self
                 .schema_provider
                 .supported_schema_ids()
                 .await
@@ -112,6 +112,7 @@ mod tests {
     use rstest::rstest;
     use tokio::sync::broadcast;
 
+    use crate::{Configuration, AllowList};
     use crate::replication::errors::IngestError;
     use crate::replication::SyncIngest;
     use crate::test_utils::{test_runner_with_manager, TestNodeManager};
@@ -141,5 +142,31 @@ mod tests {
 
             assert!(matches!(result, Err(IngestError::DuplicateEntry(_))));
         })
+    }
+
+    #[rstest]
+    fn allow_supported_schema_ids(schema: Schema,
+        encoded_entry: EncodedEntry,
+        encoded_operation: EncodedOperation,
+    ) {
+        test_runner_with_manager(move |manager: TestNodeManager| async move {
+            let config = Configuration {
+                allow_schema_ids: AllowList::Set(vec![schema.id().clone()]),
+                ..Configuration::default()
+            };
+            let node = manager.create_with_config(config).await;
+            
+            assert!(node.context.schema_provider.is_allow_list_active());
+            
+            let _ = node.context.schema_provider.update(schema.clone()).await;
+            let (tx, _rx) = broadcast::channel(8);
+            let ingest = SyncIngest::new(node.context.schema_provider.clone(), tx.clone());
+
+            let result = ingest
+                .handle_entry(&node.context.store, &encoded_entry, &encoded_operation)
+                .await;
+
+            assert!(result.is_ok());
+        });
     }
 }
