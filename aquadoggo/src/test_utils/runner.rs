@@ -59,22 +59,20 @@ impl TestNodeManager {
     }
 
     pub async fn create(&self) -> TestNode {
+        self.create_with_config(Configuration::default()).await
+    }
+
+    pub async fn create_with_config(&self, config: Configuration) -> TestNode {
         let (_config, pool) = initialize_sqlite_db().await;
 
         // Initialise test store using pool.
         let store = SqlStore::new(pool.clone());
 
-        // Construct node config supporting any schema.
-        let cfg = Configuration::default();
+        let schema_provider = SchemaProvider::new(vec![], config.allow_schema_ids.clone());
 
         // Construct the actual test node
         let test_node = TestNode {
-            context: Context::new(
-                store.clone(),
-                KeyPair::new(),
-                cfg,
-                SchemaProvider::default(),
-            ),
+            context: Context::new(store.clone(), KeyPair::new(), config, schema_provider),
         };
 
         self.pools.lock().await.push(pool);
