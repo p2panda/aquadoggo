@@ -68,18 +68,11 @@ impl TestNodeManager {
         // Initialise test store using pool.
         let store = SqlStore::new(pool.clone());
 
-        let schema_provider = SchemaProvider::new(
-            vec![], 
-            config.allow_schema_ids.clone());
+        let schema_provider = SchemaProvider::new(vec![], config.allow_schema_ids.clone());
 
         // Construct the actual test node
         let test_node = TestNode {
-            context: Context::new(
-                store.clone(),
-                KeyPair::new(),
-                config,
-                schema_provider,
-            ),
+            context: Context::new(store.clone(), KeyPair::new(), config, schema_provider),
         };
 
         self.pools.lock().await.push(pool);

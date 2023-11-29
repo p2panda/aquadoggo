@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fix bug where known schemas are not replicated between nodes [#602](https://github.com/p2panda/aquadoggo/pull/603).
+- Fix bug where known schemas are not replicated between nodes [#603](https://github.com/p2panda/aquadoggo/pull/603).
 
 ## [0.7.0]
 

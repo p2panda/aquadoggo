@@ -112,10 +112,10 @@ mod tests {
     use rstest::rstest;
     use tokio::sync::broadcast;
 
-    use crate::{Configuration, AllowList};
     use crate::replication::errors::IngestError;
     use crate::replication::SyncIngest;
     use crate::test_utils::{test_runner_with_manager, TestNodeManager};
+    use crate::{AllowList, Configuration};
 
     #[rstest]
     fn reject_duplicate_entries(
@@ -145,7 +145,8 @@ mod tests {
     }
 
     #[rstest]
-    fn allow_supported_schema_ids(schema: Schema,
+    fn allow_supported_schema_ids(
+        schema: Schema,
         encoded_entry: EncodedEntry,
         encoded_operation: EncodedOperation,
     ) {
@@ -155,9 +156,9 @@ mod tests {
                 ..Configuration::default()
             };
             let node = manager.create_with_config(config).await;
-            
+
             assert!(node.context.schema_provider.is_allow_list_active());
-            
+
             let _ = node.context.schema_provider.update(schema.clone()).await;
             let (tx, _rx) = broadcast::channel(8);
             let ingest = SyncIngest::new(node.context.schema_provider.clone(), tx.clone());
