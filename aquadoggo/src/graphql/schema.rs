@@ -125,8 +125,7 @@ pub async fn build_root_schema(
     // Add next args to the query object
     let root_query = build_next_args_query(root_query);
 
-    // Build the GraphQL schema. We can unwrap here since it will only fail if we forgot to
-    // register all required types above
+    // Build the GraphQL schema
     schema_builder
         .register(root_query)
         .data(store)
@@ -211,15 +210,23 @@ impl GraphQLSchemaManager {
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
-        async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
+        async fn rebuild(
+            shared: GraphQLSharedData,
+            schemas: GraphQLSchemas,
+        ) -> Result<(), async_graphql::dynamic::SchemaError> {
             match build_root_schema(shared.store, shared.tx, shared.schema_provider).await {
-                Ok(schema) => schemas.lock().await.push(schema),
-                Err(err) => warn!("Error building GraphQL schema: {}", err),
+                Ok(schema) => {
+                    schemas.lock().await.push(schema);
+                    Ok(())
+                }
+                Err(err) => Err(err),
             }
         }
 
         // Always build a schema right at the beginning as we don't have one yet
-        rebuild(shared.clone(), schemas.clone()).await;
+        if let Err(err) = rebuild(shared.clone(), schemas.clone()).await {
+            panic!("Failed building initial GraphQL schema: {}", err);
+        }
         debug!("Finished building initial GraphQL schema");
 
         // Spawn a task which reacts to newly registered p2panda schemas
@@ -231,7 +238,9 @@ impl GraphQLSchemaManager {
                             "Changed schema {}, rebuilding GraphQL API",
                             schema_id.display()
                         );
-                        rebuild(shared.clone(), schemas.clone()).await;
+                        if let Err(err) = rebuild(shared.clone(), schemas.clone()).await {
+                            warn!("Failed building GraphQL schema: {}", err);
+                        }
                     }
                     Err(err) => {
                         panic!("Failed receiving schema updates: {}", err)
