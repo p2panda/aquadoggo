@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentViewId;
+use p2panda_rs::Human;
 
 /// The document view id of a p2panda document. Refers to a specific point in a documents history
 /// and can be used to deterministically reconstruct its state at that time.
@@ -48,6 +49,12 @@ impl From<DocumentViewIdScalar> for DocumentViewId {
 impl Display for DocumentViewIdScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Human for DocumentViewIdScalar {
+    fn display(&self) -> String {
+        self.0.display()
     }
 }
 

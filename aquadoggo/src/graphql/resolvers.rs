@@ -3,10 +3,13 @@
 use async_graphql::dynamic::ResolverContext;
 use async_graphql::Error;
 use dynamic_graphql::FieldValue;
+use futures::Stream;
+use log::debug;
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
+use p2panda_rs::Human;
 
 use crate::db::stores::{PaginationCursor, PaginationData, RelationList};
 use crate::db::types::StorageDocument;
@@ -49,7 +52,7 @@ pub async fn resolve_document(
     ctx: ResolverContext<'_>,
     document_id: Option<DocumentIdScalar>,
     document_view_id: Option<DocumentViewIdScalar>,
-) -> Result<Option<FieldValue>, Error> {
+) -> Result<Option<FieldValue<'_>>, Error> {
     let store = ctx.data_unchecked::<SqlStore>();
 
     let document = match get_document_from_params(store, &document_id, &document_view_id).await? {
@@ -69,7 +72,7 @@ pub async fn resolve_document_collection(
     ctx: ResolverContext<'_>,
     schema: Schema,
     list: Option<RelationList>,
-) -> Result<Option<FieldValue>, Error> {
+) -> Result<Option<FieldValue<'_>>, Error> {
     let store = ctx.data_unchecked::<SqlStore>();
 
     // Populate query arguments with values from GraphQL query
@@ -126,7 +129,7 @@ pub async fn resolve_document_field(
     let schema = schema_provider
         .get(document.schema_id())
         .await
-        .expect("Schema should be in store");
+        .ok_or(Error::new("Schema not found in store"))?;
 
     // Determine name of the field to be resolved
     let name = ctx.field().name();
@@ -201,5 +204,44 @@ pub async fn resolve_document_field(
         }
         // All other fields are simply resolved to their scalar value
         value => Ok(Some(FieldValue::value(gql_scalar(value)))),
+    }
+}
+
+/// Resolve a subscription to a single document.
+pub fn resolve_document_subscription(
+    ctx: ResolverContext<'_>,
+    document_id: Option<DocumentIdScalar>,
+    document_view_id: Option<DocumentViewIdScalar>,
+) -> impl Stream<Item = Result<FieldValue<'_>, Error>> {
+    async_stream::stream! {
+        match (&document_id, &document_view_id) {
+            (_, Some(document_view_id)) => {
+                debug!("Subscribing to {}", document_view_id.display());
+            }
+            (Some(document_id), _) => {
+                debug!("Subscribing to {}", document_id.display());
+            }
+            (_, _) => {
+                yield Err(Error::new("Document id or document view id must be provided"));
+                return
+            }
+        }
+
+        loop {
+            let store = ctx.data_unchecked::<SqlStore>();
+
+            match get_document_from_params(store, &document_id, &document_view_id).await? {
+                Some(document) => {
+                    yield Ok(FieldValue::owned_any(Resolved::Document(document)));
+                }
+                None => {
+                    yield Err(Error::new("Document not found"));
+                    return
+                }
+            };
+
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
     }
 }

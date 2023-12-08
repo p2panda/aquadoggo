@@ -5,5 +5,5 @@ mod document;
 mod next_args;
 
 pub use collection::build_collection_query;
-pub use document::build_document_query;
+pub use document::{build_document_query, build_document_subscription_query};
 pub use next_args::build_next_args_query;
