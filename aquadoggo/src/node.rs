@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
+use tokio::sync::broadcast;
 
 use crate::api::NodeInterface;
 use crate::bus::ServiceMessage;
@@ -65,10 +66,13 @@ impl Node {
         let schema_provider =
             SchemaProvider::new(application_schema, config.allow_schema_ids.clone());
 
+        // Create a channel to communicate between services
+        let (tx, _) = broadcast::channel(SERVICE_BUS_CAPACITY);
+
         // Create service manager with shared data between services
-        let context = Context::new(store, key_pair, config, schema_provider);
-        let mut manager =
-            ServiceManager::<Context, ServiceMessage>::new(SERVICE_BUS_CAPACITY, context.clone());
+        let context = Context::new(store, key_pair, config, schema_provider, tx.clone());
+
+        let mut manager = ServiceManager::<Context, ServiceMessage>::new(context.clone(), tx);
 
         // Start materializer service
         if manager

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use p2panda_rs::identity::KeyPair;
 use p2panda_rs::storage_provider::traits::{DocumentStore, EntryStore, LogStore, OperationStore};
 
+use crate::bus::ServiceSender;
 use crate::config::Configuration;
 use crate::db::SqlStore;
 use crate::schema::SchemaProvider;
@@ -27,6 +28,9 @@ where
 
     /// Schema provider gives access to system and application schemas.
     pub schema_provider: SchemaProvider,
+
+    /// Service bus sender.
+    pub service_bus: ServiceSender,
 }
 
 impl<S> Data<S>
@@ -38,12 +42,14 @@ where
         key_pair: KeyPair,
         config: Configuration,
         schema_provider: SchemaProvider,
+        service_bus: ServiceSender,
     ) -> Self {
         Self {
             key_pair,
             config,
             store,
             schema_provider,
+            service_bus,
         }
     }
 }
@@ -64,12 +70,14 @@ where
         key_pair: KeyPair,
         config: Configuration,
         schema_provider: SchemaProvider,
+        tx: ServiceSender,
     ) -> Self {
         Self(Arc::new(Data::new(
             store,
             key_pair,
             config,
             schema_provider,
+            tx,
         )))
     }
 }
