@@ -8,6 +8,7 @@ use p2panda_rs::operation::OperationId;
 use p2panda_rs::storage_provider::traits::{DocumentStore, EntryStore, LogStore, OperationStore};
 use p2panda_rs::{Human, WithId};
 
+use crate::bus::ServiceMessage;
 use crate::context::Context;
 use crate::materializer::worker::{Task, TaskError, TaskResult};
 use crate::materializer::TaskInput;
@@ -241,8 +242,28 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
                     document.display(),
                     document.view_id().display()
                 );
+                // Inform other services about the updated document.
+                if context
+                    .service_bus
+                    .send(ServiceMessage::DocumentUpdated(document.id().clone()))
+                    .is_err()
+                {
+                    // If we can't send the message, we should still continue with the next
+                    // one.
+                    debug!("Failed to send new document message to service bus")
+                }
             } else {
                 debug!("Created {}", document.display());
+                // Inform other services about the new document.
+                if context
+                    .service_bus
+                    .send(ServiceMessage::DocumentUpdated(document.id().clone()))
+                    .is_err()
+                {
+                    // If we can't send the message, we should still continue with the next
+                    // one.
+                    debug!("Failed to send new document message to service bus")
+                }
             };
 
             if document.is_deleted() || document.is_edited() {

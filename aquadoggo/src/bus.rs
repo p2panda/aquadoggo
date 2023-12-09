@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::operation::OperationId;
 use tokio::sync::broadcast;
 
@@ -20,6 +21,8 @@ pub fn create_service_sender(capacity: usize) -> ServiceSender {
 pub enum ServiceMessage {
     /// A new operation arrived at the node.
     NewOperation(OperationId),
+
+    DocumentUpdated(DocumentId),
 
     /// Node established a bi-directional connection to another node.
     PeerConnected(Peer),
