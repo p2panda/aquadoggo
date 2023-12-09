@@ -156,6 +156,7 @@ mod tests {
     use tokio::sync::{broadcast, oneshot};
     use tokio::task;
 
+    use crate::bus::create_service_sender;
     use crate::context::Context;
     use crate::materializer::{Task, TaskInput};
     use crate::schema::SchemaProvider;
@@ -197,6 +198,7 @@ mod tests {
                 KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
+                create_service_sender(128),
             );
             let shutdown = task::spawn(async {
                 loop {
@@ -273,6 +275,7 @@ mod tests {
                 KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
+                create_service_sender(128),
             );
             let shutdown = task::spawn(async {
                 loop {
@@ -339,6 +342,7 @@ mod tests {
                 KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
+                create_service_sender(128),
             );
             let shutdown = task::spawn(async {
                 loop {
@@ -434,6 +438,7 @@ mod tests {
                 KeyPair::new(),
                 Configuration::default(),
                 SchemaProvider::default(),
+                create_service_sender(128),
             );
             let shutdown = task::spawn(async {
                 loop {

@@ -6,11 +6,13 @@ use dynamic_graphql::FieldValue;
 use futures::Stream;
 use log::debug;
 use p2panda_rs::document::traits::AsDocument;
+use p2panda_rs::document::DocumentId;
 use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::{FieldType, Schema};
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use p2panda_rs::Human;
 
+use crate::bus::{ServiceMessage, ServiceSender};
 use crate::db::stores::{PaginationCursor, PaginationData, RelationList};
 use crate::db::types::StorageDocument;
 use crate::db::SqlStore;
@@ -227,21 +229,28 @@ pub fn resolve_document_subscription(
             }
         }
 
+        let store = ctx.data_unchecked::<SqlStore>();
+        let tx = ctx.data_unchecked::<ServiceSender>();
+
+        let query_document_id = document_id.map(|id| DocumentId::from(&id));
+
+        let mut rx = tx.subscribe();
         loop {
-            let store = ctx.data_unchecked::<SqlStore>();
-
-            match get_document_from_params(store, &document_id, &document_view_id).await? {
-                Some(document) => {
-                    yield Ok(FieldValue::owned_any(Resolved::Document(document)));
+            if let ServiceMessage::DocumentUpdated(new_document_id) = rx.recv().await? {
+                if let Some(document_id) = &query_document_id {
+                    if document_id == &new_document_id {
+                        yield store
+                            .get_document(document_id)
+                            .await?
+                            .map_or_else(
+                                || Err(Error::new("not found")),
+                                |document| Ok(
+                                    FieldValue::owned_any(Resolved::Document(document)
+                                )
+                            ));
+                    }
                 }
-                None => {
-                    yield Err(Error::new("Document not found"));
-                    return
-                }
-            };
-
-
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
         }
     }
 }

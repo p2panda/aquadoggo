@@ -7,6 +7,7 @@ use p2panda_rs::identity::KeyPair;
 use tokio::runtime::Builder;
 use tokio::sync::Mutex;
 
+use crate::bus::create_service_sender;
 use crate::context::Context;
 use crate::db::Pool;
 use crate::db::SqlStore;
@@ -74,6 +75,7 @@ impl TestNodeManager {
                 KeyPair::new(),
                 cfg,
                 SchemaProvider::default(),
+                create_service_sender(512_000),
             ),
         };
 
@@ -115,6 +117,7 @@ pub fn test_runner<F: AsyncTestFn + Send + Sync + 'static>(test: F) {
                 KeyPair::new(),
                 config,
                 SchemaProvider::default(),
+                create_service_sender(512_000),
             ),
         };
 

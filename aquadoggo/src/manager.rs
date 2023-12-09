@@ -136,8 +136,7 @@ where
     ///
     /// The `capacity` argument defines the maximum bound of messages on the communication bus
     /// which get broadcasted across all services.
-    pub fn new(capacity: usize, context: D) -> Self {
-        let (tx, _) = broadcast::channel(capacity);
+    pub fn new(context: D, tx: Sender<M>) -> Self {
         let (shutdown_signal, _) = broadcast::channel(128);
         let (exit_signal, exit_handle) = triggered::trigger();
 
@@ -247,13 +246,16 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
+    use tokio::sync::broadcast;
+
     use super::{Sender, ServiceManager, ServiceReadySender, Shutdown};
 
     type Counter = Arc<AtomicUsize>;
 
     #[tokio::test]
     async fn service_manager() {
-        let mut manager = ServiceManager::<usize, usize>::new(120, 0);
+        let (tx, _) = broadcast::channel(128);
+        let mut manager = ServiceManager::<usize, usize>::new(0, tx);
 
         manager.add("test", |_, signal: Shutdown, _, _| async {
             let work = tokio::task::spawn(async {
@@ -286,7 +288,8 @@ mod tests {
         // Counter which is shared between services
         let counter: Counter = Arc::new(AtomicUsize::new(0));
 
-        let mut manager = ServiceManager::<Counter, Message>::new(120, counter.clone());
+        let (tx, _) = broadcast::channel(128);
+        let mut manager = ServiceManager::<Counter, Message>::new(counter.clone(), tx);
 
         // Create five services waiting for message
         for _ in 0..5 {
@@ -321,7 +324,8 @@ mod tests {
     #[tokio::test]
     async fn on_exit() {
         let counter: Counter = Arc::new(AtomicUsize::new(0));
-        let mut manager = ServiceManager::<Counter, usize>::new(120, counter.clone());
+        let (tx, _) = broadcast::channel(128);
+        let mut manager = ServiceManager::<Counter, usize>::new(counter.clone(), tx);
 
         manager.add(
             "one",
@@ -366,7 +370,8 @@ mod tests {
 
     #[tokio::test]
     async fn ready_signal() {
-        let mut manager = ServiceManager::<usize, usize>::new(120, 0);
+        let (tx, _) = broadcast::channel(128);
+        let mut manager = ServiceManager::<usize, usize>::new(0, tx);
 
         let service_ready = manager.add(
             "ready_signal",
@@ -383,7 +388,8 @@ mod tests {
 
     #[tokio::test]
     async fn ready_signal_error() {
-        let mut manager = ServiceManager::<usize, usize>::new(120, 0);
+        let (tx, _) = broadcast::channel(128);
+        let mut manager = ServiceManager::<usize, usize>::new(0, tx);
 
         let service_ready = manager.add(
             "ready_signal",
