@@ -16,7 +16,58 @@ use crate::{AllowList, Configuration, NetworkConfiguration};
 
 const WILDCARD: &str = "*";
 
+const DEFAULT_LOG_LEVEL: &str = "off";
+
+const DEFAULT_MAX_DATABASE_CONNECTIONS: u32 = 32;
+
+const DEFAULT_HTTP_PORT: u16 = 2020;
+
+const DEFAULT_QUIC_PORT: u16 = 2022;
+
+const DEFAULT_WORKER_POOL_SIZE: u32 = 16;
+
+const DEFAULT_MDNS: bool = true;
+
 static TMP_DIR: OnceLock<TempDir> = OnceLock::new();
+
+fn default_log_level() -> String {
+    DEFAULT_LOG_LEVEL.to_string()
+}
+
+fn default_max_database_connections() -> u32 {
+    DEFAULT_MAX_DATABASE_CONNECTIONS
+}
+
+fn default_http_port() -> u16 {
+    DEFAULT_HTTP_PORT
+}
+
+fn default_quic_port() -> u16 {
+    DEFAULT_QUIC_PORT
+}
+
+fn default_database_url() -> String {
+    // Give each in-memory SQLite database an unique name as we're observing funny issues with
+    // SQLite sharing data between processes (!) and breaking each others databases
+    // potentially.
+    //
+    // See related issue: https://github.com/p2panda/aquadoggo/issues/568
+    let db_name = format!("dbmem{}", rand::random::<u32>());
+
+    // Set "mode=memory" to enable SQLite running in-memory and set "cache=shared", as
+    // setting it to "private" would break sqlx / SQLite.
+    //
+    // See related issue: https://github.com/launchbadge/sqlx/issues/2510
+    format!("sqlite://file:{db_name}?mode=memory&cache=shared")
+}
+
+fn default_worker_pool_size() -> u32 {
+    DEFAULT_WORKER_POOL_SIZE
+}
+
+fn default_mdns() -> bool {
+    DEFAULT_MDNS
+}
 
 /// Node configuration which can be de/serialized from a config file.
 ///
@@ -31,6 +82,7 @@ pub struct ConfigFile {
     ///
     /// If you want to adjust the scope for deeper inspection use a filter value, for example
     /// "=TRACE" for logging _everything_ or "aquadoggo=INFO,libp2p=DEBUG" etc.
+    #[serde(default = "default_log_level")]
     pub log_level: String,
 
     /// List of schema ids which a node will replicate, persist and expose on the GraphQL API.
@@ -46,6 +98,7 @@ pub struct ConfigFile {
     /// WARNING: When set to wildcard "*", your node will support _any_ schemas it will encounter
     /// on the network. This is useful for experimentation and local development but _not_
     /// recommended for production settings.
+    #[serde(default)]
     pub allow_schema_ids: UncheckedAllowList,
 
     /// URL / connection string to PostgreSQL or SQLite database. Defaults to an in-memory SQLite
@@ -53,15 +106,19 @@ pub struct ConfigFile {
     ///
     /// WARNING: By default your node will not persist anything after shutdown. Set a database
     /// connection url for production settings to not loose data.
+    #[serde(default = "default_database_url")]
     pub database_url: String,
 
     /// Max database connections, defaults to 32.
+    #[serde(default = "default_max_database_connections")]
     pub database_max_connections: u32,
 
     /// HTTP port for client-node communication, serving the GraphQL API. Defaults to 2020.
+    #[serde(default = "default_http_port")]
     pub http_port: u16,
 
     /// QUIC port for node-node communication and data replication. Defaults to 2022.
+    #[serde(default = "default_quic_port")]
     pub quic_port: u16,
 
     /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
@@ -69,6 +126,7 @@ pub struct ConfigFile {
     ///
     /// WARNING: By default your node will not persist any blobs after shutdown. Set a path for
     /// production settings to not loose data.
+    #[serde(default)]
     pub blobs_base_path: Option<PathBuf>,
 
     /// Path to persist your ed25519 private key file. Defaults to an ephemeral key only for this
@@ -82,9 +140,11 @@ pub struct ConfigFile {
     ///
     /// When no path is set, your node will generate an ephemeral private key on every start up and
     /// _not_ persist it.
+    #[serde(default)]
     pub private_key: Option<PathBuf>,
 
     /// mDNS to discover other peers on the local network. Enabled by default.
+    #[serde(default = "default_mdns")]
     pub mdns: bool,
 
     /// List of known node addresses we want to connect to directly.
@@ -93,6 +153,7 @@ pub struct ConfigFile {
     /// with a static IP Address). If you need to connect to nodes with changing, dynamic IP
     /// addresses or even with nodes behind a firewall or NAT, do not use this field but use at
     /// least one relay.
+    #[serde(default)]
     pub direct_node_addresses: Vec<SocketAddr>,
 
     /// List of peers which are allowed to connect to your node.
@@ -108,6 +169,7 @@ pub struct ConfigFile {
     /// Use this list for example for setups where the identifier of the nodes you want to form a
     /// network with is known but you still need to use relays as their IP addresses change
     /// dynamically.
+    #[serde(default)]
     pub allow_peer_ids: UncheckedAllowList,
 
     /// List of peers which will be blocked from connecting to your node.
@@ -121,6 +183,7 @@ pub struct ConfigFile {
     ///
     /// Use this list for example if you want to allow _any_ node to connect to yours _except_ of a
     /// known number of excluded nodes.
+    #[serde(default)]
     pub block_peer_ids: Vec<PeerId>,
 
     /// List of relay addresses.
@@ -132,6 +195,7 @@ pub struct ConfigFile {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
+    #[serde(default)]
     pub relay_addresses: Vec<SocketAddr>,
 
     /// Enable if node should also function as a relay. Disabled by default.
@@ -140,45 +204,32 @@ pub struct ConfigFile {
     ///
     /// Relays _need_ to be hosted in a way where they can be reached directly, for example with a
     /// static IP address through an VPS.
+    #[serde(default)]
     pub relay_mode: bool,
 
     /// Worker pool size, defaults to 16.
+    #[serde(default = "default_worker_pool_size")]
     pub worker_pool_size: u32,
 }
 
 impl Default for ConfigFile {
     fn default() -> Self {
-        let database_url = {
-            // Give each in-memory SQLite database an unique name as we're observing funny issues with
-            // SQLite sharing data between processes (!) and breaking each others databases
-            // potentially.
-            //
-            // See related issue: https://github.com/p2panda/aquadoggo/issues/568
-            let db_name = format!("dbmem{}", rand::random::<u32>());
-
-            // Set "mode=memory" to enable SQLite running in-memory and set "cache=shared", as
-            // setting it to "private" would break sqlx / SQLite.
-            //
-            // See related issue: https://github.com/launchbadge/sqlx/issues/2510
-            format!("sqlite://file:{db_name}?mode=memory&cache=shared")
-        };
-
         Self {
-            log_level: "off".into(),
-            allow_schema_ids: UncheckedAllowList::Wildcard,
-            database_url,
-            database_max_connections: 32,
-            http_port: 2020,
-            quic_port: 2022,
+            log_level: default_log_level(),
+            allow_schema_ids: UncheckedAllowList::default(),
+            database_url: default_database_url(),
+            database_max_connections: default_max_database_connections(),
+            http_port: default_http_port(),
+            quic_port: default_quic_port(),
             blobs_base_path: None,
-            mdns: true,
+            mdns: default_mdns(),
             private_key: None,
             direct_node_addresses: vec![],
-            allow_peer_ids: UncheckedAllowList::Wildcard,
-            block_peer_ids: Vec::new(),
+            allow_peer_ids: UncheckedAllowList::default(),
+            block_peer_ids: vec![],
             relay_addresses: vec![],
             relay_mode: false,
-            worker_pool_size: 16,
+            worker_pool_size: default_worker_pool_size(),
         }
     }
 }
@@ -265,6 +316,12 @@ impl TryFrom<ConfigFile> for Configuration {
 pub enum UncheckedAllowList {
     Wildcard,
     Set(Vec<String>),
+}
+
+impl Default for UncheckedAllowList {
+    fn default() -> Self {
+        UncheckedAllowList::Wildcard
+    }
 }
 
 impl Serialize for UncheckedAllowList {
