@@ -18,7 +18,7 @@ const WILDCARD: &str = "*";
 
 static TMP_DIR: OnceLock<TempDir> = OnceLock::new();
 
-/// ConfigFile derived from a .toml file.
+/// Node configuration which can be de/serialized from a config file.
 ///
 /// See https://github.com/p2panda/aquadoggo/blob/main/aquadoggo_cli/config.toml for example
 /// config file and detailed documentation of possible configuration values.
