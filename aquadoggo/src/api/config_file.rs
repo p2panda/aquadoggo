@@ -312,16 +312,11 @@ impl TryFrom<ConfigFile> for Configuration {
 /// Helper struct to deserialize from either a wildcard string "*" or a list of string values.
 ///
 /// These string values are not checked yet and need to be validated in a succeeding step.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum UncheckedAllowList {
+    #[default]
     Wildcard,
     Set(Vec<String>),
-}
-
-impl Default for UncheckedAllowList {
-    fn default() -> Self {
-        UncheckedAllowList::Wildcard
-    }
 }
 
 impl Serialize for UncheckedAllowList {

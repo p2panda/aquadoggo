@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
-use aquadoggo::{AllowList, Configuration, ConfigFile};
+use aquadoggo::{AllowList, ConfigFile, Configuration};
 use clap::{crate_version, Parser};
 use colored::Colorize;
 use directories::ProjectDirs;
