@@ -15,7 +15,7 @@ pub mod traits;
 pub use announcement::{now, Announcement, AnnouncementMessage};
 pub use ingest::SyncIngest;
 pub use manager::SyncManager;
-pub use message::{LiveMode, LogHeights, Message, SyncMessage};
+pub use message::{LogHeights, Message, SyncMessage};
 pub use mode::Mode;
 pub use schema_id_set::SchemaIdSet;
 pub use service::replication_service;

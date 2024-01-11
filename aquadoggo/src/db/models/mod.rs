@@ -10,9 +10,11 @@ mod query;
 mod task;
 pub mod utils;
 
-pub use self::log::{LogHeightRow, LogRow};
+pub use self::log::LogHeightRow;
 pub use document::{DocumentRow, DocumentViewFieldRow};
 pub use entry::EntryRow;
-pub use operation::{OperationFieldsJoinedRow, OperationRow};
-pub use query::{OptionalOwner, QueryRow};
+pub use operation::OperationFieldsJoinedRow;
+#[cfg(test)]
+pub use query::OptionalOwner;
+pub use query::QueryRow;
 pub use task::TaskRow;

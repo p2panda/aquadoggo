@@ -13,4 +13,4 @@ mod schema;
 mod tests;
 pub mod utils;
 
-pub use schema::{build_root_schema, GraphQLSchemaManager};
+pub use schema::GraphQLSchemaManager;

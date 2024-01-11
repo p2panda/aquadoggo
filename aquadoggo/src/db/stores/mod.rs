@@ -12,6 +12,4 @@ mod schema;
 mod task;
 
 pub use operation::OperationCursor;
-pub use query::{
-    PaginationCursor, PaginationData, Query, QueryResponse, RelationList, RelationListType,
-};
+pub use query::{PaginationCursor, PaginationData, Query, RelationList};

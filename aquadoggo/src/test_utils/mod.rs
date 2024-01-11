@@ -9,7 +9,7 @@ mod runner;
 
 pub use client::{http_test_client, TestClient};
 pub use config::TestConfiguration;
-pub use db::{drop_database, initialize_db, initialize_sqlite_db};
+pub use db::{initialize_db, initialize_sqlite_db};
 pub use helpers::{doggo_fields, doggo_schema, generate_key_pairs, schema_from_fields};
 pub use node::{
     add_blob, add_document, add_schema, add_schema_and_documents, assert_query, delete_document,

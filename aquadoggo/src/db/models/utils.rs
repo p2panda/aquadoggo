@@ -25,7 +25,7 @@ use crate::db::types::StorageOperation;
 pub fn parse_operation_rows(
     operation_rows: Vec<OperationFieldsJoinedRow>,
 ) -> Option<StorageOperation> {
-    let first_row = match operation_rows.get(0) {
+    let first_row = match operation_rows.first() {
         Some(row) => row,
         None => return None,
     };

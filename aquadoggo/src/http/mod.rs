@@ -4,5 +4,8 @@ mod api;
 mod context;
 mod service;
 
+#[cfg(test)]
 pub use context::HttpServiceContext;
-pub use service::{build_server, http_service};
+#[cfg(test)]
+pub use service::build_server;
+pub use service::http_service;
