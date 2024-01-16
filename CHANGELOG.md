@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Export ConfigFile which can be de/serialized to and from a config file [#607](https://github.com/p2panda/aquadoggo/pull/607)
+
 ### Fixed
 
 - Fix bug where known schemas are not replicated between nodes [#603](https://github.com/p2panda/aquadoggo/pull/603).
