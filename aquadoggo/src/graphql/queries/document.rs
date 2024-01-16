@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use async_graphql::dynamic::{Field, FieldFuture, InputValue, Object, ResolverContext, TypeRef};
+use async_graphql::dynamic::{
+    Field, FieldFuture, InputValue, Object, ResolverContext, Subscription, SubscriptionField,
+    SubscriptionFieldFuture, TypeRef,
+};
 use async_graphql::Error;
 use dynamic_graphql::ScalarValue;
 use log::debug;
 use p2panda_rs::schema::Schema;
 
 use crate::graphql::constants;
-use crate::graphql::resolvers::resolve_document;
+use crate::graphql::resolvers::{resolve_document, resolve_document_subscription};
 use crate::graphql::scalars::{DocumentIdScalar, DocumentViewIdScalar};
 
 /// Adds a GraphQL query for retrieving a single document selected by its id or
@@ -44,6 +47,50 @@ pub fn build_document_query(query: Object, schema: &Schema) -> Object {
         .description(format!(
             "Query a {} document by id or view id.",
             schema.name()
+        )),
+    )
+}
+
+/// Builds a subscription object and adds it to the given root subscription.
+///
+/// The subscription follows the format `<SCHEMA_ID>(id: <DOCUMENT_ID>, viewId: <DOCUMENT_VIEW_ID>)`.
+pub fn build_document_subscription_query(
+    root_subscription: Subscription,
+    schema: &Schema,
+) -> Subscription {
+    let schema_id = schema.id().clone();
+    root_subscription.field(
+        SubscriptionField::new(
+            schema_id.to_string(),
+            TypeRef::named(schema_id.to_string()),
+            move |ctx| {
+                SubscriptionFieldFuture::new(async move {
+                    let (document_id, document_view_id) = parse_arguments(&ctx)?;
+                    Ok(resolve_document_subscription(
+                        ctx,
+                        document_id,
+                        document_view_id,
+                    ))
+                })
+            },
+        )
+        .argument(
+            InputValue::new(
+                constants::DOCUMENT_ID_ARG,
+                TypeRef::named(constants::DOCUMENT_ID),
+            )
+            .description("Specify the id of the document to be streamed"),
+        )
+        .argument(
+            InputValue::new(
+                constants::DOCUMENT_VIEW_ID_ARG,
+                TypeRef::named(constants::DOCUMENT_VIEW_ID),
+            )
+            .description("Specify the view id of the document to be streamed"),
+        )
+        .description(format!(
+            "Subscription for application fields of a `{}` document.",
+            schema.id().name()
         )),
     )
 }

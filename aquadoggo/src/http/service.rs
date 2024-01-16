@@ -3,6 +3,7 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use anyhow::Result;
+use async_graphql_axum::GraphQLSubscription;
 use axum::extract::Extension;
 use axum::http::Method;
 use axum::routing::get;
@@ -23,6 +24,9 @@ use crate::manager::{ServiceReadySender, Shutdown};
 /// Route to the GraphQL playground
 const GRAPHQL_ROUTE: &str = "/graphql";
 
+/// Route to the GraphQL subscription endpoint
+const GRAPHQL_SUBSCRIPTION_ROUTE: &str = "/graphql/ws";
+
 /// Build HTTP server with GraphQL API.
 pub fn build_server(http_context: HttpServiceContext) -> Router {
     // Configure CORS middleware
@@ -36,7 +40,12 @@ pub fn build_server(http_context: HttpServiceContext) -> Router {
         // Add GraphQL routes
         .route(
             GRAPHQL_ROUTE,
-            get(|| handle_graphql_playground(GRAPHQL_ROUTE)).post(handle_graphql_query),
+            get(|| handle_graphql_playground(GRAPHQL_ROUTE, GRAPHQL_SUBSCRIPTION_ROUTE))
+                .post(handle_graphql_query),
+        )
+        .route_service(
+            GRAPHQL_SUBSCRIPTION_ROUTE,
+            GraphQLSubscription::new(http_context.schema.clone()),
         )
         // Add blob routes
         .route("/blobs/:document_id", get(handle_blob_document))

@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use dynamic_graphql::{Error, Result, Scalar, ScalarValue, Value};
 use p2panda_rs::document::DocumentId;
+use p2panda_rs::Human;
 
 /// The id of a p2panda document.
 #[derive(Scalar, Clone, Debug, Eq, PartialEq)]
@@ -47,6 +48,12 @@ impl From<&DocumentIdScalar> for DocumentId {
 impl Display for DocumentIdScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.as_str())
+    }
+}
+
+impl Human for DocumentIdScalar {
+    fn display(&self) -> String {
+        self.0.display()
     }
 }
 
