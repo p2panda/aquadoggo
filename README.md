@@ -325,7 +325,7 @@ Fetch all "events" with ordering and filtering as well as selecting some meta fi
 `aquadoggo` is built using the [p2panda](https://p2panda.org) protocol which is in development and some planned features are still missing, the main ones being:
 
 - **Capabilities:** Currently all data can be edited by any author who has access to the network. In many cases, permissions can be handled where needed on the client side (planned mid-2024).
-- **Privacy:** While node communication is encrypted with TLS the data stored on nodes itself is not. Integration of [MLS](https://p2panda.org/specification/encryption/) is underway but not complete yet.
+- **Privacy:** While node communication is encrypted with TLS the data stored on nodes itself is not. Integration of [MLS](https://p2panda.org/specifications/aquadoggo/encryption/) is underway but not complete yet.
 - **Deletion:** Network-wide purging of data is dependent on having a capabilities system already in place, so these two features will arrive together.
 - **Anonymity:** Networking exposes sensitive data, we're waiting for [Arti](https://tpo.pages.torproject.net/core/arti/) supporting Onion Services to make this a configurable option.
 
