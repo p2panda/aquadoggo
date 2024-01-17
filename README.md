@@ -48,8 +48,6 @@
 
 `aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
-> 📖 Read more about nodes in our [learn](https://p2panda.org/learn/networks) section
-
 ## Features
 
 - Awaits signed operations from clients via GraphQL.
@@ -320,7 +318,7 @@ Fetch all "events" with ordering and filtering as well as selecting some meta fi
 - 🛼 Open the GraphQL playground in your browser, served under `http://localhost:2020/graphql`
 - 📖 Try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app)
 - 🔬 Manually publish data to a node [`send-to-node`](https://github.com/p2panda/send-to-node)
-- 🐼 [Learn more](https://p2panda.org/learn/) about how p2panda works
+- 🐼 [Learn more](https://p2panda.org) about how p2panda works
 
 ## What shouldn't I do with `aquadoggo`?
 
