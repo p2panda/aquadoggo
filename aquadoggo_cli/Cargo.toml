@@ -1,6 +1,6 @@
 [package]
 name = "aquadoggo_cli"
-version = "0.7.0"
+version = "0.7.1"
 authors = [
     "adz <x12@adz.garden>",
     "cafca <cafca@001.land>",
@@ -38,5 +38,5 @@ tokio = { version = "1.28.2", features = ["full"] }
 toml = "0.7.6"
 
 [dependencies.aquadoggo]
-version = "~0.7.0"
+version = "~0.7.1"
 path = "../aquadoggo"
