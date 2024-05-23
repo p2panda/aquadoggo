@@ -358,7 +358,7 @@ mod tests {
             let _ = populate_store(&node.context.store, &config).await;
 
             // The key pair of the author who published to the note.
-            let key_pair = config.authors.get(0).expect("At least one key pair");
+            let key_pair = config.authors.first().expect("At least one key pair");
 
             // We get back the first entry.
             let first_entry = node
@@ -402,8 +402,7 @@ mod tests {
 
             // The public key of the author who published to the node.
             let public_key_in_db = config
-                .authors
-                .get(0)
+                .authors.first()
                 .expect("At least one key pair")
                 .public_key();
 
@@ -452,8 +451,7 @@ mod tests {
             let _ = populate_store(&node.context.store, &config).await;
             // The public key of the author who published to the node.
             let public_key = config
-                .authors
-                .get(0)
+                .authors.first()
                 .expect("At least one key pair")
                 .public_key();
 
@@ -528,8 +526,7 @@ mod tests {
 
             // The public key of the author who published to the node.
             let public_key = config
-                .authors
-                .get(0)
+                .authors.first()
                 .expect("At least one key pair")
                 .public_key();
 

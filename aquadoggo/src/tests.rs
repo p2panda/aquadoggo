@@ -71,7 +71,7 @@ async fn e2e() {
     // lightweight clients communicating with nodes who persist, replicate, materialise and
     // serve the data.
 
-    let client = reqwest::Client::builder()
+    let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();

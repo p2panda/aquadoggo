@@ -814,7 +814,7 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
             let documents = populate_store(&node.context.store, &config).await;
-            let document = documents.get(0).expect("At least one document");
+            let document = documents.first().expect("At least one document");
 
             // Get the operations and build the document.
             let operations = node
@@ -959,7 +959,7 @@ mod tests {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
             let documents = populate_store(&node.context.store, &config).await;
-            let document = documents.get(0).expect("At least one document");
+            let document = documents.first().expect("At least one document");
 
             // The document is successfully inserted into the database, this relies on the
             // operations already being present and would fail if they were not.
@@ -1017,7 +1017,7 @@ mod tests {
             // Populate the store with some entries and operations but DON'T materialise any
             // resulting documents.
             let documents = populate_store(&node.context.store, &config).await;
-            let document = documents.get(0).expect("At least one document");
+            let document = documents.first().expect("At least one document");
 
             // Get the view id.
             let view_id = document.view_id();
@@ -1060,7 +1060,7 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
             let documents = populate_store(&node.context.store, &config).await;
-            let document = documents.get(0).expect("At least one document");
+            let document = documents.first().expect("At least one document");
 
             // Insert the document, this is possible even though it has been deleted.
             let result = node.context.store.insert_document(document).await;
@@ -1086,7 +1086,7 @@ mod tests {
         test_runner(|node: TestNode| async move {
             // Populate the store with some entries and operations but DON'T materialise any resulting documents.
             let documents = populate_store(&node.context.store, &config).await;
-            let document = documents.get(0).expect("At least one document");
+            let document = documents.first().expect("At least one document");
 
             // Get the operations for this document and sort them into linear order.
             let operations = node
