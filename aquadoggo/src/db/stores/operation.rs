@@ -227,7 +227,7 @@ fn group_and_parse_operation_rows(
             // If we've moved on to the next operation, then push the complete vec of operation
             // rows to the grouped rows collection and then setup for the next iteration.
             grouped_operation_rows.push(current_operation_rows.clone());
-            current_operation_id.clone_from(&row.operation_id);
+            current_operation_id = row.operation_id.clone();
             current_operation_rows = vec![row];
         }
     }
@@ -588,7 +588,7 @@ mod tests {
         test_runner(|mut node: TestNode| async move {
             // Populate the store with some entries and operations and materialize documents.
             let documents = populate_and_materialize(&mut node, &config).await;
-            let document_id = documents.first().expect("At least one document id").id();
+            let document_id = documents.get(0).expect("At least one document id").id();
 
             let operations_by_document_id = node
                 .context

@@ -392,10 +392,10 @@ mod tests {
             let schema = config.schema.clone();
 
             // Collect the values for the two authors and documents.
-            let key_pair_a = config.authors.first().unwrap();
+            let key_pair_a = config.authors.get(0).unwrap();
             let key_pair_b = config.authors.get(1).unwrap();
 
-            let document_a = documents.first().unwrap().id();
+            let document_a = documents.get(0).unwrap().id();
             let document_b = documents.get(1).unwrap().id();
 
             // Compose the list of logs the a remote might need.

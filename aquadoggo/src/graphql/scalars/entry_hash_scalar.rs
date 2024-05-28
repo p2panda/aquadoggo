@@ -57,12 +57,6 @@ impl Display for EntryHashScalar {
     }
 }
 
-/// Validation method used internally in `async-graphql` to check scalar values passed into the
-/// public api.
-fn validate(value: &Value) -> bool {
-    EntryHashScalar::from_value(value.to_owned()).is_ok()
-}
-
 #[cfg(test)]
 mod tests {
     use p2panda_rs::document::DocumentViewId;
@@ -74,4 +68,10 @@ mod tests {
             hash.0.into()
         }
     }
+}
+
+/// Validation method used internally in `async-graphql` to check scalar values passed into the
+/// public api.
+fn validate(value: &Value) -> bool {
+    EntryHashScalar::from_value(value.to_owned()).is_ok()
 }
