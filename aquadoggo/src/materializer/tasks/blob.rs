@@ -76,6 +76,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
             let mut file = OpenOptions::new()
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(&blob_view_path)
                 .await
                 .map_err(|err| {

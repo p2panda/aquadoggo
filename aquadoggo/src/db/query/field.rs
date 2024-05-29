@@ -39,16 +39,15 @@ impl TryFrom<&str> for MetaField {
     }
 }
 
-impl ToString for MetaField {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for MetaField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
             MetaField::DocumentId => "documentId",
             MetaField::DocumentViewId => "viewId",
             MetaField::Owner => "owner",
             MetaField::Edited => "edited",
             MetaField::Deleted => "deleted",
-        }
-        .to_string()
+        })
     }
 }
 
