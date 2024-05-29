@@ -29,7 +29,7 @@ pub fn parse_str(key: &str, value: &[OperationValue]) -> Result<(String, FilterB
     }
 
     // Unwrap since we know at least one element exists
-    let element = value.get(0).unwrap();
+    let element = value.first().unwrap();
 
     if key.ends_with("_gt") {
         Ok((
@@ -41,7 +41,7 @@ pub fn parse_str(key: &str, value: &[OperationValue]) -> Result<(String, FilterB
             false,
         ))
     } else if key.ends_with("_gte") {
-        let element = value.get(0).context("Needs at least one value")?;
+        let element = value.first().context("Needs at least one value")?;
 
         Ok((
             clean_key(key, "_gte"),

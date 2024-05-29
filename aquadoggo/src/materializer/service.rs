@@ -465,7 +465,7 @@ mod tests {
 
             // Send a message over the bus which kicks in materialization
             tx.send(crate::bus::ServiceMessage::NewOperation(
-                p2panda_rs::entry::traits::AsEncodedEntry::hash(&entry_encoded).into(),
+                AsEncodedEntry::hash(&entry_encoded).into(),
             ))
             .unwrap();
 

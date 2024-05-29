@@ -457,7 +457,7 @@ mod tests {
 
             // We didn't reduce this document_view so it shouldn't exist in the db.
             let document_view_id: DocumentViewId =
-                sorted_document_operations.get(0).unwrap().clone().0.into();
+                sorted_document_operations.first().unwrap().clone().0.into();
 
             let document = node
                 .context

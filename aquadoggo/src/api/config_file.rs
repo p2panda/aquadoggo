@@ -281,8 +281,7 @@ impl TryFrom<ConfigFile> for Configuration {
                 .get_or_init(|| {
                     // Initialise a `TempDir` instance globally to make sure it does not run out of
                     // scope and gets deleted before the end of the application runtime
-                    tempfile::TempDir::new()
-                        .expect("Could not create temporary directory to store blobs")
+                    TempDir::new().expect("Could not create temporary directory to store blobs")
                 })
                 .path()
                 .to_path_buf(),
