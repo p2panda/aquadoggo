@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Accept domain name and ip addresses for peers in configuration file and cli [#612](https://github.com/p2panda/aquadoggo/pull/612)
+
 ## [0.7.1]
 
 ### Added
