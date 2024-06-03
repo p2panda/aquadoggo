@@ -31,6 +31,8 @@ pub fn load_config() -> Result<(ConfigFilePath, ConfigFile)> {
     // Parse command line arguments first to get optional config file path
     let cli = Cli::parse();
 
+    println!("{:#?}", cli);
+
     // Determine if a config file path was provided or if we should look for it in common locations
     let config_file_path: ConfigFilePath = match &cli.config {
         Some(path) => {
@@ -47,6 +49,8 @@ pub fn load_config() -> Result<(ConfigFilePath, ConfigFile)> {
     if let Some(path) = &config_file_path {
         figment = figment.merge(Toml::file(path));
     }
+
+    println!("{:#?}", Env::raw().filter(|k| k == "CONFIG"));
 
     let config = figment
         .merge(Env::raw())
@@ -74,7 +78,7 @@ struct Cli {
     /// When not set the program will try to find a `config.toml` file in the same folder the
     /// program is executed in and otherwise in the regarding operation systems XDG config
     /// directory ("$HOME/.config/aquadoggo/config.toml" on Linux).
-    #[arg(short = 'c', long, value_name = "PATH")]
+    #[arg(short = 'c', long, value_name = "PATH", env)]
     #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<PathBuf>,
 
