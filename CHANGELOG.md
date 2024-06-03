@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Allow setting config file path via environment variables [#611](https://github.com/p2panda/aquadoggo/pull/611)
+
 ## [0.7.1]
 
 ### Added
