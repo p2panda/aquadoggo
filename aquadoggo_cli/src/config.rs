@@ -28,7 +28,8 @@ type ConfigFilePath = Option<PathBuf>;
 /// Returns a partly unchecked configuration object which results from all of these sources. It
 /// still needs to be converted for aquadoggo as it might still contain invalid values.
 pub fn load_config() -> Result<(ConfigFilePath, ConfigFile)> {
-    // Parse command line arguments first to get optional config file path
+    // Parse command line arguments and CONFIG environment variable first to get optional config 
+    // file path
     let cli = Cli::parse();
 
     // Determine if a config file path was provided or if we should look for it in common locations
