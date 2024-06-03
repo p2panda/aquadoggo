@@ -177,6 +177,10 @@ mod tests {
                         }}
                         fields {{
                             line
+                            index
+                            font
+                            another_text_field
+                            a_float_field
                         }}
                     }}
                 }},
@@ -216,26 +220,36 @@ mod tests {
                 // X-ray Spex : Oh Bondage Up Yours!
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 0.into(), None),
                     ("line", "Bind me, tie me, chain me to the wall".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 1.into(), None),
                     ("line", "I wanna be a slave to you all".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 2.into(), None),
                     ("line", "Oh bondage, up yours".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 3.into(), None),
                     ("line", "Oh bondage, no more".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 4.into(), None),
                     (
                         "line",
@@ -245,6 +259,8 @@ mod tests {
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 5.into(), None),
                     (
                         "line",
@@ -254,6 +270,8 @@ mod tests {
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 6.into(), None),
                     (
                         "line",
@@ -263,152 +281,212 @@ mod tests {
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 7.into(), None),
                     ("line", "I wanna be a victim for you all".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 8.into(), None),
                     ("line", "Bind me, tie me, chain me to the wall".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 9.into(), None),
                     ("line", "I wanna be a slave to you all".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 10.into(), None),
                     ("line", "Oh bondage, no more!".into(), None),
                 ],
                 // Gang of Four : Natural's Not In
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 11.into(), None),
                     ("line", "The problem of leisure".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 12.into(), None),
                     ("line", "What to do for pleasure".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 13.into(), None),
                     ("line", "Ideal love, a new purchase".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 14.into(), None),
                     ("line", "A market of the senses".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 15.into(), None),
                     ("line", "Dream of the perfect life".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 16.into(), None),
                     ("line", "Economic circumstances".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 17.into(), None),
                     ("line", "The body is good business".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 18.into(), None),
                     ("line", "Sell out, maintain the interest".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 19.into(), None),
                     ("line", "Remember Lot's wife".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 20.into(), None),
                     ("line", "Renounce all sin and vice".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 21.into(), None),
                     ("line", "Dream of the perfect life".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 22.into(), None),
                     ("line", "This heaven gives me migraine".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 23.into(), None),
                     ("line", "The problem of leisure".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 24.into(), None),
                     ("line", "What to do for pleasure".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 25.into(), None),
                     ("line", "Coercion of the senses".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 26.into(), None),
                     ("line", "We're not so gullible".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 27.into(), None),
                     ("line", "Our great expectations".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 28.into(), None),
                     ("line", "A future for the good".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 29.into(), None),
                     ("line", "Fornication makes you happy".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 30.into(), None),
                     ("line", "No escape from society".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 31.into(), None),
                     ("line", "Natural is not in it".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 32.into(), None),
                     ("line", "Your relations are of power".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 33.into(), None),
                     ("line", "We all have good intentions".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 34.into(), None),
                     ("line", "But all with strings attached".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 35.into(), None),
                     ("line", "Repackaged sex (keeps) your interest".into(), None),
                 ],
                 vec![
                     ("font", "comic-sans".into(), None),
+                    ("another_text_field", "yo!".into(), None),
+                    ("a_float_field", 0.7.into(), None),
                     ("index", 36.into(), None),
                     ("line", "This heaven gives me migraine".into(), None),
                 ],
@@ -546,6 +624,66 @@ mod tests {
             key_pair,
         )
         .await
+    }
+
+    async fn next_page(
+        client: &TestClient,
+        schema: &Schema,
+        first: usize,
+        end_cursor: Option<&String>,
+        order_by: Option<&String>,
+        order_direction: Option<&String>,
+        filter: Option<&String>,
+        documents: &mut Vec<JsonValue>,
+    ) -> (usize, usize, String, bool) {
+        let after = if let Some(end_cursor) = end_cursor {
+            format!("after: {end_cursor}, ")
+        } else {
+            String::new()
+        };
+
+        let order_by = if let Some(order_by) = order_by {
+            format!("orderBy: {order_by}, ")
+        } else {
+            String::new()
+        };
+
+        let order_direction = if let Some(order_direction) = order_direction {
+            format!("orderDirection: {order_direction}, ")
+        } else {
+            String::new()
+        };
+
+        let filter = if let Some(filter) = filter {
+            format!("filter: {{ {filter} }} ")
+        } else {
+            String::new()
+        };
+
+        let data = query_lyrics(
+            client,
+            schema.id(),
+            &format!(
+                "(
+                    first: {first},
+                    {after}
+                    {order_by}
+                    {order_direction}
+                    {filter}
+                    
+                )"
+            ),
+        )
+        .await;
+
+        let mut page = data["query"]["documents"].as_array().unwrap().to_owned();
+        let page_len = page.len();
+        let total_count = data["query"]["totalCount"].clone().as_i64().unwrap();
+        let end_cursor = data["query"]["endCursor"].clone().to_string();
+        let has_next_page = data["query"]["hasNextPage"].clone().as_bool().unwrap();
+
+        documents.append(&mut page);
+        (page_len, total_count as usize, end_cursor, has_next_page)
     }
 
     #[rstest]
@@ -1332,48 +1470,6 @@ mod tests {
     #[rstest]
     fn paginated_query_with_ordering_and_filtering(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
-            async fn next_page(
-                client: &TestClient,
-                schema: &Schema,
-                first: usize,
-                end_cursor: Option<&String>,
-                filter_value: &String,
-            ) -> (usize, usize, String, bool) {
-                let after = if let Some(end_cursor) = end_cursor {
-                    format!("after: {end_cursor}, ")
-                } else {
-                    String::new()
-                };
-
-                let data = query_lyrics(
-                    client,
-                    schema.id(),
-                    &format!(
-                        "(
-                            first: {first},
-                            {after}
-                            orderBy: line,
-                            orderDirection: DESC,
-                            filter: {{
-                                line: {{ contains: \"{filter_value}\" }}
-                            }}
-                        )"
-                    ),
-                )
-                .await;
-
-                let documents_len = data["query"]["documents"].as_array().unwrap().len();
-                let total_count = data["query"]["totalCount"].clone().as_i64().unwrap();
-                let end_cursor = data["query"]["endCursor"].clone().to_string();
-                let has_next_page = data["query"]["hasNextPage"].clone().as_bool().unwrap();
-                (
-                    documents_len,
-                    total_count as usize,
-                    end_cursor,
-                    has_next_page,
-                )
-            }
-
             // Publish some lyrics to the node.
             let (lyric_schema, _) = here_be_some_lyrics(&mut node, &key_pair).await;
 
@@ -1382,12 +1478,24 @@ mod tests {
 
             // We're making paginated queries and filtering by a string value.
             let page_size = 3;
-            let filter_value = String::from("m");
+            let order_by = String::from("line");
+            let order_direction = String::from("DESC");
+            let filter = String::from("line: { contains: \"m\" }");
             let mut acc = 0;
+            let mut documents = Vec::new();
 
             // Make the initial paginated request.
-            let (mut page_count, mut total_count, mut end_cursor, mut has_next_page) =
-                next_page(&client, &lyric_schema, page_size, None, &filter_value).await;
+            let (mut page_count, mut total_count, mut end_cursor, mut has_next_page) = next_page(
+                &client,
+                &lyric_schema,
+                page_size,
+                None,
+                Some(&order_by),
+                Some(&order_direction),
+                Some(&filter),
+                &mut documents,
+            )
+            .await;
 
             // Add the page count to the accumulator.
             acc += page_count;
@@ -1399,7 +1507,10 @@ mod tests {
                     &lyric_schema,
                     page_size,
                     Some(&end_cursor),
-                    &filter_value,
+                    Some(&order_by),
+                    Some(&order_direction),
+                    Some(&filter),
+                    &mut documents,
                 )
                 .await;
 
@@ -1408,6 +1519,7 @@ mod tests {
             }
 
             // We should have received the same number of documents as the total count.
+            println!("{documents:#?}");
             assert_eq!(acc, total_count);
         })
     }
@@ -1449,6 +1561,124 @@ mod tests {
             )
             .await;
             assert_eq!(data["query"]["documents"].as_array().unwrap().len(), 0);
+        })
+    }
+
+    #[rstest]
+    fn vanishing_document_in_paginated_query_regression_test(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish some lyrics to the node.
+            let (lyric_schema, _) = here_be_some_lyrics(&mut node, &key_pair).await;
+
+            // Init a GraphQL client we'll use to query the node.
+            let client = http_test_client(&node).await;
+
+            // We're making paginated queries, sorting by line in ascending order.
+            let page_size = 3; // @TODO: some page sizes don't fail here.
+            let order_by = String::from("line");
+            let order_direction = String::from("ASC");
+            let mut acc = 0;
+            let mut documents = Vec::new();
+
+            // Make the initial paginated request.
+            let (mut page_count, mut total_count, mut end_cursor, mut has_next_page) = next_page(
+                &client,
+                &lyric_schema,
+                page_size,
+                None,
+                Some(&order_by),
+                Some(&order_direction),
+                None,
+                &mut documents,
+            )
+            .await;
+
+            // Add the page count to the accumulator.
+            acc += page_count;
+
+            // Now while there is a next page we keep querying.
+            while has_next_page {
+                (page_count, total_count, end_cursor, has_next_page) = next_page(
+                    &client,
+                    &lyric_schema,
+                    page_size,
+                    Some(&end_cursor),
+                    Some(&order_by),
+                    Some(&order_direction),
+                    None,
+                    &mut documents,
+                )
+                .await;
+
+                // Add the page count to the accumulator.
+                acc += page_count;
+            }
+
+            // We should have received the same number of documents as the total count.
+            assert_eq!(documents.len(), total_count);
+            assert_eq!(acc, total_count);
+        })
+    }
+
+    #[rstest]
+    fn incorrect_ordering_regression_test(key_pair: KeyPair) {
+        // @TODO: this test does not fail yet... We have observed a bug in the wild where documents in an ordered collection 
+        // query are returned out of order. This is a so far unsuccessful attempt to reproduce the bug in tests.
+
+        test_runner(|mut node: TestNode| async move {
+            // Publish some lyrics to the node.
+            let (lyric_schema, _) = here_be_some_lyrics(&mut node, &key_pair).await;
+
+            // Init a GraphQL client we'll use to query the node.
+            let client = http_test_client(&node).await;
+
+            // We're making paginated queries, sorting by index in ascending order.
+            let page_size = 3;
+            let order_by = String::from("index");
+            let order_direction = String::from("ASC");
+            let mut documents = Vec::new();
+
+            // Make the initial paginated request.
+            let (mut _page_count, mut _total_count, mut end_cursor, mut has_next_page) = next_page(
+                &client,
+                &lyric_schema,
+                page_size,
+                None,
+                Some(&order_by),
+                Some(&order_direction),
+                None,
+                &mut documents,
+            )
+            .await;
+
+            // Now while there is a next page we keep querying.
+            while has_next_page {
+                (_page_count, _total_count, end_cursor, has_next_page) = next_page(
+                    &client,
+                    &lyric_schema,
+                    page_size,
+                    Some(&end_cursor),
+                    Some(&order_by),
+                    Some(&order_direction),
+                    None,
+                    &mut documents,
+                )
+                .await;
+            }
+
+            // Assert that the "index" field for every document returned is <= the next document in the collection.
+            let mut document_iterator = documents.iter().peekable();
+            while let Some(document) = document_iterator.next() {
+                match document_iterator.peek() {
+                    Some(next) => {
+                        assert!(
+                            document["fields"]["index"].as_u64().unwrap()
+                                <= next["fields"]["index"].as_u64().unwrap()
+                        )
+                    }
+                    None => continue,
+                }
+            }
         })
     }
 }
