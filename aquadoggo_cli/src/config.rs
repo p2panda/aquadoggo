@@ -27,7 +27,8 @@ type ConfigFilePath = Option<PathBuf>;
 /// Returns a partly unchecked configuration object which results from all of these sources. It
 /// still needs to be converted for aquadoggo as it might still contain invalid values.
 pub fn load_config() -> Result<(ConfigFilePath, ConfigFile)> {
-    // Parse command line arguments first to get optional config file path
+    // Parse command line arguments and CONFIG environment variable first to get optional config 
+    // file path
     let cli = Cli::parse();
 
     // Determine if a config file path was provided or if we should look for it in common locations
@@ -73,7 +74,7 @@ struct Cli {
     /// When not set the program will try to find a `config.toml` file in the same folder the
     /// program is executed in and otherwise in the regarding operation systems XDG config
     /// directory ("$HOME/.config/aquadoggo/config.toml" on Linux).
-    #[arg(short = 'c', long, value_name = "PATH")]
+    #[arg(short = 'c', long, value_name = "PATH", env)]
     #[serde(skip_serializing_if = "Option::is_none")]
     config: Option<PathBuf>,
 
