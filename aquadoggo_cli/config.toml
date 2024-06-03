@@ -142,7 +142,8 @@ mdns = true
 # NODES
 # ﾟ･｡+☆
 
-# List of known node addresses (IP + port) we want to connect to directly.
+# List of known node addresses we want to connect to direct. Addresses can be 
+# domain names or IP addresses and must include a port number.
 #
 # NOTE: Make sure that nodes mentioned in this list are directly reachable
 # (they need to be hosted with a static IP Address). If you need to connect to
@@ -151,7 +152,7 @@ mdns = true
 #
 direct_node_addresses = [
     # "192.0.2.0:2022",
-    # "192.0.2.2:3000",
+    # "my.domain.name:2022",
 ]
 
 # List of peers which are allowed to connect to your node.
@@ -189,7 +190,8 @@ block_peer_ids = []
 # RELAYS
 # ﾟ･｡+☆+
 
-# List of relay addresses.
+# List of relay addresses. Addresses can be domain names or IP addresses 
+# and must include a port number.
 #
 # A relay helps discover other nodes on the internet (also known as
 # "rendesvouz" or "bootstrap" server) and helps establishing direct p2p
@@ -210,7 +212,7 @@ block_peer_ids = []
 #
 relay_addresses = [
     # "192.0.2.16:2022",
-    # "192.0.2.17:2022",
+    # "my.domain.me:2022",
 ]
 
 # Set to true if node should also function as a relay. Defaults to false.
