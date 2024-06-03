@@ -31,8 +31,6 @@ pub fn load_config() -> Result<(ConfigFilePath, ConfigFile)> {
     // Parse command line arguments first to get optional config file path
     let cli = Cli::parse();
 
-    println!("{:#?}", cli);
-
     // Determine if a config file path was provided or if we should look for it in common locations
     let config_file_path: ConfigFilePath = match &cli.config {
         Some(path) => {
@@ -49,8 +47,6 @@ pub fn load_config() -> Result<(ConfigFilePath, ConfigFile)> {
     if let Some(path) = &config_file_path {
         figment = figment.merge(Toml::file(path));
     }
-
-    println!("{:#?}", Env::raw().filter(|k| k == "CONFIG"));
 
     let config = figment
         .merge(Env::raw())
