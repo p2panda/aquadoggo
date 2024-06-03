@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::convert::TryFrom;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
 use anyhow::{anyhow, Result};
-use libp2p::PeerId;
+use libp2p::{Multiaddr, PeerId};
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::TempDir;
 
+use crate::network::utils::to_multiaddress;
 use crate::{AllowList, Configuration, NetworkConfiguration};
 
 const WILDCARD: &str = "*";
@@ -154,7 +154,7 @@ pub struct ConfigFile {
     /// addresses or even with nodes behind a firewall or NAT, do not use this field but use at
     /// least one relay.
     #[serde(default)]
-    pub direct_node_addresses: Vec<SocketAddr>,
+    pub direct_node_addresses: Vec<String>,
 
     /// List of peers which are allowed to connect to your node.
     ///
@@ -196,7 +196,7 @@ pub struct ConfigFile {
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
     #[serde(default)]
-    pub relay_addresses: Vec<SocketAddr>,
+    pub relay_addresses: Vec<String>,
 
     /// Enable if node should also function as a relay. Disabled by default.
     ///
@@ -287,6 +287,18 @@ impl TryFrom<ConfigFile> for Configuration {
                 .to_path_buf(),
         };
 
+        let direct_node_addresses = value
+            .direct_node_addresses
+            .iter()
+            .map(to_multiaddress)
+            .collect::<Result<Vec<Multiaddr>, _>>()?;
+
+        let relay_addresses = value
+            .relay_addresses
+            .iter()
+            .map(to_multiaddress)
+            .collect::<Result<Vec<Multiaddr>, _>>()?;
+
         Ok(Configuration {
             allow_schema_ids,
             database_url: value.database_url,
@@ -297,10 +309,10 @@ impl TryFrom<ConfigFile> for Configuration {
             network: NetworkConfiguration {
                 quic_port: value.quic_port,
                 mdns: value.mdns,
-                direct_node_addresses: value.direct_node_addresses,
+                direct_node_addresses,
                 allow_peer_ids,
                 block_peer_ids: value.block_peer_ids,
-                relay_addresses: value.relay_addresses,
+                relay_addresses,
                 relay_mode: value.relay_mode,
                 ..Default::default()
             },

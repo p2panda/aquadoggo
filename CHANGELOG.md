@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Accept domain name and ip addresses for peers in configuration file and cli [#612](https://github.com/p2panda/aquadoggo/pull/612)
 - Allow setting config file path via environment variables [#611](https://github.com/p2panda/aquadoggo/pull/611)
 
 ## [0.7.1]

@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::net::SocketAddr;
-
 use libp2p::connection_limits::ConnectionLimits;
-use libp2p::PeerId;
+use libp2p::{Multiaddr, PeerId};
 
 use crate::AllowList;
 
@@ -25,7 +23,7 @@ pub struct NetworkConfiguration {
     /// with a static IP Address). If you need to connect to nodes with changing, dynamic IP
     /// addresses or even with nodes behind a firewall or NAT, do not use this field but use at
     /// least one relay.
-    pub direct_node_addresses: Vec<SocketAddr>,
+    pub direct_node_addresses: Vec<Multiaddr>,
 
     /// List of peers which are allowed to connect to your node.
     ///
@@ -64,7 +62,7 @@ pub struct NetworkConfiguration {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
-    pub relay_addresses: Vec<SocketAddr>,
+    pub relay_addresses: Vec<Multiaddr>,
 
     /// Enable if node should also function as a relay.
     ///

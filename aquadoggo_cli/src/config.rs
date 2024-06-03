@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
@@ -161,7 +160,7 @@ struct Cli {
     /// least one relay.
     #[arg(short = 'n', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    direct_node_addresses: Option<Vec<SocketAddr>>,
+    direct_node_addresses: Option<Vec<String>>,
 
     /// List of peers which are allowed to connect to your node.
     ///
@@ -209,7 +208,7 @@ struct Cli {
     /// concerned about leaking your IP.
     #[arg(short = 'r', long, value_name = "IP:PORT", num_args = 0..)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    relay_addresses: Option<Vec<SocketAddr>>,
+    relay_addresses: Option<Vec<String>>,
 
     /// Enable if node should also function as a relay. Disabled by default.
     ///
