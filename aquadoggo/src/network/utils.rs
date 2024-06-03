@@ -29,7 +29,7 @@ pub fn to_multiaddress(address: &String) -> Result<Multiaddr> {
     let socket_address = address
         .to_socket_addrs()?
         .next()
-        .expect(&format!("Could not resolve socket address for: {address}"));
+        .unwrap_or_else(|| panic!("Could not resolve socket address for: {}", address));
 
     let mut multiaddr = match socket_address.ip() {
         IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
