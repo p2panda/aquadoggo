@@ -11,8 +11,8 @@ use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::TempDir;
 
-use crate::{AllowList, Configuration, NetworkConfiguration};
 use crate::network::utils::to_multiaddress;
+use crate::{AllowList, Configuration, NetworkConfiguration};
 
 const WILDCARD: &str = "*";
 
