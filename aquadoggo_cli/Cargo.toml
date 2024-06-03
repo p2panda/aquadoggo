@@ -1,6 +1,6 @@
 [package]
 name = "aquadoggo_cli"
-version = "0.7.1"
+version = "0.7.2"
 authors = [
     "adz <x12@adz.garden>",
     "cafca <cafca@001.land>",
