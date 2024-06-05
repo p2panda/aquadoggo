@@ -404,7 +404,9 @@ impl SqlStore {
         document_view_id: &DocumentViewId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
         // Collect all ids or view ids of children related to from the passed document view.
-        let children_ids: Vec<String> = query_scalar(
+        //
+        // Value is None when a relation list is empty.
+        let children_ids: Vec<Option<String>> = query_scalar(
             "
             SELECT
                 operation_fields_v1.value
@@ -431,6 +433,9 @@ impl SqlStore {
         .fetch_all(&self.pool)
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        // Remove any None results from the vec.
+        let children_ids: Vec<String> = children_ids.into_iter().flatten().collect();
 
         // If no children were found return now already with an empty vec.
         if children_ids.is_empty() {
