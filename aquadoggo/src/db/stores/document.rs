@@ -1431,4 +1431,27 @@ mod tests {
             assert_eq!(next_args, (None, None, SeqNum::default(), LogId::new(1)));
         });
     }
+
+    #[rstest]
+    fn regression_handle_null_relation_list_value(
+        #[from(populate_store_config)]
+        #[with(1, 1, vec![KeyPair::new()])]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let documents = populate_and_materialize(&mut node, &config).await;
+            let document = documents[0].clone();
+
+            // The default test document contains an empty pinned relation field so we expect this
+            // query to error.
+            let result = node
+                .context
+                .store
+                .get_child_document_ids(&document.view_id())
+                .await;
+
+            assert!(result.is_ok());
+        });
+    }
 }
