@@ -1448,8 +1448,7 @@ mod tests {
             let documents = populate_and_materialize(&mut node, &config).await;
             let document = documents[0].clone();
 
-            // The default test document contains an empty pinned relation field so we expect this
-            // query to error.
+            // The default test document contains an empty pinned relation list field.
             let result = node
                 .context
                 .store
