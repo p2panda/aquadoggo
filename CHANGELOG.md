@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Handle null values returned from empty child relation queries [#614](https://github.com/p2panda/aquadoggo/pull/614)
+
 ## [0.7.2]
 
 ### Changed

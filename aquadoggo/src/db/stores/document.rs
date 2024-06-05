@@ -404,7 +404,9 @@ impl SqlStore {
         document_view_id: &DocumentViewId,
     ) -> Result<Vec<DocumentId>, DocumentStorageError> {
         // Collect all ids or view ids of children related to from the passed document view.
-        let children_ids: Vec<String> = query_scalar(
+        //
+        // Value is None when a relation list is empty.
+        let children_ids: Vec<Option<String>> = query_scalar(
             "
             SELECT
                 operation_fields_v1.value
@@ -431,6 +433,9 @@ impl SqlStore {
         .fetch_all(&self.pool)
         .await
         .map_err(|err| DocumentStorageError::FatalStorageError(err.to_string()))?;
+
+        // Remove any None results from the vec.
+        let children_ids: Vec<String> = children_ids.into_iter().flatten().collect();
 
         // If no children were found return now already with an empty vec.
         if children_ids.is_empty() {
@@ -1429,6 +1434,28 @@ mod tests {
             assert!(result.is_ok());
             let next_args = result.unwrap();
             assert_eq!(next_args, (None, None, SeqNum::default(), LogId::new(1)));
+        });
+    }
+
+    #[rstest]
+    fn regression_handle_null_relation_list_value(
+        #[from(populate_store_config)]
+        #[with(1, 1, vec![KeyPair::new()])]
+        config: PopulateStoreConfig,
+    ) {
+        test_runner(|mut node: TestNode| async move {
+            // Populate the store and materialize all documents.
+            let documents = populate_and_materialize(&mut node, &config).await;
+            let document = documents[0].clone();
+
+            // The default test document contains an empty pinned relation list field.
+            let result = node
+                .context
+                .store
+                .get_child_document_ids(&document.view_id())
+                .await;
+
+            assert!(result.is_ok());
         });
     }
 }
