@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 
-use anyhow::Result;
-use libp2p::multiaddr::Protocol;
 use libp2p::Multiaddr;
 use regex::Regex;
 
@@ -23,19 +21,4 @@ pub fn to_quic_address(address: &Multiaddr) -> Option<SocketAddr> {
             Some(socket)
         }
     }
-}
-
-pub fn to_multiaddress(address: &String) -> Result<Multiaddr> {
-    let socket_address = address
-        .to_socket_addrs()?
-        .next()
-        .unwrap_or_else(|| panic!("Could not resolve socket address for: {}", address));
-
-    let mut multiaddr = match socket_address.ip() {
-        IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
-        IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
-    };
-    multiaddr.push(Protocol::Udp(socket_address.port()));
-    multiaddr.push(Protocol::QuicV1);
-    Ok(multiaddr)
 }

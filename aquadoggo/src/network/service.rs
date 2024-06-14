@@ -22,7 +22,7 @@ use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
 
-const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Network service which handles all networking logic for a p2panda node.
 ///
@@ -93,10 +93,18 @@ pub async fn network_service(
         // replication sessions, which could leave the node in a strange state.
         swarm.behaviour_mut().peers.disable();
 
-        for mut relay_address in network_config.relay_addresses.clone() {
+        for relay_address in &network_config.relay_addresses {
             info!("Connecting to relay node {}", relay_address);
 
-            // Attempt to connect to the relay node, we give this a 5 second timeout so as not to
+            let mut relay_address = match relay_address.to_quic_multiaddr() {
+                Ok(relay_address) => relay_address,
+                Err(e) => {
+                    debug!("Failed to resolve relay multiaddr: {}", e.to_string());
+                    continue;
+                }
+            };
+
+            // Attempt to connect to the relay node, we give this a 10 second timeout so as not to
             // get stuck if one relay is unreachable.
             if let Ok(result) = tokio::time::timeout(
                 RELAY_CONNECT_TIMEOUT,
@@ -161,6 +169,14 @@ pub async fn network_service(
     // Dial all nodes we want to directly connect to.
     for direct_node_address in &network_config.direct_node_addresses {
         info!("Connecting to node @ {}", direct_node_address);
+
+        let direct_node_address = match direct_node_address.to_quic_multiaddr() {
+            Ok(address) => address,
+            Err(e) => {
+                debug!("Failed to resolve direct node multiaddr: {}", e.to_string());
+                continue;
+            }
+        };
 
         let opts = DialOpts::unknown_peer_id()
             .address(direct_node_address.clone())

@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+
+use anyhow::Error;
 use libp2p::connection_limits::ConnectionLimits;
+use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
+use serde::{Deserialize, Serialize};
 
 use crate::AllowList;
 
@@ -23,7 +28,7 @@ pub struct NetworkConfiguration {
     /// with a static IP Address). If you need to connect to nodes with changing, dynamic IP
     /// addresses or even with nodes behind a firewall or NAT, do not use this field but use at
     /// least one relay.
-    pub direct_node_addresses: Vec<Multiaddr>,
+    pub direct_node_addresses: Vec<PeerAddress>,
 
     /// List of peers which are allowed to connect to your node.
     ///
@@ -62,7 +67,7 @@ pub struct NetworkConfiguration {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
-    pub relay_addresses: Vec<Multiaddr>,
+    pub relay_addresses: Vec<PeerAddress>,
 
     /// Enable if node should also function as a relay.
     ///
@@ -144,5 +149,40 @@ impl NetworkConfiguration {
             .with_max_established_outgoing(Some(self.max_connections_out))
             .with_max_established_incoming(Some(self.max_connections_in))
             .with_max_established_per_peer(Some(self.max_connections_per_peer))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerAddress(String);
+
+impl PeerAddress {
+    pub fn to_socket(&self) -> Result<SocketAddr, Error> {
+        match self.0.to_socket_addrs() {
+            Ok(mut addrs) => addrs
+                .next()
+                .ok_or(anyhow::format_err!("No socket addresses found")),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn to_quic_multiaddr(&self) -> Result<Multiaddr, Error> {
+        match self.to_socket() {
+            Ok(socket_address) => {
+                let mut multiaddr = match socket_address.ip() {
+                    IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
+                    IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
+                };
+                multiaddr.push(Protocol::Udp(socket_address.port()));
+                multiaddr.push(Protocol::QuicV1);
+                Ok(multiaddr)
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl std::fmt::Display for PeerAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
