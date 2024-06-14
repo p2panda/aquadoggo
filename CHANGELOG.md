@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Re-materialize blobs which were only partially written to disc due to node crash [#618](https://github.com/p2panda/aquadoggo/pull/618)
 
+### Added
+
+- Introduce `PeerAddress` struct to help resolve `String` to internal address types [#621](https://github.com/p2panda/aquadoggo/pull/621)
+
 ## [0.7.3]
 
 ### Fixed
