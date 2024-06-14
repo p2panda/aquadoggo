@@ -3,6 +3,7 @@
 use futures::{pin_mut, StreamExt};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use tokio::fs::OpenOptions;
@@ -46,13 +47,29 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                 .blobs_base_path
                 .join(blob_document.view_id().to_string());
 
-            // Check if the blob has already been materialized and return early from this task
+            // Check if the blob has already been fully materialized and return early from this task
             // with an error if it has.
-            let is_blob_materialized = OpenOptions::new()
-                .read(true)
-                .open(&blob_view_path)
-                .await
-                .is_ok();
+            let is_blob_materialized =
+                match OpenOptions::new().read(true).open(&blob_view_path).await {
+                    Ok(file) => {
+                        let metadata = file
+                            .metadata()
+                            .await
+                            .expect("Can retrieve blob file metadata");
+
+                        let expected_blob_length = match blob_document.get("length").unwrap() {
+                            OperationValue::Integer(length) => length,
+                            _ => unreachable!(),
+                        };
+                        
+                        if metadata.len() < *expected_blob_length as u64 {
+                            false
+                        } else {
+                            true
+                        }
+                    }
+                    Err(_) => false,
+                };
             if is_blob_materialized {
                 return Err(TaskError::Failure(format!(
                     "Blob file already exists at {}",
