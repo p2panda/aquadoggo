@@ -218,9 +218,12 @@ pub enum Event {
     Identify(identify::Event),
     Mdns(mdns::Event),
     RelayClient(relay::client::Event),
+    #[allow(dead_code)]
     RelayServer(relay::Event),
     RendezvousClient(rendezvous::client::Event),
+    #[allow(dead_code)]
     RendezvousServer(rendezvous::server::Event),
+    #[allow(dead_code)]
     Dcutr(dcutr::Event),
     Peers(peers::Event),
     Void,

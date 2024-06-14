@@ -31,6 +31,7 @@ pub struct QueryRow {
 
     /// Flag if document was at least changed once (more than one operation).
     #[sqlx(default)]
+    #[allow(dead_code)]
     pub is_edited: bool,
 
     /// Public key of original author of document / CREATE operation.
@@ -52,6 +53,7 @@ pub struct QueryRow {
     /// Special index value for (pinned) relation list fields which can contain multiple values.
     /// The order of these values is crucial and needs to be preserved by keeping the index around.
     #[sqlx(default)]
+    #[allow(dead_code)]
     pub list_index: i32,
 }
 

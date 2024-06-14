@@ -4,6 +4,7 @@ use sqlx::FromRow;
 
 /// A struct representing a single operation row as it is inserted in the database.
 #[derive(FromRow, Debug)]
+#[allow(dead_code)]
 pub struct OperationRow {
     /// The public key of the author of this operation.
     pub public_key: String,
@@ -35,6 +36,7 @@ pub struct OperationRow {
 
 /// A struct representing a single operation field row as it is inserted in the database.
 #[derive(FromRow, Debug)]
+#[allow(dead_code)]
 pub struct OperationFieldRow {
     /// The id of the operation this field was published on.
     pub operation_id: String,
@@ -65,6 +67,7 @@ pub struct OperationFieldRow {
 
 /// A struct representing a joined OperationRow and OperationFieldRow.
 #[derive(FromRow, Debug, Clone)]
+#[allow(dead_code)]
 pub struct OperationFieldsJoinedRow {
     /// The author of this operation.
     pub public_key: String,
