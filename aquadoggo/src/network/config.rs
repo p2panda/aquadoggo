@@ -156,7 +156,6 @@ impl NetworkConfiguration {
 pub struct PeerAddress {
     addr_str: String,
     socket_addr: Option<SocketAddr>,
-    multi_addr: Option<Multiaddr>,
 }
 
 impl PeerAddress {
@@ -164,7 +163,6 @@ impl PeerAddress {
         PeerAddress {
             addr_str,
             socket_addr: None,
-            multi_addr: None,
         }
     }
 
