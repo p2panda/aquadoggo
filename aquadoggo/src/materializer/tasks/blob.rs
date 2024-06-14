@@ -267,7 +267,6 @@ mod tests {
     fn re_materialize_blob_after_previous_task_did_not_complete(key_pair: KeyPair) {
         test_runner(|mut node: TestNode| async move {
             // Publish blob
-            // Publish blob
             let blob_data = "Hello, World!";
             let blob_view_id =
                 add_blob(&mut node, blob_data.as_bytes(), 5, "plain/text", &key_pair).await;
