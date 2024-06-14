@@ -61,7 +61,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                             OperationValue::Integer(length) => length,
                             _ => unreachable!(),
                         };
-                        
+
                         if metadata.len() < *expected_blob_length as u64 {
                             false
                         } else {
@@ -264,6 +264,44 @@ mod tests {
 
             // It should fail
             assert!(result.is_err());
+        })
+    }
+
+    #[rstest]
+    fn re_materialize_blob_after_previous_task_did_not_complete(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish blob
+            // Publish blob
+            let blob_data = "Hello, World!";
+            let blob_view_id =
+                add_blob(&mut node, blob_data.as_bytes(), 5, "plain/text", &key_pair).await;
+
+            // Construct the expected path to the blob view file
+            let base_path = &node.context.config.blobs_base_path;
+            let blob_path = base_path.join(blob_view_id.to_string());
+
+            // Write some bytes to the expected blob path which are < than the actual blob
+            // bytes length. We expect this file to be overwritten when we run the blob task.
+            fs::write(blob_path.clone(), vec![0, 1, 2]).await.unwrap();
+
+            // Run blob task
+            let result = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await;
+
+            // It shouldn't fail
+            assert!(result.is_ok());
+            // It should return no extra tasks
+            assert!(result.unwrap().is_none());
+
+            // Read from this file
+            let retrieved_blob_data = fs::read(blob_path).await;
+
+            // Number of bytes for the publish and materialized blob should be the same
+            assert!(retrieved_blob_data.is_ok());
+            assert_eq!(blob_data.len(), retrieved_blob_data.unwrap().len());
         })
     }
 }
