@@ -12,15 +12,17 @@ use libp2p::swarm::SwarmEvent;
 use libp2p::{identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
 use tokio::task;
-use tokio_stream::wrappers::BroadcastStream;
+use tokio::time::interval;
+use tokio_stream::wrappers::{BroadcastStream, IntervalStream};
 use tokio_stream::StreamExt;
 
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Event, P2pandaBehaviour};
-use crate::network::config::NODE_NAMESPACE;
+use crate::network::config::{PeerAddress, NODE_NAMESPACE};
 use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
+use crate::NetworkConfiguration;
 
 const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -193,6 +195,7 @@ pub async fn network_service(
     // Spawn main event loop handling all p2panda and libp2p network events.
     spawn_event_loop(
         swarm,
+        network_config.to_owned(),
         local_peer_id,
         connected_relays,
         shutdown,
@@ -317,9 +320,13 @@ pub async fn connect_to_relay(
     Ok((relay_peer_id, relay_address.clone()))
 }
 
+const REDIAL_INTERVAL: Duration = Duration::from_secs(20);
+
 /// Main loop polling the async swarm event stream and incoming service messages stream.
 struct EventLoop {
     swarm: Swarm<P2pandaBehaviour>,
+    network_config: NetworkConfiguration,
+    redial_scheduler: IntervalStream,
     local_peer_id: PeerId,
     tx: ServiceSender,
     rx: BroadcastStream<ServiceMessage>,
@@ -331,6 +338,7 @@ struct EventLoop {
 impl EventLoop {
     pub fn new(
         swarm: Swarm<P2pandaBehaviour>,
+        network_config: NetworkConfiguration,
         local_peer_id: PeerId,
         tx: ServiceSender,
         relay_addresses: HashMap<PeerId, Multiaddr>,
@@ -338,6 +346,8 @@ impl EventLoop {
     ) -> Self {
         Self {
             swarm,
+            network_config,
+            redial_scheduler: IntervalStream::new(interval(REDIAL_INTERVAL)),
             local_peer_id,
             rx: BroadcastStream::new(tx.subscribe()),
             tx,
@@ -403,10 +413,43 @@ impl EventLoop {
                         return
                     },
                 },
+                // The redial_scheduler emits an event every `REDIAL_INTERVAL` seconds.
+                Some(_) = self.redial_scheduler.next() => {
+                    self.attempt_dial_known_addresses().await;
+                },
                 _ = shutdown_request_received.next() => {
                     self.shutdown().await;
                 }
             }
+        }
+    }
+
+    /// Attempt to dial all hardcoded relay and direct node addresses. Only establishes a new connection
+    /// if we are currently not connected to the target peer.
+    async fn attempt_dial_known_addresses(&mut self) {
+        fn try_dial_peer(swarm: &mut Swarm<P2pandaBehaviour>, address: &mut PeerAddress) {
+            let address = match address.to_quic_multiaddr() {
+                Ok(address) => address,
+                Err(e) => {
+                    debug!("Failed to resolve relay multiaddr: {}", e.to_string());
+                    return;
+                }
+            };
+
+            let opts = DialOpts::unknown_peer_id().address(address.clone()).build();
+
+            match swarm.dial(opts) {
+                Ok(_) => (),
+                Err(err) => debug!("Error dialing node: {:?}", err),
+            };
+        }
+
+        for relay_address in self.network_config.relay_addresses.iter_mut() {
+            try_dial_peer(&mut self.swarm, relay_address);
+        }
+
+        for direct_node_address in self.network_config.direct_node_addresses.iter_mut() {
+            try_dial_peer(&mut self.swarm, direct_node_address);
         }
     }
 
@@ -530,6 +573,7 @@ impl EventLoop {
 
 pub async fn spawn_event_loop(
     swarm: Swarm<P2pandaBehaviour>,
+    network_config: NetworkConfiguration,
     local_peer_id: PeerId,
     relay_addresses: HashMap<PeerId, Multiaddr>,
     shutdown: Shutdown,
@@ -541,6 +585,7 @@ pub async fn spawn_event_loop(
     // Spawn a task to run swarm in event loop
     let event_loop = EventLoop::new(
         swarm,
+        network_config,
         local_peer_id,
         tx,
         relay_addresses,
