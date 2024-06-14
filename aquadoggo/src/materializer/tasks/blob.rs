@@ -3,6 +3,7 @@
 use futures::{pin_mut, StreamExt};
 use log::{debug, info};
 use p2panda_rs::document::traits::AsDocument;
+use p2panda_rs::operation::OperationValue;
 use p2panda_rs::schema::SchemaId;
 use p2panda_rs::storage_provider::traits::DocumentStore;
 use tokio::fs::OpenOptions;
@@ -46,13 +47,25 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                 .blobs_base_path
                 .join(blob_document.view_id().to_string());
 
-            // Check if the blob has already been materialized and return early from this task
+            // Check if the blob has already been fully materialized and return early from this task
             // with an error if it has.
-            let is_blob_materialized = OpenOptions::new()
-                .read(true)
-                .open(&blob_view_path)
-                .await
-                .is_ok();
+            let is_blob_materialized =
+                match OpenOptions::new().read(true).open(&blob_view_path).await {
+                    Ok(file) => {
+                        let metadata = file
+                            .metadata()
+                            .await
+                            .expect("Can retrieve blob file metadata");
+
+                        let expected_blob_length = match blob_document.get("length").unwrap() {
+                            OperationValue::Integer(length) => length,
+                            _ => unreachable!(),
+                        };
+
+                        metadata.len() == *expected_blob_length as u64
+                    }
+                    Err(_) => false,
+                };
             if is_blob_materialized {
                 return Err(TaskError::Failure(format!(
                     "Blob file already exists at {}",
@@ -247,6 +260,43 @@ mod tests {
 
             // It should fail
             assert!(result.is_err());
+        })
+    }
+
+    #[rstest]
+    fn re_materialize_blob_after_previous_task_did_not_complete(key_pair: KeyPair) {
+        test_runner(|mut node: TestNode| async move {
+            // Publish blob
+            let blob_data = "Hello, World!";
+            let blob_view_id =
+                add_blob(&mut node, blob_data.as_bytes(), 5, "plain/text", &key_pair).await;
+
+            // Construct the expected path to the blob view file
+            let base_path = &node.context.config.blobs_base_path;
+            let blob_path = base_path.join(blob_view_id.to_string());
+
+            // Write some bytes to the expected blob path which are < than the actual blob
+            // bytes length. We expect this file to be overwritten when we run the blob task.
+            fs::write(blob_path.clone(), vec![0, 1, 2]).await.unwrap();
+
+            // Run blob task
+            let result = blob_task(
+                node.context.clone(),
+                TaskInput::DocumentViewId(blob_view_id.clone()),
+            )
+            .await;
+
+            // It shouldn't fail
+            assert!(result.is_ok());
+            // It should return no extra tasks
+            assert!(result.unwrap().is_none());
+
+            // Read from this file
+            let retrieved_blob_data = fs::read(blob_path).await;
+
+            // Number of bytes for the publish and materialized blob should be the same
+            assert!(retrieved_blob_data.is_ok());
+            assert_eq!(blob_data.len(), retrieved_blob_data.unwrap().len());
         })
     }
 }
