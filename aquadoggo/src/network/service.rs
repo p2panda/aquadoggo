@@ -428,7 +428,7 @@ impl EventLoop {
     /// if we are currently not connected to the target peer.
     async fn attempt_dial_known_addresses(&mut self) {
         fn try_dial_peer(swarm: &mut Swarm<P2pandaBehaviour>, address: &mut PeerAddress) {
-            let address = match address.to_quic_multiaddr() {
+            let address = match address.quic_multiaddr() {
                 Ok(address) => address,
                 Err(e) => {
                     debug!("Failed to resolve relay multiaddr: {}", e.to_string());
