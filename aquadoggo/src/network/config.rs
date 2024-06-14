@@ -151,6 +151,14 @@ impl NetworkConfiguration {
     }
 }
 
+/// Helper struct for handling ambiguous string addresses which may need resolving via
+/// a DNS lookup. The [ToSocketAddrs](https://doc.rust-lang.org/std/net/trait.ToSocketAddrs.html)
+/// implementation is used to attempt converting a `String`` to a `SocketAddrs` and then from
+/// here to a `Multiaddr`.
+/// 
+/// When `to_socket` is first called it's successful result is cached internally and this value
+/// is used directly from this point on. This is an optimization which avoids unnecessary DNS 
+/// lookups.
 #[derive(Debug, Clone)]
 pub struct PeerAddress {
     addr_str: String,
