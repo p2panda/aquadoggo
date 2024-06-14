@@ -235,11 +235,6 @@ pub async fn connect_to_relay(
 
                 // Now that we have a reply from the relay node we can add their peer id to the
                 // relay address.
-
-                // Pop off the "p2p" protocol.
-                let _ = relay_address.pop();
-
-                // Add it back on again with the relay nodes peer id included.
                 relay_address.push(Protocol::P2p(peer_id));
 
                 // Update values on the config.
