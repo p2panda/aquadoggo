@@ -1519,7 +1519,6 @@ mod tests {
             }
 
             // We should have received the same number of documents as the total count.
-            println!("{documents:#?}");
             assert_eq!(acc, total_count);
         })
     }
@@ -1565,8 +1564,11 @@ mod tests {
     }
 
     #[rstest]
-    fn vanishing_document_in_paginated_query_regression_test(key_pair: KeyPair) {
-        test_runner(|mut node: TestNode| async move {
+    fn incorrect_number_of_documents_in_paginated_query_regression_test(
+        #[values(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)] page_size: usize,
+        key_pair: KeyPair,
+    ) {
+        test_runner(move |mut node: TestNode| async move {
             // Publish some lyrics to the node.
             let (lyric_schema, _) = here_be_some_lyrics(&mut node, &key_pair).await;
 
@@ -1574,7 +1576,6 @@ mod tests {
             let client = http_test_client(&node).await;
 
             // We're making paginated queries, sorting by line in ascending order.
-            let page_size = 3; // @TODO: some page sizes don't fail here.
             let order_by = String::from("line");
             let order_direction = String::from("ASC");
             let mut acc = 0;
@@ -1621,11 +1622,13 @@ mod tests {
     }
 
     #[rstest]
-    fn incorrect_ordering_regression_test(key_pair: KeyPair) {
-        // @TODO: this test does not fail yet... We have observed a bug in the wild where documents in an ordered collection 
+    fn incorrect_ordering_regression_test(
+        #[values(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)] page_size: usize,
+        key_pair: KeyPair) {
+        // @TODO: this test does not fail yet... We have observed a bug in the wild where documents in an ordered collection
         // query are returned out of order. This is a so far unsuccessful attempt to reproduce the bug in tests.
 
-        test_runner(|mut node: TestNode| async move {
+        test_runner(move |mut node: TestNode| async move {
             // Publish some lyrics to the node.
             let (lyric_schema, _) = here_be_some_lyrics(&mut node, &key_pair).await;
 
@@ -1633,7 +1636,6 @@ mod tests {
             let client = http_test_client(&node).await;
 
             // We're making paginated queries, sorting by index in ascending order.
-            let page_size = 3;
             let order_by = String::from("index");
             let order_direction = String::from("ASC");
             let mut documents = Vec::new();
