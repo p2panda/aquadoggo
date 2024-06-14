@@ -62,11 +62,7 @@ pub async fn blob_task(context: Context, input: TaskInput) -> TaskResult<TaskInp
                             _ => unreachable!(),
                         };
 
-                        if metadata.len() < *expected_blob_length as u64 {
-                            false
-                        } else {
-                            true
-                        }
+                        metadata.len() < *expected_blob_length as u64
                     }
                     Err(_) => false,
                 };
