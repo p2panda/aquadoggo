@@ -40,7 +40,7 @@ pub async fn network_service(
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    let network_config = &context.config.network;
+    let mut network_config = context.config.network.clone();
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
 
@@ -49,7 +49,7 @@ pub async fn network_service(
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
-        let mut swarm = swarm::build_relay_swarm(network_config, key_pair).await?;
+        let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
 
         // Start listening on tcp address.
         let listen_addr_tcp = Multiaddr::empty()
@@ -60,7 +60,7 @@ pub async fn network_service(
         swarm
     } else {
         info!("Networking service initializing...");
-        swarm::build_client_swarm(network_config, key_pair).await?
+        swarm::build_client_swarm(&network_config, key_pair).await?
     };
 
     // Start listening on QUIC address. Pick a random one if the given is taken already.
@@ -93,7 +93,7 @@ pub async fn network_service(
         // replication sessions, which could leave the node in a strange state.
         swarm.behaviour_mut().peers.disable();
 
-        for relay_address in &network_config.relay_addresses {
+        for relay_address in network_config.relay_addresses.iter_mut() {
             info!("Connecting to relay node {}", relay_address);
 
             let mut relay_address = match relay_address.to_quic_multiaddr() {
@@ -167,7 +167,7 @@ pub async fn network_service(
     }
 
     // Dial all nodes we want to directly connect to.
-    for direct_node_address in &network_config.direct_node_addresses {
+    for direct_node_address in network_config.direct_node_addresses.iter_mut() {
         info!("Connecting to node @ {}", direct_node_address);
 
         let direct_node_address = match direct_node_address.to_quic_multiaddr() {

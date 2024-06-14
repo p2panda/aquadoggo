@@ -153,19 +153,39 @@ impl NetworkConfiguration {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerAddress(String);
+pub struct PeerAddress {
+    addr_str: String,
+    socket_addr: Option<SocketAddr>,
+    multi_addr: Option<Multiaddr>,
+}
 
 impl PeerAddress {
-    pub fn to_socket(&self) -> Result<SocketAddr, Error> {
-        match self.0.to_socket_addrs() {
-            Ok(mut addrs) => addrs
-                .next()
-                .ok_or(anyhow::format_err!("No socket addresses found")),
-            Err(e) => Err(e.into()),
+    pub fn new(addr_str: String) -> Self {
+        PeerAddress {
+            addr_str,
+            socket_addr: None,
+            multi_addr: None,
         }
     }
 
-    pub fn to_quic_multiaddr(&self) -> Result<Multiaddr, Error> {
+    pub fn to_socket(&mut self) -> Result<SocketAddr, Error> {
+        if let Some(socket_addr) = self.socket_addr {
+            return Ok(socket_addr);
+        }
+
+        let socket_addr = match self.addr_str.to_socket_addrs() {
+            Ok(mut addrs) => match addrs.next() {
+                Some(addrs) => addrs,
+                None => return Err(anyhow::format_err!("No socket addresses found")),
+            },
+            Err(e) => return Err(e.into()),
+        };
+
+        let _ = self.socket_addr.replace(socket_addr);
+        Ok(socket_addr)
+    }
+
+    pub fn to_quic_multiaddr(&mut self) -> Result<Multiaddr, Error> {
         match self.to_socket() {
             Ok(socket_address) => {
                 let mut multiaddr = match socket_address.ip() {
@@ -181,8 +201,14 @@ impl PeerAddress {
     }
 }
 
+impl From<String> for PeerAddress {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
 impl std::fmt::Display for PeerAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.addr_str)
     }
 }
