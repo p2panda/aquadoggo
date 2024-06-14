@@ -6,7 +6,6 @@ use anyhow::Error;
 use libp2p::connection_limits::ConnectionLimits;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
-use serde::{Deserialize, Serialize};
 
 use crate::AllowList;
 
@@ -152,7 +151,7 @@ impl NetworkConfiguration {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PeerAddress {
     addr_str: String,
     socket_addr: Option<SocketAddr>,
