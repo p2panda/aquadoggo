@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Re-materialize blobs which were only partially written to disc due to node crash [#618](https://github.com/p2panda/aquadoggo/pull/618)
 - Include all logs for target schemas during replication [#620](https://github.com/p2panda/aquadoggo/pull/620)
+- Re-apply unhandled operations during startup of materializer service [#623](https://github.com/p2panda/aquadoggo/pull/623)
 
 ## [0.7.3]
 
