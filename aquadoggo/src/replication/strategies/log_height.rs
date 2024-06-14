@@ -136,7 +136,7 @@ impl LogHeightStrategy {
             // Retrieve ids for all documents in the store which follow a certain schema id. The result will
             // include the id for documents which were deleted as we still want to replicate any tombstone
             // operations.
-            let schema_document_ids = get_all_document_ids_for_schema(&store, &schema_id).await;
+            let schema_document_ids = get_all_document_ids_for_schema(store, schema_id).await;
 
             let mut schema_blob_documents = vec![];
 
