@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Introduce `PeerAddress` struct to help resolve `String` to internal address types [#621](https://github.com/p2panda/aquadoggo/pull/621)
+- Re-dial all configured known peers on schedule [#622](https://github.com/p2panda/aquadoggo/pull/622)
 
 ### Changed
 
