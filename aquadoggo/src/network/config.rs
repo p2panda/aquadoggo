@@ -155,9 +155,9 @@ impl NetworkConfiguration {
 /// a DNS lookup. The [ToSocketAddrs](https://doc.rust-lang.org/std/net/trait.ToSocketAddrs.html)
 /// implementation is used to attempt converting a `String`` to a `SocketAddrs` and then from
 /// here to a `Multiaddr`.
-/// 
+///
 /// When `to_socket` is first called it's successful result is cached internally and this value
-/// is used directly from this point on. This is an optimization which avoids unnecessary DNS 
+/// is used directly from this point on. This is an optimization which avoids unnecessary DNS
 /// lookups.
 #[derive(Debug, Clone)]
 pub struct PeerAddress {
@@ -173,7 +173,7 @@ impl PeerAddress {
         }
     }
 
-    pub fn to_socket(&mut self) -> Result<SocketAddr, Error> {
+    pub fn socket(&mut self) -> Result<SocketAddr, Error> {
         if let Some(socket_addr) = self.socket_addr {
             return Ok(socket_addr);
         }
@@ -190,8 +190,8 @@ impl PeerAddress {
         Ok(socket_addr)
     }
 
-    pub fn to_quic_multiaddr(&mut self) -> Result<Multiaddr, Error> {
-        match self.to_socket() {
+    pub fn quic_multiaddr(&mut self) -> Result<Multiaddr, Error> {
+        match self.socket() {
             Ok(socket_address) => {
                 let mut multiaddr = match socket_address.ip() {
                     IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),

@@ -96,7 +96,7 @@ pub async fn network_service(
         for relay_address in network_config.relay_addresses.iter_mut() {
             info!("Connecting to relay node {}", relay_address);
 
-            let mut relay_address = match relay_address.to_quic_multiaddr() {
+            let mut relay_address = match relay_address.quic_multiaddr() {
                 Ok(relay_address) => relay_address,
                 Err(e) => {
                     debug!("Failed to resolve relay multiaddr: {}", e.to_string());
@@ -170,7 +170,7 @@ pub async fn network_service(
     for direct_node_address in network_config.direct_node_addresses.iter_mut() {
         info!("Connecting to node @ {}", direct_node_address);
 
-        let direct_node_address = match direct_node_address.to_quic_multiaddr() {
+        let direct_node_address = match direct_node_address.quic_multiaddr() {
             Ok(address) => address,
             Err(e) => {
                 debug!("Failed to resolve direct node multiaddr: {}", e.to_string());
