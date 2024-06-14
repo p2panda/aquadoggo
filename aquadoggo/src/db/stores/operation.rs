@@ -243,6 +243,30 @@ fn group_and_parse_operation_rows(
 }
 
 impl SqlStore {
+    /// Returns ids of operations which have not been processed by `reduce` task yet.
+    pub async fn get_unindexed_operation_ids(
+        &self,
+    ) -> Result<Vec<OperationId>, OperationStorageError> {
+        let id_rows: Vec<String> = query_scalar(
+            "
+            SELECT
+                operations_v1.operation_id
+            FROM
+                operations_v1
+            WHERE
+                operations_v1.sorted_index IS NULL
+            ",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| OperationStorageError::FatalStorageError(e.to_string()))?;
+
+        Ok(id_rows
+            .iter()
+            .map(|id| id.parse().expect("invalid operation id in database"))
+            .collect())
+    }
+
     /// Update the sorted index of an operation. This method is used in `reduce` tasks as each
     /// operation is processed.
     pub async fn update_operation_index(
