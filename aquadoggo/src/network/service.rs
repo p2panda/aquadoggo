@@ -330,6 +330,7 @@ struct EventLoop {
     local_peer_id: PeerId,
     tx: ServiceSender,
     rx: BroadcastStream<ServiceMessage>,
+    known_peers: HashMap<Multiaddr, PeerId>,
     relay_addresses: HashMap<PeerId, Multiaddr>,
     shutdown_handler: ShutdownHandler,
     learned_port: bool,
@@ -340,8 +341,9 @@ impl EventLoop {
         swarm: Swarm<P2pandaBehaviour>,
         network_config: NetworkConfiguration,
         local_peer_id: PeerId,
-        tx: ServiceSender,
         relay_addresses: HashMap<PeerId, Multiaddr>,
+        known_peers: HashMap<Multiaddr, PeerId>,
+        tx: ServiceSender,
         shutdown_handler: ShutdownHandler,
     ) -> Self {
         Self {
@@ -351,6 +353,7 @@ impl EventLoop {
             local_peer_id,
             rx: BroadcastStream::new(tx.subscribe()),
             tx,
+            known_peers,
             relay_addresses,
             shutdown_handler,
             learned_port: false,
@@ -427,7 +430,11 @@ impl EventLoop {
     /// Attempt to dial all hardcoded relay and direct node addresses. Only establishes a new connection
     /// if we are currently not connected to the target peer.
     async fn attempt_dial_known_addresses(&mut self) {
-        fn try_dial_peer(swarm: &mut Swarm<P2pandaBehaviour>, address: &mut PeerAddress) {
+        fn try_dial_peer(
+            swarm: &mut Swarm<P2pandaBehaviour>,
+            known_peers: &mut HashMap<Multiaddr, PeerId>,
+            address: &mut PeerAddress,
+        ) {
             let address = match address.quic_multiaddr() {
                 Ok(address) => address,
                 Err(e) => {
@@ -436,7 +443,16 @@ impl EventLoop {
                 }
             };
 
-            let opts = DialOpts::unknown_peer_id().address(address.clone()).build();
+            let opts = match known_peers.get(&address) {
+                Some(peer_id) => DialOpts::peer_id(*peer_id)
+                    .addresses(vec![address.to_owned()])
+                    .condition(PeerCondition::NotDialing)
+                    .condition(PeerCondition::Disconnected)
+                    .build(),
+                None => DialOpts::unknown_peer_id()
+                    .address(address.to_owned())
+                    .build(),
+            };
 
             match swarm.dial(opts) {
                 Ok(_) => (),
@@ -445,11 +461,11 @@ impl EventLoop {
         }
 
         for relay_address in self.network_config.relay_addresses.iter_mut() {
-            try_dial_peer(&mut self.swarm, relay_address);
+            try_dial_peer(&mut self.swarm, &mut self.known_peers, relay_address);
         }
 
         for direct_node_address in self.network_config.direct_node_addresses.iter_mut() {
-            try_dial_peer(&mut self.swarm, direct_node_address);
+            try_dial_peer(&mut self.swarm, &mut self.known_peers, direct_node_address);
         }
     }
 
@@ -532,10 +548,22 @@ impl EventLoop {
     async fn handle_identify_events(&mut self, event: &identify::Event) {
         match event {
             identify::Event::Received {
-                info: identify::Info { observed_addr, .. },
-                ..
+                info:
+                    identify::Info {
+                        observed_addr,
+                        listen_addrs,
+                        ..
+                    },
+                peer_id,
             } => {
-                debug!("Observed external address reported: {observed_addr}");
+                for address in self.network_config.relay_addresses.iter_mut() {
+                    if let Some(addr) = address.quic_multiaddr().ok() {
+                        if listen_addrs.contains(&addr) {
+                            self.known_peers.insert(addr, *peer_id);
+                        }
+                    }
+                }
+
                 if !self
                     .swarm
                     .external_addresses()
@@ -582,13 +610,19 @@ pub async fn spawn_event_loop(
 ) -> Result<()> {
     let mut shutdown_handler = ShutdownHandler::new();
 
+    let mut known_peers = HashMap::new();
+    for (peer_id, addr) in relay_addresses.iter() {
+        known_peers.insert(addr.to_owned(), *peer_id);
+    }
+
     // Spawn a task to run swarm in event loop
     let event_loop = EventLoop::new(
         swarm,
         network_config,
         local_peer_id,
-        tx,
         relay_addresses,
+        known_peers,
+        tx,
         shutdown_handler.clone(),
     );
     let handle = task::spawn(event_loop.run());
