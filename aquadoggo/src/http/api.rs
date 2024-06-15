@@ -25,8 +25,12 @@ use tokio_util::io::ReaderStream;
 use crate::http::context::HttpServiceContext;
 
 /// Handle GraphQL playground requests at the given path.
-pub async fn handle_graphql_playground(path: &str) -> impl IntoResponse {
-    response::Html(playground_source(GraphQLPlaygroundConfig::new(path)))
+pub async fn handle_graphql_playground(path: &str, subscription_path: &str) -> impl IntoResponse {
+    response::Html(playground_source(
+        GraphQLPlaygroundConfig::new(path)
+            .subscription_endpoint(subscription_path)
+            .title("p2panda GraphQL Playground"),
+    ))
 }
 
 /// Handle GraphQL requests.

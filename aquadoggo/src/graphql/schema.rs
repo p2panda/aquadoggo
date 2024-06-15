@@ -3,9 +3,11 @@
 //! Dynamically create and manage GraphQL schemas.
 use std::sync::Arc;
 
-use async_graphql::dynamic::{Field, FieldFuture, Object, Schema, TypeRef};
+use async_graphql::dynamic::{Field, FieldFuture, Object, Schema, Subscription, TypeRef};
 use async_graphql::{Request, Response, Value};
 use dynamic_graphql::internal::Registry;
+use futures::stream::BoxStream;
+use futures::{FutureExt, Stream, StreamExt};
 use log::{debug, info, warn};
 use p2panda_rs::Human;
 use tokio::sync::Mutex;
@@ -23,7 +25,8 @@ use crate::graphql::objects::{
     build_paginated_document_object, DocumentMeta,
 };
 use crate::graphql::queries::{
-    build_collection_query, build_document_query, build_next_args_query,
+    build_collection_query, build_document_query, build_document_subscription_query,
+    build_next_args_query,
 };
 use crate::graphql::responses::NextArguments;
 use crate::graphql::scalars::{
@@ -75,14 +78,22 @@ pub async fn build_root_schema(
         .register::<PublicKeyScalar>()
         .register::<SeqNumScalar>();
 
-    let mut schema_builder = Schema::build("Query", Some("MutationRoot"), None);
+    // Construct the root query object
+    let mut root_query = Object::new("Query");
+
+    // Construct the root subscription object
+    let mut root_subscription = Subscription::new("Subscription");
+
+    // Start a schema builder with the root objects
+    let mut schema_builder = Schema::build(
+        root_query.type_name(),
+        Some("MutationRoot"),
+        Some(root_subscription.type_name()),
+    );
 
     // Populate it with the registered types. We can now use these in any following dynamically
     // created query object fields.
     schema_builder = registry.apply_into_schema_builder(schema_builder);
-
-    // Construct the root query object
-    let mut root_query = Object::new("Query");
 
     // Loop through all schema retrieved from the schema store, dynamically create GraphQL objects,
     // input values and a query for the documents they describe
@@ -120,15 +131,18 @@ pub async fn build_root_schema(
 
         // Add a query for retrieving all documents of a certain schema
         root_query = build_collection_query(root_query, &schema);
+
+        // Add a field for subscribing to changes on a single document
+        root_subscription = build_document_subscription_query(root_subscription, &schema);
     }
 
     // Add next args to the query object
     let root_query = build_next_args_query(root_query);
 
-    // Build the GraphQL schema. We can unwrap here since it will only fail if we forgot to
-    // register all required types above
+    // Build the GraphQL schema
     schema_builder
         .register(root_query)
+        .register(root_subscription)
         .data(store)
         .data(schema_provider)
         .data(tx)
@@ -211,15 +225,23 @@ impl GraphQLSchemaManager {
         let mut on_schema_added = shared.schema_provider.on_schema_added();
 
         // Create the new GraphQL based on the current state of known p2panda application schemas
-        async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
+        async fn rebuild(
+            shared: GraphQLSharedData,
+            schemas: GraphQLSchemas,
+        ) -> Result<(), async_graphql::dynamic::SchemaError> {
             match build_root_schema(shared.store, shared.tx, shared.schema_provider).await {
-                Ok(schema) => schemas.lock().await.push(schema),
-                Err(err) => warn!("Error building GraphQL schema: {}", err),
+                Ok(schema) => {
+                    schemas.lock().await.push(schema);
+                    Ok(())
+                }
+                Err(err) => Err(err),
             }
         }
 
         // Always build a schema right at the beginning as we don't have one yet
-        rebuild(shared.clone(), schemas.clone()).await;
+        if let Err(err) = rebuild(shared.clone(), schemas.clone()).await {
+            panic!("Failed building initial GraphQL schema: {}", err);
+        }
         debug!("Finished building initial GraphQL schema");
 
         // Spawn a task which reacts to newly registered p2panda schemas
@@ -231,7 +253,9 @@ impl GraphQLSchemaManager {
                             "Changed schema {}, rebuilding GraphQL API",
                             schema_id.display()
                         );
-                        rebuild(shared.clone(), schemas.clone()).await;
+                        if let Err(err) = rebuild(shared.clone(), schemas.clone()).await {
+                            warn!("Failed building GraphQL schema: {}", err);
+                        }
                     }
                     Err(err) => {
                         panic!("Failed receiving schema updates: {}", err)
@@ -253,6 +277,41 @@ impl GraphQLSchemaManager {
             .expect("No schema given yet")
             .execute(request)
             .await
+    }
+
+    /// Executes an incoming GraphQL query.
+    ///
+    /// This method makes sure the GraphQL query will be executed by the latest given schema the
+    /// manager knows about.
+    pub async fn stream(
+        self,
+        request: impl Into<Request>,
+        session_data: Arc<async_graphql::Data>,
+    ) -> impl Stream<Item = Response> {
+        self.schemas
+            .lock()
+            .await
+            .last()
+            .expect("No schema given yet")
+            .execute_stream_with_session_data(request, session_data)
+    }
+}
+
+#[async_trait::async_trait]
+impl async_graphql::Executor for GraphQLSchemaManager {
+    async fn execute(&self, request: Request) -> Response {
+        self.execute(request).await
+    }
+
+    fn execute_stream(
+        &self,
+        request: Request,
+        session_data: Option<Arc<async_graphql::Data>>,
+    ) -> BoxStream<'static, Response> {
+        self.clone()
+            .stream(request, session_data.unwrap_or_default())
+            .flatten_stream()
+            .boxed()
     }
 }
 
