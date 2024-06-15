@@ -2,8 +2,9 @@
 
 use anyhow::Result;
 use p2panda_rs::identity::KeyPair;
+use tokio::sync::mpsc::Receiver;
 
-use crate::api::NodeInterface;
+use crate::api::{NodeEvent, NodeInterface};
 use crate::bus::ServiceMessage;
 use crate::config::Configuration;
 use crate::context::Context;
@@ -130,5 +131,11 @@ impl Node {
     /// Returns `true` if migration took place or `false` if no migration was required.
     pub async fn migrate(&self, lock_file: LockFile) -> Result<bool> {
         self.api.migrate(lock_file).await
+    }
+
+    /// Subscribe to channel reporting on significant node events which can be interesting for
+    /// clients, for example when peers connect or disconnect.
+    pub async fn subscribe(&self) -> Receiver<NodeEvent> {
+        self.api.subscribe().await
     }
 }

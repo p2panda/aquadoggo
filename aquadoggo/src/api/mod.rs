@@ -6,7 +6,7 @@ mod config_file;
 mod lock_file;
 mod migration;
 
-pub use api::NodeInterface;
+pub use api::{NodeEvent, NodeInterface};
 pub use config_file::ConfigFile;
 pub use lock_file::LockFile;
 pub use migration::migrate;
