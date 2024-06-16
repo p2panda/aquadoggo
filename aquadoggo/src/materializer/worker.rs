@@ -364,12 +364,22 @@ where
     }
 
     /// Returns true if there are no more tasks given for this worker pool.
-    #[allow(dead_code)]
     pub fn is_empty(&self, name: &str) -> bool {
         match self.managers.get(name) {
             Some(manager) => manager.queue.is_empty(),
             None => false,
         }
+    }
+
+    /// Returns true if there are no more tasks given for all worker pools
+    pub fn is_all_empty(&self) -> bool {
+        for name in self.managers.keys() {
+            if !self.is_empty(name) {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Future which resolves as soon as factory returned a critical error.
