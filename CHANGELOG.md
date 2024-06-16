@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Introduce `PeerAddress` struct to help resolve `String` to internal address types [#621](https://github.com/p2panda/aquadoggo/pull/621)
 
+### Changed
+
+- Increase `max_pending_connections_in` and `max_pending_connections_out` [#628](https://github.com/p2panda/aquadoggo/pull/628)
+
 ## [0.7.3]
 
 ### Fixed
