@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+
+use anyhow::Error;
 use libp2p::connection_limits::ConnectionLimits;
+use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
 
 use crate::AllowList;
@@ -23,7 +27,7 @@ pub struct NetworkConfiguration {
     /// with a static IP Address). If you need to connect to nodes with changing, dynamic IP
     /// addresses or even with nodes behind a firewall or NAT, do not use this field but use at
     /// least one relay.
-    pub direct_node_addresses: Vec<Multiaddr>,
+    pub direct_node_addresses: Vec<PeerAddress>,
 
     /// List of peers which are allowed to connect to your node.
     ///
@@ -62,7 +66,7 @@ pub struct NetworkConfiguration {
     /// WARNING: This will potentially expose your IP address on the network. Do only connect to
     /// trusted relays or make sure your IP address is hidden via a VPN or proxy if you're
     /// concerned about leaking your IP.
-    pub relay_addresses: Vec<Multiaddr>,
+    pub relay_addresses: Vec<PeerAddress>,
 
     /// Enable if node should also function as a relay.
     ///
@@ -144,5 +148,72 @@ impl NetworkConfiguration {
             .with_max_established_outgoing(Some(self.max_connections_out))
             .with_max_established_incoming(Some(self.max_connections_in))
             .with_max_established_per_peer(Some(self.max_connections_per_peer))
+    }
+}
+
+/// Helper struct for handling ambiguous string addresses which may need resolving via
+/// a DNS lookup. The [ToSocketAddrs](https://doc.rust-lang.org/std/net/trait.ToSocketAddrs.html)
+/// implementation is used to attempt converting a `String`` to a `SocketAddrs` and then from
+/// here to a `Multiaddr`.
+///
+/// When `to_socket` is first called it's successful result is cached internally and this value
+/// is used directly from this point on. This is an optimization which avoids unnecessary DNS
+/// lookups.
+#[derive(Debug, Clone)]
+pub struct PeerAddress {
+    addr_str: String,
+    socket_addr: Option<SocketAddr>,
+}
+
+impl PeerAddress {
+    pub fn new(addr_str: String) -> Self {
+        PeerAddress {
+            addr_str,
+            socket_addr: None,
+        }
+    }
+
+    pub fn socket(&mut self) -> Result<SocketAddr, Error> {
+        if let Some(socket_addr) = self.socket_addr {
+            return Ok(socket_addr);
+        }
+
+        let socket_addr = match self.addr_str.to_socket_addrs() {
+            Ok(mut addrs) => match addrs.next() {
+                Some(addrs) => addrs,
+                None => return Err(anyhow::format_err!("No socket addresses found")),
+            },
+            Err(e) => return Err(e.into()),
+        };
+
+        let _ = self.socket_addr.replace(socket_addr);
+        Ok(socket_addr)
+    }
+
+    pub fn quic_multiaddr(&mut self) -> Result<Multiaddr, Error> {
+        match self.socket() {
+            Ok(socket_address) => {
+                let mut multiaddr = match socket_address.ip() {
+                    IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
+                    IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
+                };
+                multiaddr.push(Protocol::Udp(socket_address.port()));
+                multiaddr.push(Protocol::QuicV1);
+                Ok(multiaddr)
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl From<String> for PeerAddress {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl std::fmt::Display for PeerAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.addr_str)
     }
 }

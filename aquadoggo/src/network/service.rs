@@ -22,7 +22,7 @@ use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
 use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
 
-const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Network service which handles all networking logic for a p2panda node.
 ///
@@ -40,7 +40,7 @@ pub async fn network_service(
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    let network_config = &context.config.network;
+    let mut network_config = context.config.network.clone();
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
 
@@ -49,7 +49,7 @@ pub async fn network_service(
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
-        let mut swarm = swarm::build_relay_swarm(network_config, key_pair).await?;
+        let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
 
         // Start listening on tcp address.
         let listen_addr_tcp = Multiaddr::empty()
@@ -60,7 +60,7 @@ pub async fn network_service(
         swarm
     } else {
         info!("Networking service initializing...");
-        swarm::build_client_swarm(network_config, key_pair).await?
+        swarm::build_client_swarm(&network_config, key_pair).await?
     };
 
     // Start listening on QUIC address. Pick a random one if the given is taken already.
@@ -93,10 +93,18 @@ pub async fn network_service(
         // replication sessions, which could leave the node in a strange state.
         swarm.behaviour_mut().peers.disable();
 
-        for mut relay_address in network_config.relay_addresses.clone() {
+        for relay_address in network_config.relay_addresses.iter_mut() {
             info!("Connecting to relay node {}", relay_address);
 
-            // Attempt to connect to the relay node, we give this a 5 second timeout so as not to
+            let mut relay_address = match relay_address.quic_multiaddr() {
+                Ok(relay_address) => relay_address,
+                Err(e) => {
+                    debug!("Failed to resolve relay multiaddr: {}", e.to_string());
+                    continue;
+                }
+            };
+
+            // Attempt to connect to the relay node, we give this a 10 second timeout so as not to
             // get stuck if one relay is unreachable.
             if let Ok(result) = tokio::time::timeout(
                 RELAY_CONNECT_TIMEOUT,
@@ -159,8 +167,16 @@ pub async fn network_service(
     }
 
     // Dial all nodes we want to directly connect to.
-    for direct_node_address in &network_config.direct_node_addresses {
+    for direct_node_address in network_config.direct_node_addresses.iter_mut() {
         info!("Connecting to node @ {}", direct_node_address);
+
+        let direct_node_address = match direct_node_address.quic_multiaddr() {
+            Ok(address) => address,
+            Err(e) => {
+                debug!("Failed to resolve direct node multiaddr: {}", e.to_string());
+                continue;
+            }
+        };
 
         let opts = DialOpts::unknown_peer_id()
             .address(direct_node_address.clone())
@@ -219,11 +235,6 @@ pub async fn connect_to_relay(
 
                 // Now that we have a reply from the relay node we can add their peer id to the
                 // relay address.
-
-                // Pop off the "p2p" protocol.
-                let _ = relay_address.pop();
-
-                // Add it back on again with the relay nodes peer id included.
                 relay_address.push(Protocol::P2p(peer_id));
 
                 // Update values on the config.

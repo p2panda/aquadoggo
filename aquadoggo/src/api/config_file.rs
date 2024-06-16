@@ -6,12 +6,11 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use anyhow::{anyhow, Result};
-use libp2p::{Multiaddr, PeerId};
+use libp2p::PeerId;
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::TempDir;
 
-use crate::network::utils::to_multiaddress;
 use crate::{AllowList, Configuration, NetworkConfiguration};
 
 const WILDCARD: &str = "*";
@@ -287,17 +286,12 @@ impl TryFrom<ConfigFile> for Configuration {
                 .to_path_buf(),
         };
 
+        let relay_addresses = value.relay_addresses.into_iter().map(From::from).collect();
         let direct_node_addresses = value
             .direct_node_addresses
-            .iter()
-            .map(to_multiaddress)
-            .collect::<Result<Vec<Multiaddr>, _>>()?;
-
-        let relay_addresses = value
-            .relay_addresses
-            .iter()
-            .map(to_multiaddress)
-            .collect::<Result<Vec<Multiaddr>, _>>()?;
+            .into_iter()
+            .map(From::from)
+            .collect();
 
         Ok(Configuration {
             allow_schema_ids,
