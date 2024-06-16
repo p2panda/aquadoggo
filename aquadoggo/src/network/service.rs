@@ -20,7 +20,8 @@ use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::NODE_NAMESPACE;
-use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
+use crate::network::{identity, peers, swarm, utils};
+use crate::shutdown::ShutdownHandler;
 
 const RELAY_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use futures::{FutureExt, Stream};
@@ -10,14 +11,61 @@ use triggered::{Listener, Trigger};
 /// the application.
 #[derive(Clone)]
 pub struct ShutdownHandler {
+    inner: Arc<Mutex<ShutdownHandlerInner>>,
+}
+
+impl ShutdownHandler {
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(ShutdownHandlerInner::new())),
+        }
+    }
+
+    /// Returns an async stream which can be polled to find out if a shutdown request was sent.
+    pub fn is_requested(&self) -> ShutdownRequest {
+        ShutdownRequest {
+            inner: self
+                .inner
+                .lock()
+                .expect("could not acquire lock for shutdown handler")
+                .request_signal
+                .clone(),
+            is_sent: false,
+        }
+    }
+
+    /// Signal that the shutdown has completed.
+    pub fn set_done(&mut self) {
+        self.inner
+            .lock()
+            .expect("could not acquire lock for shutdown handler")
+            .done_trigger
+            .trigger();
+    }
+
+    /// Returns a future which can be polled to find out if the shutdown has completed.
+    ///
+    /// This automatically triggers the request to shut down when being called.
+    pub fn is_done(&mut self) -> Listener {
+        let unlocked = self
+            .inner
+            .lock()
+            .expect("could not acquire lock for shutdown handler");
+
+        unlocked.request_trigger.trigger();
+        unlocked.done_signal.clone()
+    }
+}
+
+#[derive(Clone)]
+pub struct ShutdownHandlerInner {
     request_trigger: Trigger,
     request_signal: Listener,
     done_trigger: Trigger,
     done_signal: Listener,
 }
 
-impl ShutdownHandler {
-    /// Returns a new instance of `ShutdownHandler`.
+impl ShutdownHandlerInner {
     pub fn new() -> Self {
         let (request_trigger, request_signal) = triggered::trigger();
         let (done_trigger, done_signal) = triggered::trigger();
@@ -28,27 +76,6 @@ impl ShutdownHandler {
             done_trigger,
             done_signal,
         }
-    }
-
-    /// Returns an async stream which can be polled to find out if a shutdown request was sent.
-    pub fn is_requested(&self) -> ShutdownRequest {
-        ShutdownRequest {
-            inner: self.request_signal.clone(),
-            is_sent: false,
-        }
-    }
-
-    /// Signal that the shutdown has completed.
-    pub fn set_done(&mut self) {
-        self.done_trigger.trigger();
-    }
-
-    /// Returns a future which can be polled to find out if the shutdown has completed.
-    ///
-    /// This automatically triggers the request to shut down when being called.
-    pub fn is_done(&mut self) -> Listener {
-        self.request_trigger.trigger();
-        self.done_signal.clone()
     }
 }
 

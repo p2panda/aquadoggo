@@ -27,6 +27,7 @@ mod node;
 mod proptests;
 mod replication;
 mod schema;
+mod shutdown;
 #[cfg(test)]
 mod test_utils;
 #[cfg(test)]
