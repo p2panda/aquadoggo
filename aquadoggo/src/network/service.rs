@@ -556,9 +556,28 @@ impl EventLoop {
                     },
                 peer_id,
             } => {
+                // Configuring known static relay and peer addresses is done by providing an ip
+                // address or domain name and port. We don't yet know the peer id of the relay or
+                // direct peer. Here we observe all identify events and check the addresses the 
+                // identified peer provides. If one matches our known addresses then we can add
+                // their peer id to our address book. This is then used when dialing the peer
+                // to avoid multiple connections being established to the same peer.
+ 
+                // Check if the identified peer is one of our configured relay addresses.
                 for address in self.network_config.relay_addresses.iter_mut() {
                     if let Some(addr) = address.quic_multiaddr().ok() {
                         if listen_addrs.contains(&addr) {
+                            debug!("Relay identified: {peer_id} {addr}");
+                            self.known_peers.insert(addr, *peer_id);
+                        }
+                    }
+                }
+
+                // Check if the identified peer is one of our direct node addresses.
+                for address in self.network_config.direct_node_addresses.iter_mut() {
+                    if let Some(addr) = address.quic_multiaddr().ok() {
+                        if listen_addrs.contains(&addr) {
+                            debug!("Direct node identified: {peer_id} {addr}");
                             self.known_peers.insert(addr, *peer_id);
                         }
                     }
