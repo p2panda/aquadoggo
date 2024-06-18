@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
-use libp2p::swarm::behaviour::ConnectionEstablished;
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
