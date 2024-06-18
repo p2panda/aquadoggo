@@ -316,8 +316,8 @@ struct EventLoop {
     /// - listening on a circuit relay address for relayed connections
     relay_addresses: HashMap<PeerId, Multiaddr>,
 
-    /// Addresses of configured relay or direct peers with their corresponding PeerId. 
-    /// Is only populated once we have made the first connection to the addressed peer 
+    /// Addresses of configured relay or direct peers with their corresponding PeerId.
+    /// Is only populated once we have made the first connection to the addressed peer
     /// and received an identify message back containing the PeerId.
     known_peers: HashMap<Multiaddr, PeerId>,
 
@@ -576,7 +576,7 @@ impl EventLoop {
 
                 // Check if the identified peer is one of our configured relay addresses.
                 for address in self.network_config.relay_addresses.iter_mut() {
-                    if let Some(addr) = address.quic_multiaddr().ok() {
+                    if let Ok(addr) = address.quic_multiaddr() {
                         if listen_addrs.contains(&addr) {
                             debug!("Relay identified: {peer_id} {addr}");
                             self.known_peers.insert(addr, *peer_id);
@@ -586,7 +586,7 @@ impl EventLoop {
 
                 // Check if the identified peer is one of our direct node addresses.
                 for address in self.network_config.direct_node_addresses.iter_mut() {
-                    if let Some(addr) = address.quic_multiaddr().ok() {
+                    if let Ok(addr) = address.quic_multiaddr() {
                         if listen_addrs.contains(&addr) {
                             debug!("Direct node identified: {peer_id} {addr}");
                             self.known_peers.insert(addr, *peer_id);
