@@ -301,15 +301,39 @@ const REDIAL_INTERVAL: Duration = Duration::from_secs(20);
 
 /// Main loop polling the async swarm event stream and incoming service messages stream.
 struct EventLoop {
+    /// libp2p swarm.
     swarm: Swarm<P2pandaBehaviour>,
+
+    /// p2panda network configuration.
     network_config: NetworkConfiguration,
-    redial_scheduler: IntervalStream,
+
+    /// Our own local PeerId.
     local_peer_id: PeerId,
-    tx: ServiceSender,
-    rx: BroadcastStream<ServiceMessage>,
-    known_peers: HashMap<Multiaddr, PeerId>,
+
+    /// Addresses of relays which we connected to during node startup, this means we
+    /// are:
+    /// - registered on it's rendezvous service and actively discovering other peers
+    /// - listening on a circuit relay address for relayed connections
     relay_addresses: HashMap<PeerId, Multiaddr>,
+
+    /// Addresses of configured relay or direct peers with their corresponding PeerId. 
+    /// Is only populated once we have made the first connection to the addressed peer 
+    /// and received an identify message back containing the PeerId.
+    known_peers: HashMap<Multiaddr, PeerId>,
+
+    /// Scheduler which triggers known peer redial attempts.
+    redial_scheduler: IntervalStream,
+
+    /// Service message channel sender.
+    tx: ServiceSender,
+
+    /// Service message channel receiver.
+    rx: BroadcastStream<ServiceMessage>,
+
+    /// Shutdown handler.
     shutdown_handler: ShutdownHandler,
+
+    /// Did we learn our own port yet?
     learned_port: bool,
 }
 
@@ -445,10 +469,12 @@ impl EventLoop {
             };
         }
 
+        // Attempt to dial all relay addresses.
         for relay_address in self.network_config.relay_addresses.iter_mut() {
             try_dial_peer(&mut self.swarm, &mut self.known_peers, relay_address);
         }
 
+        // Attempt to dial all direct peer addresses.
         for direct_node_address in self.network_config.direct_node_addresses.iter_mut() {
             try_dial_peer(&mut self.swarm, &mut self.known_peers, direct_node_address);
         }
