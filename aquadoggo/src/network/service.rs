@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use libp2p::multiaddr::Protocol;
+use libp2p::swarm::behaviour::ConnectionEstablished;
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
@@ -412,6 +413,9 @@ impl EventLoop {
             known_peers: &mut HashMap<Multiaddr, PeerId>,
             address: &mut PeerAddress,
         ) {
+            // Get the peers quic multiaddress, this can error if the address was provided in the form
+            // of a domain name and we are not able to resolve it to a valid multiaddress (for example, 
+            // if we are offline).
             let address = match address.quic_multiaddr() {
                 Ok(address) => address,
                 Err(e) => {
@@ -420,6 +424,8 @@ impl EventLoop {
                 }
             };
 
+            // Construct dial opts depending on if we know the peer id of the peer we are dialing.
+            // We know the peer id if we have connected once to the peer in the current session.
             let opts = match known_peers.get(&address) {
                 Some(peer_id) => DialOpts::peer_id(*peer_id)
                     .addresses(vec![address.to_owned()])
@@ -431,6 +437,9 @@ impl EventLoop {
                     .build(),
             };
 
+            // Dial the known peer. When dialing a peer by it's peer id this method will attempt a
+            // new connections if we are already connected to the peer or we are already dialing
+            // them.
             match swarm.dial(opts) {
                 Ok(_) => (),
                 Err(err) => debug!("Error dialing node: {:?}", err),
@@ -535,11 +544,11 @@ impl EventLoop {
             } => {
                 // Configuring known static relay and peer addresses is done by providing an ip
                 // address or domain name and port. We don't yet know the peer id of the relay or
-                // direct peer. Here we observe all identify events and check the addresses the 
+                // direct peer. Here we observe all identify events and check the addresses the
                 // identified peer provides. If one matches our known addresses then we can add
                 // their peer id to our address book. This is then used when dialing the peer
                 // to avoid multiple connections being established to the same peer.
- 
+
                 // Check if the identified peer is one of our configured relay addresses.
                 for address in self.network_config.relay_addresses.iter_mut() {
                     if let Some(addr) = address.quic_multiaddr().ok() {
@@ -560,6 +569,8 @@ impl EventLoop {
                     }
                 }
 
+                // If we don't know of the observed address a peer told us then add it to our
+                // external addresses.
                 if !self
                     .swarm
                     .external_addresses()
