@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4]
+
 ### Fixed
 
 - Re-materialize blobs which were only partially written to disc due to node crash [#618](https://github.com/p2panda/aquadoggo/pull/618)
@@ -311,7 +313,8 @@ Released on 2021-10-25: :package: [`crate`](https://crates.io/crates/aquadoggo/0
 - Use p2panda-rs 0.2.1 with fixed linter setting [#41](https://github.com/p2panda/aquadoggo/41)
 - Use `tide` for HTTP server and `jsonrpc-v2` for JSON RPC [#29](https://github.com/p2panda/aquadoggo/29)
 
-[unreleased]: https://github.com/p2panda/aquadoggo/compare/v0.7.3...HEAD
+[unreleased]: https://github.com/p2panda/aquadoggo/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/p2panda/aquadoggo/releases/tag/v0.7.4
 [0.7.3]: https://github.com/p2panda/aquadoggo/releases/tag/v0.7.3
 [0.7.2]: https://github.com/p2panda/aquadoggo/releases/tag/v0.7.2
 [0.7.1]: https://github.com/p2panda/aquadoggo/releases/tag/v0.7.1
