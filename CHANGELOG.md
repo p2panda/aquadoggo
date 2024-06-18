@@ -9,12 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.4]
 
-### Fixed
-
-- Re-materialize blobs which were only partially written to disc due to node crash [#618](https://github.com/p2panda/aquadoggo/pull/618)
-- Include all logs for target schemas during replication [#620](https://github.com/p2panda/aquadoggo/pull/620)
-- Re-apply unhandled operations during startup of materializer service [#623](https://github.com/p2panda/aquadoggo/pull/623)
-
 ### Added
 
 - Introduce `PeerAddress` struct to help resolve `String` to internal address types [#621](https://github.com/p2panda/aquadoggo/pull/621)
@@ -23,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Increase `max_pending_connections_in` and `max_pending_connections_out` [#628](https://github.com/p2panda/aquadoggo/pull/628)
+
+### Fixed
+
+- Re-materialize blobs which were only partially written to disc due to node crash [#618](https://github.com/p2panda/aquadoggo/pull/618)
+- Include all logs for target schemas during replication [#620](https://github.com/p2panda/aquadoggo/pull/620)
+- Re-apply unhandled operations during startup of materializer service [#623](https://github.com/p2panda/aquadoggo/pull/623)
 
 ## [0.7.3]
 
