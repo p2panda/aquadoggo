@@ -413,7 +413,7 @@ impl EventLoop {
             address: &mut PeerAddress,
         ) {
             // Get the peers quic multiaddress, this can error if the address was provided in the form
-            // of a domain name and we are not able to resolve it to a valid multiaddress (for example, 
+            // of a domain name and we are not able to resolve it to a valid multiaddress (for example,
             // if we are offline).
             let address = match address.quic_multiaddr() {
                 Ok(address) => address,
