@@ -51,8 +51,7 @@ pub async fn network_service(
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
-        let swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
-        swarm
+        swarm::build_relay_swarm(&network_config, key_pair).await?
     } else {
         info!("Networking service initializing...");
         swarm::build_client_swarm(&network_config, key_pair).await?
