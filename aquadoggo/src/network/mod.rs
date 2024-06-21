@@ -7,7 +7,6 @@ mod peers;
 mod service;
 mod shutdown;
 mod swarm;
-mod transport;
 pub mod utils;
 
 pub use config::NetworkConfiguration;
