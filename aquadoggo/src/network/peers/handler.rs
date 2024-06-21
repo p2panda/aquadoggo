@@ -232,14 +232,7 @@ impl ConnectionHandler for Handler {
             return false;
         }
 
-        if let Some(
-            OutboundSubstreamState::PendingSend(_, _) | OutboundSubstreamState::PendingFlush(_),
-        ) = self.outbound_substream
-        {
-            return true;
-        }
-
-        return true;
+        true
     }
 
     fn poll(
