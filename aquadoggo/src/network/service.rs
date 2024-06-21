@@ -51,14 +51,7 @@ pub async fn network_service(
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
-        let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
-
-        // Start listening on tcp address.
-        let listen_addr_tcp = Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-            .with(Protocol::Tcp(0));
-        swarm.listen_on(listen_addr_tcp)?;
-
+        let swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
         swarm
     } else {
         info!("Networking service initializing...");
