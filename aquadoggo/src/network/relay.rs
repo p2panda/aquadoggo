@@ -75,7 +75,7 @@ impl Relay {
             .unwrap()
             .register(
                 rendezvous::Namespace::from_static(NODE_NAMESPACE),
-                self.peer_id.clone(),
+                self.peer_id,
                 None, // Default ttl is 7200s
             )?;
 

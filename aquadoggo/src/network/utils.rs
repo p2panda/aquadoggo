@@ -31,8 +31,8 @@ pub fn to_quic_address(address: &Multiaddr) -> Option<SocketAddr> {
 }
 
 pub fn is_known_peer_address(
-    known_addresses: &mut Vec<PeerAddress>,
-    peer_addresses: &Vec<Multiaddr>,
+    known_addresses: &mut [PeerAddress],
+    peer_addresses: &[Multiaddr],
 ) -> Option<Multiaddr> {
     for address in known_addresses.iter_mut() {
         if let Ok(addr) = address.quic_multiaddr() {

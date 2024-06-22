@@ -324,7 +324,7 @@ impl EventLoop {
                 rendezvous_node,
                 ..
             } => {
-                if let Some(relay) = self.relays.get_mut(&rendezvous_node) {
+                if let Some(relay) = self.relays.get_mut(rendezvous_node) {
                     if !relay.registered {
                         debug!("Registered on rendezvous {rendezvous_node} in namespace \"{namespace}\"");
                         relay.registered = true;
@@ -376,7 +376,7 @@ impl EventLoop {
                 if let Some(addr) =
                     is_known_peer_address(&mut self.network_config.relay_addresses, listen_addrs)
                 {
-                    if self.relays.get(peer_id).is_some() {
+                    if self.relays.contains_key(peer_id) {
                         return;
                     }
 
@@ -447,7 +447,7 @@ impl EventLoop {
             relay::client::Event::ReservationReqAccepted { relay_peer_id, .. } => {
                 debug!("Relay {relay_peer_id} accepted circuit reservation request");
 
-                if let Some(relay) = self.relays.get_mut(&relay_peer_id) {
+                if let Some(relay) = self.relays.get_mut(relay_peer_id) {
                     relay.reservation_accepted = true;
                     // Attempt to start discovering peers at the configured namespace.
                     if relay.discover(&mut self.swarm) {
@@ -497,7 +497,7 @@ impl EventLoop {
                 );
 
                 // Remove this peer address from our known peers.
-                self.known_peers.remove(&endpoint.get_remote_address());
+                self.known_peers.remove(endpoint.get_remote_address());
             }
             event => trace!("{event:?}"),
         }
