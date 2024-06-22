@@ -24,7 +24,7 @@ use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::relay::Relay;
 use crate::network::utils::{dial_known_peer, is_known_peer_address};
 use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
-use crate::NetworkConfiguration;
+use crate::{info_or_print, NetworkConfiguration};
 
 /// Interval at which we attempt to dial known peers and relays.
 const REDIAL_INTERVAL: Duration = Duration::from_secs(20);
@@ -49,7 +49,7 @@ pub async fn network_service(
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
 
-    println!("Peer id: {local_peer_id}");
+    info_or_print(&format!("Peer id: {local_peer_id}"));
 
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
@@ -70,10 +70,12 @@ pub async fn network_service(
             .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
             .with(Protocol::Udp(0))
             .with(Protocol::QuicV1);
-        println!(
+
+        info_or_print(&format!(
             "QUIC port {} was already taken, try random port instead ..",
             network_config.quic_port
-        );
+        ));
+
         swarm.listen_on(random_port_addr)?;
     }
 
@@ -184,7 +186,7 @@ impl EventLoop {
                             // Show only one QUIC address during the runtime of the node, otherwise
                             // it might get too spammy
                             if let Some(address) = utils::to_quic_address(&address) {
-                                println!("Node is listening on 0.0.0.0:{}", address.port());
+                                info_or_print(&format!("Node is listening on 0.0.0.0:{}", address.port()));
                                 self.learned_port = true;
                             }
                         }
@@ -308,9 +310,8 @@ impl EventLoop {
                                 .addresses(vec![peer_circuit_address])
                                 .build();
 
-                            match self.swarm.dial(opts) {
-                                Ok(_) => debug!("Dialed peer {}", peer_id),
-                                Err(_) => (),
+                            if self.swarm.dial(opts).is_ok() {
+                                debug!("Dialed peer {}", peer_id)
                             };
                         } else {
                             debug!("Discovered peer from unknown relay node")
