@@ -227,14 +227,6 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> bool {
-        if self.critical_error {
-            return false;
-        }
-
-        true
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -298,7 +290,7 @@ impl ConnectionHandler for Handler {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                warn!("Error during closing inbound connection: {err}")
+                                warn!("Error during closing inbound connection: {err}");
                             }
                             self.inbound_substream = None;
                             break;
