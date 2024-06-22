@@ -30,6 +30,24 @@ pub fn to_quic_address(address: &Multiaddr) -> Option<SocketAddr> {
     }
 }
 
+pub fn to_tcp_address(address: &Multiaddr) -> Option<SocketAddr> {
+    let hay = address.to_string();
+    let regex = Regex::new(r"/ip4/(\d+.\d+.\d+.\d+)/tcp/(\d+)").unwrap();
+    let caps = regex.captures(&hay);
+
+    match caps {
+        None => None,
+        Some(caps) => {
+            let ip_address = caps.get(1).unwrap().as_str();
+            let port = caps.get(2).unwrap().as_str();
+            let socket = format!("{ip_address}:{port}")
+                .parse::<SocketAddr>()
+                .expect("Tried to convert invalid address");
+            Some(socket)
+        }
+    }
+}
+
 pub fn is_known_peer_address(
     known_addresses: &mut [PeerAddress],
     peer_addresses: &[Multiaddr],

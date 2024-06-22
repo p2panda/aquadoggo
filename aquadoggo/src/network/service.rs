@@ -61,22 +61,39 @@ pub async fn network_service(
     };
 
     // Start listening on QUIC address. Pick a random one if the given is taken already.
-    let listen_addr_quic = Multiaddr::empty()
+    let mut listen_addr_quic = Multiaddr::empty()
         .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Udp(network_config.quic_port))
+        .with(Protocol::Udp(network_config.port))
         .with(Protocol::QuicV1);
-    if swarm.listen_on(listen_addr_quic).is_err() {
-        let random_port_addr = Multiaddr::empty()
+    if swarm.listen_on(listen_addr_quic.clone()).is_err() {
+        listen_addr_quic = Multiaddr::empty()
             .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
             .with(Protocol::Udp(0))
             .with(Protocol::QuicV1);
 
         info_or_print(&format!(
             "QUIC port {} was already taken, try random port instead ..",
-            network_config.quic_port
+            network_config.port
         ));
 
-        swarm.listen_on(random_port_addr)?;
+        swarm.listen_on(listen_addr_quic.clone())?;
+    }
+
+    // Start listening on TCP address. Pick a random one if the given is taken already.
+    let mut listen_address_tcp = Multiaddr::empty()
+        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+        .with(Protocol::Tcp(network_config.port));
+    if swarm.listen_on(listen_address_tcp.clone()).is_err() {
+        listen_address_tcp = Multiaddr::empty()
+            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+            .with(Protocol::Tcp(0));
+
+        info_or_print(&format!(
+            "TCP port {} was already taken, try random port instead ..",
+            network_config.port
+        ));
+
+        swarm.listen_on(listen_address_tcp.clone())?;
     }
 
     info!("Network service ready!");
@@ -122,8 +139,11 @@ struct EventLoop {
     /// Shutdown handler.
     shutdown_handler: ShutdownHandler,
 
-    /// Did we learn our own port yet.
-    learned_port: bool,
+    /// Did we learn our own QUIC port yet.
+    learned_quic_port: bool,
+
+    /// Did we learn our own TCP port yet.
+    learned_tcp_port: bool,
 
     /// Did we learn our observed address yet.
     learned_observed_addr: bool,
@@ -147,7 +167,8 @@ impl EventLoop {
             known_peers: HashMap::new(),
             relays: HashMap::new(),
             shutdown_handler,
-            learned_port: false,
+            learned_quic_port: false,
+            learned_tcp_port: false,
             learned_observed_addr: false,
         }
     }
@@ -179,15 +200,22 @@ impl EventLoop {
                     let event = event.expect("Swarm stream to be infinite");
                     match event {
                         SwarmEvent::NewListenAddr { address, .. } => {
-                            if self.learned_port {
-                                continue;
+                            if !self.learned_quic_port {
+                                // Show only one QUIC address during the runtime of the node, otherwise
+                                // it might get too spammy
+                                if let Some(address) = utils::to_quic_address(&address) {
+                                    info_or_print(&format!("Node is listening on 0.0.0.0:{} (QUIC)", address.port()));
+                                    self.learned_quic_port = true;
+                                }
                             }
 
-                            // Show only one QUIC address during the runtime of the node, otherwise
-                            // it might get too spammy
-                            if let Some(address) = utils::to_quic_address(&address) {
-                                info_or_print(&format!("Node is listening on 0.0.0.0:{}", address.port()));
-                                self.learned_port = true;
+                            if !self.learned_tcp_port {
+                                // Show only one TCP address during the runtime of the node, otherwise
+                                // it might get too spammy
+                                if let Some(address) = utils::to_tcp_address(&address) {
+                                    info_or_print(&format!("Node is listening on 0.0.0.0:{} (TCP)", address.port()));
+                                    self.learned_tcp_port = true;
+                                }
                             }
                         }
                         SwarmEvent::Behaviour(Event::Identify(event)) => self.handle_identify_events(&event).await,

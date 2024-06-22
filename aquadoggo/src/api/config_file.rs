@@ -21,7 +21,7 @@ const DEFAULT_MAX_DATABASE_CONNECTIONS: u32 = 32;
 
 const DEFAULT_HTTP_PORT: u16 = 2020;
 
-const DEFAULT_QUIC_PORT: u16 = 2022;
+const DEFAULT_NODE_PORT: u16 = 2022;
 
 const DEFAULT_WORKER_POOL_SIZE: u32 = 16;
 
@@ -41,8 +41,8 @@ fn default_http_port() -> u16 {
     DEFAULT_HTTP_PORT
 }
 
-fn default_quic_port() -> u16 {
-    DEFAULT_QUIC_PORT
+fn default_node_port() -> u16 {
+    DEFAULT_NODE_PORT
 }
 
 fn default_database_url() -> String {
@@ -116,9 +116,9 @@ pub struct ConfigFile {
     #[serde(default = "default_http_port")]
     pub http_port: u16,
 
-    /// QUIC port for node-node communication and data replication. Defaults to 2022.
-    #[serde(default = "default_quic_port")]
-    pub quic_port: u16,
+    /// TCP / QUIC port for node-node communication and data replication. Defaults to 2022.
+    #[serde(default = "default_node_port")]
+    pub node_port: u16,
 
     /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
     /// directory.
@@ -219,7 +219,7 @@ impl Default for ConfigFile {
             database_url: default_database_url(),
             database_max_connections: default_max_database_connections(),
             http_port: default_http_port(),
-            quic_port: default_quic_port(),
+            node_port: default_node_port(),
             blobs_base_path: None,
             mdns: default_mdns(),
             private_key: None,
@@ -301,7 +301,7 @@ impl TryFrom<ConfigFile> for Configuration {
             blobs_base_path,
             worker_pool_size: value.worker_pool_size,
             network: NetworkConfiguration {
-                quic_port: value.quic_port,
+                port: value.node_port,
                 mdns: value.mdns,
                 direct_node_addresses,
                 allow_peer_ids,

@@ -15,8 +15,8 @@ pub const NODE_NAMESPACE: &str = "aquadoggo";
 /// Network config for the node.
 #[derive(Debug, Clone)]
 pub struct NetworkConfiguration {
-    /// QUIC port for node-node communication and data replication.
-    pub quic_port: u16,
+    /// QUIC or TCP port for node-node communication and data replication.
+    pub port: u16,
 
     /// Discover peers on the local network via mDNS (over IPv4 only, using port 5353).
     pub mdns: bool,
@@ -120,7 +120,7 @@ pub struct NetworkConfiguration {
 impl Default for NetworkConfiguration {
     fn default() -> Self {
         Self {
-            quic_port: 2022,
+            port: 2022,
             mdns: true,
             direct_node_addresses: Vec::new(),
             allow_peer_ids: AllowList::<PeerId>::Wildcard,

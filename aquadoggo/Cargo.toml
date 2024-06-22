@@ -42,12 +42,13 @@ libp2p = { version = "0.53.2", features = [
     "macros",
     "mdns",
     "noise",
+    "quic",
     "relay",
     "rendezvous",
     "serde",
+    "tcp",
     "tokio",
     "yamux",
-    "quic",
 ] }
 lipmaa-link = "0.2.2"
 log = "0.4.19"
