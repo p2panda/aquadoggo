@@ -75,8 +75,5 @@ pub fn dial_known_peer(
     // Dial the known peer. When dialing a peer by it's peer id this method will attempt a
     // new connections if we are already connected to the peer or we are already dialing
     // them.
-    match swarm.dial(opts) {
-        Ok(_) => (),
-        Err(err) => debug!("Error dialing node: {:?}", err),
-    };
+    let _ = swarm.dial(opts);
 }

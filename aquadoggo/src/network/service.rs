@@ -171,9 +171,6 @@ impl EventLoop {
     pub async fn run(mut self) {
         let mut shutdown_request_received = self.shutdown_handler.is_requested();
 
-        // Dial all known relay and direct peers.
-        self.attempt_dial_known_addresses().await;
-
         loop {
             tokio::select! {
                 event = self.swarm.next() => {
@@ -286,37 +283,38 @@ impl EventLoop {
                 ..
             } => {
                 for Registration { record, .. } in registrations {
-                    for address in record.addresses() {
-                        let peer_id = record.peer_id();
-                        if peer_id != self.local_peer_id {
-                            debug!("Peer discovered via rendezvous: {} {}", peer_id, address);
+                    let peer_id = record.peer_id();
+                    let addresses = record.addresses();
 
-                            if self.swarm.is_connected(&peer_id) {
-                                debug!("Already connected to peer {} not dialing", peer_id);
-                                continue;
-                            }
+                    debug!(
+                        "Discovered {} addresses for peer {}",
+                        addresses.len(),
+                        peer_id
+                    );
 
-                            if let Some(relay_address) = self.relays.get(rendezvous_node) {
-                                debug!("Dialing peer {}", peer_id);
-
-                                let peer_circuit_address =
-                                    relay_address.circuit_addr().with(Protocol::P2p(peer_id));
-
-                                let opts = DialOpts::peer_id(peer_id)
-                                    .override_dial_concurrency_factor(
-                                        NonZeroU8::new(1).expect("Is nonzero u8"),
-                                    )
-                                    .addresses(vec![peer_circuit_address])
-                                    .build();
-
-                                match self.swarm.dial(opts) {
-                                    Ok(_) => (),
-                                    Err(err) => debug!("Error dialing peer: {:?}", err),
-                                };
-                            } else {
-                                debug!("Discovered peer from unknown relay node")
-                            };
+                    if peer_id != self.local_peer_id {
+                        if self.swarm.is_connected(&peer_id) {
+                            continue;
                         }
+
+                        if let Some(relay_address) = self.relays.get(rendezvous_node) {
+                            let peer_circuit_address =
+                                relay_address.circuit_addr().with(Protocol::P2p(peer_id));
+
+                            let opts = DialOpts::peer_id(peer_id)
+                                .override_dial_concurrency_factor(
+                                    NonZeroU8::new(1).expect("Is nonzero u8"),
+                                )
+                                .addresses(vec![peer_circuit_address])
+                                .build();
+
+                            match self.swarm.dial(opts) {
+                                Ok(_) => debug!("Dialed peer {}", peer_id),
+                                Err(_) => (),
+                            };
+                        } else {
+                            debug!("Discovered peer from unknown relay node")
+                        };
                     }
                 }
             }
@@ -382,7 +380,7 @@ impl EventLoop {
                     }
 
                     // Add the relay to our known peers.
-                    debug!("Relay identified: {peer_id} {addr}");
+                    debug!("Relay identified {peer_id} {addr}");
                     self.known_peers.insert(addr.clone(), *peer_id);
 
                     // Also add it to our map of identified relays.
@@ -395,7 +393,7 @@ impl EventLoop {
                     listen_addrs,
                 ) {
                     // Add the direct node to our known peers.
-                    debug!("Direct node identified: {peer_id} {addr}");
+                    debug!("Direct node identified {peer_id} {addr}");
                     self.known_peers.insert(addr, *peer_id);
                 }
             }
@@ -411,7 +409,7 @@ impl EventLoop {
                     match relay.register(&mut self.swarm) {
                         Ok(registered) => {
                             if registered {
-                                debug!("Registered on relay {} at {}", relay.peer_id, relay.addr)
+                                debug!("Registration request sent to relay {}", relay.peer_id)
                             }
                         }
                         Err(e) => debug!("Error registering on relay: {}", e),
@@ -478,16 +476,12 @@ impl EventLoop {
     async fn handle_swarm_events(&mut self, event: SwarmEvent<Event>) {
         match event {
             SwarmEvent::ConnectionEstablished {
-                peer_id,
-                connection_id,
                 endpoint,
                 num_established,
                 ..
             } => {
                 debug!(
-                    "Connection established with peer {}({}) at {}, total connections {}",
-                    peer_id,
-                    connection_id,
+                    "Connected to {} (1/{})",
                     endpoint.get_remote_address(),
                     num_established
                 );
