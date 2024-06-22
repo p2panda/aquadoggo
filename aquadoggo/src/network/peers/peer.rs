@@ -61,7 +61,7 @@ impl Human for Peer {
         // Trick to nicely display `ConnectionId` struct
         let connection_id = format!("{:?}", self.1);
         let connection_id = connection_id[13..]
-            .strip_suffix(")")
+            .strip_suffix(')')
             .expect("ConnectionId format is as expected");
         format!("{} ({})", self.0, connection_id)
     }
@@ -82,7 +82,10 @@ mod tests {
         assert_eq!(peer_connection_2.display(), format!("{} ({})", peer_id, 2));
 
         let peer_connection_23 = Peer::new(peer_id, ConnectionId::new_unchecked(23));
-        assert_eq!(peer_connection_23.display(), format!("{} ({})", peer_id, 23));
+        assert_eq!(
+            peer_connection_23.display(),
+            format!("{} ({})", peer_id, 23)
+        );
 
         let peer_connection_999 = Peer::new(peer_id, ConnectionId::new_unchecked(999));
         assert_eq!(
