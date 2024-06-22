@@ -467,7 +467,7 @@ impl EventLoop {
         match &event.result {
             Ok(connection_id) => {
                 info!(
-                    "{}({}) upgraded to direct connection",
+                    "Connection with {}({}) upgraded to direct connection",
                     event.remote_peer_id, connection_id
                 );
             }
