@@ -10,7 +10,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::rendezvous::Registration;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
+use libp2p::{dcutr, identify, mdns, relay, rendezvous, Multiaddr, PeerId, Swarm};
 use log::{debug, info, trace, warn};
 use tokio::task;
 use tokio::time::interval;
@@ -196,6 +196,7 @@ impl EventLoop {
                         SwarmEvent::Behaviour(Event::RendezvousClient(event)) => self.handle_rendezvous_client_events(&event).await,
                         SwarmEvent::Behaviour(Event::Peers(event)) => self.handle_peers_events(&event).await,
                         SwarmEvent::Behaviour(Event::RelayClient(event)) => self.handle_relay_client_events(&event).await,
+                        SwarmEvent::Behaviour(Event::Dcutr(event)) => self.handle_dcutr_events(&event).await,
                         event => self.handle_swarm_events(event).await,
 
                     }
@@ -459,6 +460,18 @@ impl EventLoop {
                 }
             }
             event => trace!("{event:?}"),
+        }
+    }
+
+    async fn handle_dcutr_events(&mut self, event: &dcutr::Event) {
+        match &event.result {
+            Ok(connection_id) => {
+                info!(
+                    "{}({}) upgraded to direct connection",
+                    event.remote_peer_id, connection_id
+                );
+            }
+            Err(e) => debug!("Direct connection upgrade error: {}", e),
         }
     }
 

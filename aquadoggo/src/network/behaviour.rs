@@ -223,7 +223,6 @@ pub enum Event {
     RendezvousClient(rendezvous::client::Event),
     #[allow(dead_code)]
     RendezvousServer(rendezvous::server::Event),
-    #[allow(dead_code)]
     Dcutr(dcutr::Event),
     Peers(peers::Event),
     Void,
