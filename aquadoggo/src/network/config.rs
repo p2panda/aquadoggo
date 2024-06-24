@@ -21,7 +21,12 @@ pub struct NetworkConfiguration {
     /// protocol (TCP/QUIC) used for node-node communication and data replication.
     pub transport: Transport,
 
-    /// Establish a private net secured by this pre-shared key.
+    /// Pre-shared key formatted as a 64 digit hexadecimal string.
+    ///
+    /// When provided a private network will be made with only peers knowing the psk being able
+    /// to form connections.
+    ///
+    /// WARNING: Private networks are only supported when using TCP for the transport layer.
     pub psk: Option<PreSharedKey>,
 
     /// QUIC or TCP port for node-node communication and data replication.

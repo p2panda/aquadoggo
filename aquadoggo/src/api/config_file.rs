@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use anyhow::{anyhow, Result};
-use libp2p::PeerId;
+use libp2p::{pnet::PreSharedKey, PeerId};
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::TempDir;
@@ -116,13 +116,22 @@ pub struct ConfigFile {
     #[serde(default = "default_http_port")]
     pub http_port: u16,
 
-    /// protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC. 
+    /// protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC.
     #[serde(default)]
     pub transport: Transport,
 
     /// TCP / QUIC port for node-node communication and data replication. Defaults to 2022.
     #[serde(default = "default_node_port")]
     pub node_port: u16,
+
+    /// Pre-shared key formatted as a 64 digit hexadecimal string.
+    ///
+    /// When provided a private network will be made with only peers knowing the psk being able
+    /// to form connections.
+    ///
+    /// WARNING: Private networks are only supported when using TCP for the transport layer.
+    #[serde(default)]
+    pub psk: Option<String>,
 
     /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
     /// directory.
@@ -219,6 +228,7 @@ impl Default for ConfigFile {
     fn default() -> Self {
         Self {
             transport: Transport::default(),
+            psk: None,
             log_level: default_log_level(),
             allow_schema_ids: UncheckedAllowList::default(),
             database_url: default_database_url(),
@@ -298,6 +308,14 @@ impl TryFrom<ConfigFile> for Configuration {
             .map(From::from)
             .collect();
 
+        // `PreSharedKey` expects to parse key string from a multi-line string in the following format.
+        let psk = if let Some(psk) = value.psk {
+            let formatted_psk = format!("/key/swarm/psk/1.0.0/\n/base16/\n{}", psk);
+            Some(PreSharedKey::from_str(&formatted_psk)?)
+        } else {
+            None
+        };
+
         Ok(Configuration {
             allow_schema_ids,
             database_url: value.database_url,
@@ -307,6 +325,7 @@ impl TryFrom<ConfigFile> for Configuration {
             worker_pool_size: value.worker_pool_size,
             network: NetworkConfiguration {
                 transport: value.transport,
+                psk,
                 port: value.node_port,
                 mdns: value.mdns,
                 direct_node_addresses,

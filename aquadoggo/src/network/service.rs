@@ -47,11 +47,16 @@ pub async fn network_service(
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    let network_config = context.config.network.clone();
+    let mut network_config = context.config.network.clone();
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
 
     info_or_print(&format!("Peer id: {local_peer_id}"));
+
+    if network_config.psk.is_some() && network_config.transport == Transport::QUIC {
+        warn!("Private net not supported for QUIC transport protocol, switching to TCP");
+        network_config.transport = Transport::TCP;
+    }
 
     let mut swarm = match network_config.transport {
         Transport::QUIC => build_quic_swarm(&network_config, key_pair),
