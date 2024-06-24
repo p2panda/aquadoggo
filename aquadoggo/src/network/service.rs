@@ -51,15 +51,7 @@ pub async fn network_service(
     // The swarm can be initiated with or without "relay" capabilities.
     let mut swarm = if network_config.relay_mode {
         info!("Networking service initializing with relay capabilities...");
-        let mut swarm = swarm::build_relay_swarm(&network_config, key_pair).await?;
-
-        // Start listening on tcp address.
-        let listen_addr_tcp = Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-            .with(Protocol::Tcp(0));
-        swarm.listen_on(listen_addr_tcp)?;
-
-        swarm
+        swarm::build_relay_swarm(&network_config, key_pair).await?
     } else {
         info!("Networking service initializing...");
         swarm::build_client_swarm(&network_config, key_pair).await?
@@ -270,21 +262,6 @@ pub async fn connect_to_relay(
             )) => {
                 info!("Registered on rendezvous in namespace \"{namespace}\"");
                 rendezvous_registered = true;
-            }
-            SwarmEvent::ConnectionClosed { .. } => {
-                // Listening on a relay circuit address opens a connection to the relay node, this
-                // doesn't always succeed first time though, so we catch here when the connection closed
-                // and retry listening.
-                warn!(
-                    "Relay circuit connection closed, re-attempting listening on: {:?}",
-                    circuit_address
-                );
-
-                // After a short wait.
-                tokio::time::sleep(Duration::from_millis(100)).await;
-
-                // Listen again.
-                swarm.listen_on(circuit_address.clone())?;
             }
             event => debug!("{event:?}"),
         }

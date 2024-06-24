@@ -7,7 +7,7 @@ use libp2p::core::Endpoint;
 use libp2p::swarm::derive_prelude::ConnectionEstablished;
 use libp2p::swarm::{
     ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use libp2p::{Multiaddr, PeerId};
 
@@ -184,7 +184,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
@@ -200,24 +200,13 @@ impl NetworkBehaviour for Behaviour {
             }) => {
                 self.on_connection_closed(peer_id, connection_id);
             }
-            FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrConfirmed(_)
-            | FromSwarm::ExternalAddrExpired(_) => {}
+            _ => {}
         }
     }
 
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
@@ -229,9 +218,8 @@ impl NetworkBehaviour for Behaviour {
 
 #[cfg(test)]
 mod tests {
-    use futures::FutureExt;
-    #[allow(deprecated)]
-    use libp2p::swarm::{keep_alive, ConnectionId, Swarm};
+    use libp2p::swarm::{dummy, ConnectionError, SwarmEvent};
+    use libp2p::swarm::{ConnectionId, Swarm};
     use libp2p_swarm_test::SwarmExt;
     use p2panda_rs::schema::SchemaId;
     use rstest::rstest;
@@ -250,7 +238,7 @@ mod tests {
 
         // Listen on swarm_1 and connect from swarm_2, this should establish a bi-directional
         // connection.
-        swarm_1.listen().await;
+        swarm_1.listen().with_memory_addr_external().await;
         swarm_2.connect(&mut swarm_1).await;
 
         let swarm_1_peer_id = *swarm_1.local_peer_id();
@@ -273,14 +261,14 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(unused_variables)]
     async fn incompatible_network_behaviour() {
         // Create two swarms
         let mut swarm_1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
-        #[allow(deprecated)]
-        let mut swarm_2 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
+        let mut swarm_2 = Swarm::new_ephemeral(|_| dummy::Behaviour);
 
         // Listen on swarm_1 and connect from swarm_2, this should establish a bi-directional connection.
-        swarm_1.listen().await;
+        swarm_1.listen().with_memory_addr_external().await;
         swarm_2.connect(&mut swarm_1).await;
 
         let swarm_1_peer_id = *swarm_1.local_peer_id();
@@ -313,14 +301,13 @@ mod tests {
             )),
         );
 
-        // Await a swarm event on swarm_2.
-        //
-        // We expect a timeout panic as no event will occur.
-        let result = std::panic::AssertUnwindSafe(swarm_2.next_swarm_event())
-            .catch_unwind()
-            .await;
-
-        assert!(result.is_err())
+        // We expect the peers to close the connection by timing out.
+        if let SwarmEvent::ConnectionClosed { cause, .. } = swarm_2.next_swarm_event().await {
+            matches!(Some(ConnectionError::KeepAliveTimeout), cause);
+        } else {
+            // We didn't get the event we expected.
+            panic!()
+        }
     }
 
     #[rstest]
@@ -331,13 +318,21 @@ mod tests {
     #[case(random_schema_id_set(), random_schema_id_set())]
     #[tokio::test]
     async fn swarm_behaviour_events(#[case] set_1: SchemaIdSet, #[case] set_2: SchemaIdSet) {
+        use libp2p::swarm::dial_opts::DialOpts;
+
         let mut swarm_1 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
         let mut swarm_2 = Swarm::new_ephemeral(|_| PeersBehaviour::new());
 
         // Listen on swarm_1 and connect from swarm_2, this should establish a bi-directional
         // connection
-        swarm_1.listen().await;
-        swarm_2.connect(&mut swarm_1).await;
+        swarm_1.listen().with_memory_addr_external().await;
+        swarm_2
+            .dial(
+                DialOpts::peer_id(*swarm_1.local_peer_id())
+                    .addresses(swarm_1.external_addresses().cloned().collect())
+                    .build(),
+            )
+            .unwrap();
 
         let mut events_1 = Vec::new();
         let mut events_2 = Vec::new();
