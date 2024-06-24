@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::str::FromStr;
 
 use anyhow::Error;
 use libp2p::connection_limits::ConnectionLimits;
 use libp2p::multiaddr::Protocol;
 use libp2p::{Multiaddr, PeerId};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::AllowList;
 
@@ -15,6 +17,9 @@ pub const NODE_NAMESPACE: &str = "aquadoggo";
 /// Network config for the node.
 #[derive(Debug, Clone)]
 pub struct NetworkConfiguration {
+    /// protocol (TCP/QUIC) used for node-node communication and data replication. 
+    pub transport: Transport,
+
     /// QUIC or TCP port for node-node communication and data replication.
     pub port: u16,
 
@@ -120,6 +125,7 @@ pub struct NetworkConfiguration {
 impl Default for NetworkConfiguration {
     fn default() -> Self {
         Self {
+            transport: Transport::QUIC,
             port: 2022,
             mdns: true,
             direct_node_addresses: Vec::new(),
@@ -204,6 +210,20 @@ impl PeerAddress {
             Err(e) => Err(e),
         }
     }
+
+    pub fn tcp_multiaddr(&mut self) -> Result<Multiaddr, Error> {
+        match self.socket() {
+            Ok(socket_address) => {
+                let mut multiaddr = match socket_address.ip() {
+                    IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
+                    IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
+                };
+                multiaddr.push(Protocol::Tcp(socket_address.port()));
+                Ok(multiaddr)
+            }
+            Err(e) => Err(e),
+        }
+    }
 }
 
 impl From<String> for PeerAddress {
@@ -215,5 +235,45 @@ impl From<String> for PeerAddress {
 impl std::fmt::Display for PeerAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.addr_str)
+    }
+}
+
+/// Enum representing transport protocol types.
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+pub enum Transport {
+    #[default]
+    /// UDP/QUIC transport protocol
+    QUIC,
+
+    /// TCP transport protocol
+    TCP,
+}
+
+impl<'de> Deserialize<'de> for Transport {
+    fn deserialize<D>(deserializer: D) -> Result<Transport, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let str_value = String::deserialize(deserializer)?;
+        let transport = str_value
+            .parse()
+            .map_err(|_| serde::de::Error::custom("Could not parse string as transport type"))?;
+
+        Ok(transport)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TransportParsingError;
+
+impl FromStr for Transport {
+    type Err = TransportParsingError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "TCP" => Ok(Transport::TCP),
+            "QUIC" => Ok(Transport::QUIC),
+            _ => Err(TransportParsingError),
+        }
     }
 }

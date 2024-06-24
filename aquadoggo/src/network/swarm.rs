@@ -31,7 +31,7 @@ pub async fn build_client_swarm(
     let swarm = SwarmBuilder::with_existing_identity(key_pair)
         .with_tokio()
         .with_tcp(
-            tcp::Config::default().port_reuse(true).nodelay(true),
+            tcp::Config::default().nodelay(true),
             noise::Config::new,
             yamux::Config::default,
         )?

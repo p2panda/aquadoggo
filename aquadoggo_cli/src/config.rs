@@ -112,10 +112,15 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     http_port: Option<u16>,
 
-    /// QUIC port for node-node communication and data replication. Defaults to 2022.
-    #[arg(short = 'q', long, value_name = "PORT")]
+    /// protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC. 
+    #[arg(short = 'q', long, value_name = "TRANSPORT")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    quic_port: Option<u16>,
+    pub transport: Option<String>,
+
+    /// QUIC port for node-node communication and data replication. Defaults to 2022.
+    #[arg(short = 't', long, value_name = "PORT")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    node_port: Option<u16>,
 
     /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
     /// directory.

@@ -11,7 +11,7 @@ use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::TempDir;
 
-use crate::{AllowList, Configuration, NetworkConfiguration};
+use crate::{AllowList, Configuration, NetworkConfiguration, Transport};
 
 const WILDCARD: &str = "*";
 
@@ -116,6 +116,10 @@ pub struct ConfigFile {
     #[serde(default = "default_http_port")]
     pub http_port: u16,
 
+    /// protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC. 
+    #[serde(default)]
+    pub transport: Transport,
+
     /// TCP / QUIC port for node-node communication and data replication. Defaults to 2022.
     #[serde(default = "default_node_port")]
     pub node_port: u16,
@@ -214,6 +218,7 @@ pub struct ConfigFile {
 impl Default for ConfigFile {
     fn default() -> Self {
         Self {
+            transport: Transport::default(),
             log_level: default_log_level(),
             allow_schema_ids: UncheckedAllowList::default(),
             database_url: default_database_url(),
@@ -301,6 +306,7 @@ impl TryFrom<ConfigFile> for Configuration {
             blobs_base_path,
             worker_pool_size: value.worker_pool_size,
             network: NetworkConfiguration {
+                transport: value.transport,
                 port: value.node_port,
                 mdns: value.mdns,
                 direct_node_addresses,
