@@ -6,6 +6,7 @@ use std::str::FromStr;
 use anyhow::Error;
 use libp2p::connection_limits::ConnectionLimits;
 use libp2p::multiaddr::Protocol;
+use libp2p::pnet::PreSharedKey;
 use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -17,8 +18,11 @@ pub const NODE_NAMESPACE: &str = "aquadoggo";
 /// Network config for the node.
 #[derive(Debug, Clone)]
 pub struct NetworkConfiguration {
-    /// protocol (TCP/QUIC) used for node-node communication and data replication. 
+    /// protocol (TCP/QUIC) used for node-node communication and data replication.
     pub transport: Transport,
+
+    /// Establish a private net secured by this pre-shared key.
+    pub psk: Option<PreSharedKey>,
 
     /// QUIC or TCP port for node-node communication and data replication.
     pub port: u16,
@@ -126,6 +130,7 @@ impl Default for NetworkConfiguration {
     fn default() -> Self {
         Self {
             transport: Transport::QUIC,
+            psk: None,
             port: 2022,
             mdns: true,
             direct_node_addresses: Vec::new(),
@@ -239,7 +244,7 @@ impl std::fmt::Display for PeerAddress {
 }
 
 /// Enum representing transport protocol types.
-#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub enum Transport {
     #[default]
     /// UDP/QUIC transport protocol

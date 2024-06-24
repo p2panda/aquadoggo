@@ -23,8 +23,9 @@ use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Event, P2pandaBehaviour};
 use crate::network::config::Transport;
 use crate::network::relay::Relay;
+use crate::network::swarm::{build_quic_swarm, build_tcp_swarm};
 use crate::network::utils::{dial_known_peer, is_known_peer_address};
-use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
+use crate::network::{identity, peers, utils, ShutdownHandler};
 use crate::{info_or_print, NetworkConfiguration};
 
 /// Interval at which we attempt to dial known peers and relays.
@@ -52,14 +53,10 @@ pub async fn network_service(
 
     info_or_print(&format!("Peer id: {local_peer_id}"));
 
-    // The swarm can be initiated with or without "relay" capabilities.
-    let mut swarm = if network_config.relay_mode {
-        info!("Networking service initializing with relay capabilities...");
-        swarm::build_relay_swarm(&network_config, key_pair).await?
-    } else {
-        info!("Networking service initializing...");
-        swarm::build_client_swarm(&network_config, key_pair).await?
-    };
+    let mut swarm = match network_config.transport {
+        Transport::QUIC => build_quic_swarm(&network_config, key_pair),
+        Transport::TCP => build_tcp_swarm(&network_config, key_pair),
+    }?;
 
     match network_config.transport {
         Transport::QUIC => {
