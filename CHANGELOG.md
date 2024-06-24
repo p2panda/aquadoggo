@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed 
+### Changed
+
+- Upate `libp2p` to version `0.53.2` and apply API changes [#631](https://github.com/p2panda/aquadoggo/pull/631)
+
+### Fixed
 
 - Handle connection ids greater than 9 in `Peer` impl of `Human` trait [#634](https://github.com/p2panda/aquadoggo/pull/634)
 
