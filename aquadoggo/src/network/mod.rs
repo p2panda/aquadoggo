@@ -4,6 +4,7 @@ mod behaviour;
 mod config;
 pub mod identity;
 mod peers;
+mod relay;
 mod service;
 mod shutdown;
 mod swarm;

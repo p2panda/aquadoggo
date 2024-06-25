@@ -120,15 +120,6 @@ impl Behaviour {
         false
     }
 
-    /// Disable the behaviour, it won't handle any connection events or received messages.
-    pub fn disable(&mut self) {
-        self.enabled = false
-    }
-
-    pub fn enable(&mut self) {
-        self.enabled = true
-    }
-
     pub fn send_message(&mut self, peer: Peer, message: PeerMessage) {
         self.push_event(ToSwarm::NotifyHandler {
             peer_id: peer.id(),

@@ -132,9 +132,9 @@ impl Default for NetworkConfiguration {
             dial_concurrency_factor: 8,
             max_connections_in: 16,
             max_connections_out: 16,
-            max_connections_pending_in: 16,
-            max_connections_pending_out: 16,
-            max_connections_per_peer: 8,
+            max_connections_pending_in: 8,
+            max_connections_pending_out: 8,
+            max_connections_per_peer: 2,
         }
     }
 }

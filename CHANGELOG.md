@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Upate `libp2p` to version `0.53.2` and apply API changes [#631](https://github.com/p2panda/aquadoggo/pull/631)
+- Update `libp2p` to version `0.53.2` and apply API changes [#631](https://github.com/p2panda/aquadoggo/pull/631)
+- Move relay registration into main network service event loop [#632](https://github.com/p2panda/aquadoggo/pull/632)
 
 ### Fixed
 
