@@ -32,10 +32,11 @@ mod test_utils;
 #[cfg(test)]
 mod tests;
 
+use log::{info, log_enabled, Level};
+
 pub use crate::api::{ConfigFile, LockFile};
 pub use crate::config::{AllowList, Configuration};
 pub use crate::network::NetworkConfiguration;
-use log::{info, log_enabled, Level};
 pub use node::Node;
 
 /// Init env_logger before the test suite runs to handle logging outputs.
