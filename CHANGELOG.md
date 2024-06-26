@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Support private network secured by pre-shared key [#635](https://github.com/p2panda/aquadoggo/pull/635) 
+
 ### Changed
 
 - Update `libp2p` to version `0.53.2` and apply API changes [#631](https://github.com/p2panda/aquadoggo/pull/631)
