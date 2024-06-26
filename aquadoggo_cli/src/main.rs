@@ -8,7 +8,7 @@ use std::convert::TryInto;
 use std::str::FromStr;
 
 use anyhow::Context;
-use aquadoggo::{AllowList, Configuration, Node};
+use aquadoggo::{AllowList, Configuration, Node, Transport};
 use env_logger::WriteStyle;
 use log::{warn, LevelFilter};
 
@@ -73,6 +73,13 @@ async fn main() -> anyhow::Result<()> {
 
 /// Show some hopefully helpful warnings around common configuration issues.
 fn show_warnings(config: &Configuration, is_temporary_blobs_path: bool) {
+    if config.network.psk.is_some() && config.network.transport == Transport::QUIC {
+        warn!(
+            "Your node is configured with a pre-shared key and uses QUIC transport. Private 
+            nets are not supported when using QUIC therefore TCP will be enforced. "
+        );
+    }
+
     match &config.allow_schema_ids {
         AllowList::Set(values) => {
             if values.is_empty() && !config.network.relay_mode {

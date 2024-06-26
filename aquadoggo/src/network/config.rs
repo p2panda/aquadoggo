@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::str::FromStr;
 
 use anyhow::Error;
 use libp2p::connection_limits::ConnectionLimits;
 use libp2p::multiaddr::Protocol;
+use libp2p::pnet::PreSharedKey;
 use libp2p::{Multiaddr, PeerId};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::AllowList;
 
@@ -15,8 +18,19 @@ pub const NODE_NAMESPACE: &str = "aquadoggo";
 /// Network config for the node.
 #[derive(Debug, Clone)]
 pub struct NetworkConfiguration {
-    /// QUIC port for node-node communication and data replication.
-    pub quic_port: u16,
+    /// Protocol (TCP/QUIC) used for node-node communication and data replication.
+    pub transport: Transport,
+
+    /// Pre-shared key formatted as a 64 digit hexadecimal string.
+    ///
+    /// When provided a private network will be made with only peers knowing the psk being able
+    /// to form connections.
+    ///
+    /// WARNING: Private networks are only supported when using TCP for the transport layer.
+    pub psk: Option<PreSharedKey>,
+
+    /// QUIC or TCP port for node-node communication and data replication.
+    pub port: u16,
 
     /// Discover peers on the local network via mDNS (over IPv4 only, using port 5353).
     pub mdns: bool,
@@ -120,7 +134,9 @@ pub struct NetworkConfiguration {
 impl Default for NetworkConfiguration {
     fn default() -> Self {
         Self {
-            quic_port: 2022,
+            transport: Transport::QUIC,
+            psk: None,
+            port: 2022,
             mdns: true,
             direct_node_addresses: Vec::new(),
             allow_peer_ids: AllowList::<PeerId>::Wildcard,
@@ -204,6 +220,20 @@ impl PeerAddress {
             Err(e) => Err(e),
         }
     }
+
+    pub fn tcp_multiaddr(&mut self) -> Result<Multiaddr, Error> {
+        match self.socket() {
+            Ok(socket_address) => {
+                let mut multiaddr = match socket_address.ip() {
+                    IpAddr::V4(ip) => Multiaddr::from(Protocol::Ip4(ip)),
+                    IpAddr::V6(ip) => Multiaddr::from(Protocol::Ip6(ip)),
+                };
+                multiaddr.push(Protocol::Tcp(socket_address.port()));
+                Ok(multiaddr)
+            }
+            Err(e) => Err(e),
+        }
+    }
 }
 
 impl From<String> for PeerAddress {
@@ -215,5 +245,45 @@ impl From<String> for PeerAddress {
 impl std::fmt::Display for PeerAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.addr_str)
+    }
+}
+
+/// Enum representing transport protocol types.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub enum Transport {
+    #[default]
+    /// UDP/QUIC transport protocol
+    QUIC,
+
+    /// TCP transport protocol
+    TCP,
+}
+
+impl<'de> Deserialize<'de> for Transport {
+    fn deserialize<D>(deserializer: D) -> Result<Transport, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let str_value = String::deserialize(deserializer)?;
+        let transport = str_value
+            .parse()
+            .map_err(|_| serde::de::Error::custom("Could not parse string as transport type"))?;
+
+        Ok(transport)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TransportParsingError;
+
+impl FromStr for Transport {
+    type Err = TransportParsingError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "TCP" => Ok(Transport::TCP),
+            "QUIC" => Ok(Transport::QUIC),
+            _ => Err(TransportParsingError),
+        }
     }
 }

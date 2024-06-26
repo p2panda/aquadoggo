@@ -10,7 +10,7 @@ use log::debug;
 use regex::Regex;
 
 use crate::network::behaviour::P2pandaBehaviour;
-use crate::network::config::PeerAddress;
+use crate::network::config::{PeerAddress, Transport};
 
 pub fn to_quic_address(address: &Multiaddr) -> Option<SocketAddr> {
     let hay = address.to_string();
@@ -30,12 +30,36 @@ pub fn to_quic_address(address: &Multiaddr) -> Option<SocketAddr> {
     }
 }
 
+pub fn to_tcp_address(address: &Multiaddr) -> Option<SocketAddr> {
+    let hay = address.to_string();
+    let regex = Regex::new(r"/ip4/(\d+.\d+.\d+.\d+)/tcp/(\d+)").unwrap();
+    let caps = regex.captures(&hay);
+
+    match caps {
+        None => None,
+        Some(caps) => {
+            let ip_address = caps.get(1).unwrap().as_str();
+            let port = caps.get(2).unwrap().as_str();
+            let socket = format!("{ip_address}:{port}")
+                .parse::<SocketAddr>()
+                .expect("Tried to convert invalid address");
+            Some(socket)
+        }
+    }
+}
+
 pub fn is_known_peer_address(
     known_addresses: &mut [PeerAddress],
     peer_addresses: &[Multiaddr],
+    transport: Transport,
 ) -> Option<Multiaddr> {
     for address in known_addresses.iter_mut() {
-        if let Ok(addr) = address.quic_multiaddr() {
+        let address = match transport {
+            Transport::QUIC => address.quic_multiaddr(),
+            Transport::TCP => address.tcp_multiaddr(),
+        };
+
+        if let Ok(addr) = address {
             if peer_addresses.contains(&addr) {
                 return Some(addr.clone());
             }
@@ -48,11 +72,17 @@ pub fn dial_known_peer(
     swarm: &mut Swarm<P2pandaBehaviour>,
     known_peers: &mut HashMap<Multiaddr, PeerId>,
     address: &mut PeerAddress,
+    transport: Transport,
 ) {
-    // Get the peers quic multiaddress, this can error if the address was provided in the form
-    // of a domain name and we are not able to resolve it to a valid multiaddress (for example,
+    // Get the peers multiaddr, this can error if the address was provided in the form
+    // of a domain name and we are not able to resolve it to a valid address (for example,
     // if we are offline).
-    let address = match address.quic_multiaddr() {
+    let address = match transport {
+        Transport::QUIC => address.quic_multiaddr(),
+        Transport::TCP => address.tcp_multiaddr(),
+    };
+
+    let address = match address {
         Ok(address) => address,
         Err(e) => {
             debug!("Failed to resolve relay multiaddr: {}", e.to_string());

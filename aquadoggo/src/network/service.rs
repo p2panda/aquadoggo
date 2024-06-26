@@ -21,9 +21,11 @@ use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 use crate::manager::{ServiceReadySender, Shutdown};
 use crate::network::behaviour::{Event, P2pandaBehaviour};
+use crate::network::config::Transport;
 use crate::network::relay::Relay;
+use crate::network::swarm::{build_quic_swarm, build_tcp_swarm};
 use crate::network::utils::{dial_known_peer, is_known_peer_address};
-use crate::network::{identity, peers, swarm, utils, ShutdownHandler};
+use crate::network::{identity, peers, utils, ShutdownHandler};
 use crate::{info_or_print, NetworkConfiguration};
 
 /// Interval at which we attempt to dial known peers and relays.
@@ -45,38 +47,61 @@ pub async fn network_service(
     tx: ServiceSender,
     tx_ready: ServiceReadySender,
 ) -> Result<()> {
-    let network_config = context.config.network.clone();
+    let mut network_config = context.config.network.clone();
     let key_pair = identity::to_libp2p_key_pair(&context.key_pair);
     let local_peer_id = key_pair.public().to_peer_id();
 
     info_or_print(&format!("Peer id: {local_peer_id}"));
 
-    // The swarm can be initiated with or without "relay" capabilities.
-    let mut swarm = if network_config.relay_mode {
-        info!("Networking service initializing with relay capabilities...");
-        swarm::build_relay_swarm(&network_config, key_pair).await?
-    } else {
-        info!("Networking service initializing...");
-        swarm::build_client_swarm(&network_config, key_pair).await?
-    };
+    if network_config.psk.is_some() && network_config.transport == Transport::QUIC {
+        warn!("Private net not supported for QUIC transport protocol, switching to TCP");
+        network_config.transport = Transport::TCP;
+    }
 
-    // Start listening on QUIC address. Pick a random one if the given is taken already.
-    let listen_addr_quic = Multiaddr::empty()
-        .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-        .with(Protocol::Udp(network_config.quic_port))
-        .with(Protocol::QuicV1);
-    if swarm.listen_on(listen_addr_quic).is_err() {
-        let random_port_addr = Multiaddr::empty()
-            .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
-            .with(Protocol::Udp(0))
-            .with(Protocol::QuicV1);
+    let mut swarm = match network_config.transport {
+        Transport::QUIC => build_quic_swarm(&network_config, key_pair),
+        Transport::TCP => build_tcp_swarm(&network_config, key_pair),
+    }?;
 
-        info_or_print(&format!(
-            "QUIC port {} was already taken, try random port instead ..",
-            network_config.quic_port
-        ));
+    match network_config.transport {
+        Transport::QUIC => {
+            // Start listening on QUIC address. Pick a random one if the given is taken already.
+            let mut listen_addr_quic = Multiaddr::empty()
+                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+                .with(Protocol::Udp(network_config.port))
+                .with(Protocol::QuicV1);
+            if swarm.listen_on(listen_addr_quic.clone()).is_err() {
+                info_or_print(&format!(
+                    "QUIC port {} was already taken, try random port instead ..",
+                    network_config.port
+                ));
 
-        swarm.listen_on(random_port_addr)?;
+                listen_addr_quic = Multiaddr::empty()
+                    .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+                    .with(Protocol::Udp(0))
+                    .with(Protocol::QuicV1);
+
+                swarm.listen_on(listen_addr_quic.clone())?;
+            }
+        }
+        Transport::TCP => {
+            // Start listening on TCP address. Pick a random one if the given is taken already.
+            let mut listen_address_tcp = Multiaddr::empty()
+                .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+                .with(Protocol::Tcp(network_config.port));
+            if swarm.listen_on(listen_address_tcp.clone()).is_err() {
+                info_or_print(&format!(
+                    "TCP port {} was already taken, try random port instead ..",
+                    network_config.port
+                ));
+
+                listen_address_tcp = Multiaddr::empty()
+                    .with(Protocol::from(Ipv4Addr::UNSPECIFIED))
+                    .with(Protocol::Tcp(0));
+
+                swarm.listen_on(listen_address_tcp.clone())?;
+            }
+        }
     }
 
     info!("Network service ready!");
@@ -179,15 +204,22 @@ impl EventLoop {
                     let event = event.expect("Swarm stream to be infinite");
                     match event {
                         SwarmEvent::NewListenAddr { address, .. } => {
-                            if self.learned_port {
-                                continue;
+                            if !self.learned_port {
+                                // Show only one QUIC address during the runtime of the node, otherwise
+                                // it might get too spammy
+                                if let Some(address) = utils::to_quic_address(&address) {
+                                    info_or_print(&format!("Node is listening on 0.0.0.0:{} (QUIC)", address.port()));
+                                    self.learned_port = true;
+                                }
                             }
 
-                            // Show only one QUIC address during the runtime of the node, otherwise
-                            // it might get too spammy
-                            if let Some(address) = utils::to_quic_address(&address) {
-                                info_or_print(&format!("Node is listening on 0.0.0.0:{}", address.port()));
-                                self.learned_port = true;
+                            if !self.learned_port {
+                                // Show only one TCP address during the runtime of the node, otherwise
+                                // it might get too spammy
+                                if let Some(address) = utils::to_tcp_address(&address) {
+                                    info_or_print(&format!("Node is listening on 0.0.0.0:{} (TCP)", address.port()));
+                                    self.learned_port = true;
+                                }
                             }
                         }
                         SwarmEvent::Behaviour(Event::Identify(event)) => self.handle_identify_events(&event).await,
@@ -227,13 +259,23 @@ impl EventLoop {
         // Attempt to dial all relay addresses.
         for relay_address in self.network_config.relay_addresses.iter_mut() {
             debug!("Dial relay at address {}", relay_address);
-            dial_known_peer(&mut self.swarm, &mut self.known_peers, relay_address);
+            dial_known_peer(
+                &mut self.swarm,
+                &mut self.known_peers,
+                relay_address,
+                self.network_config.transport,
+            );
         }
 
         // Attempt to dial all direct peer addresses.
         for direct_node_address in self.network_config.direct_node_addresses.iter_mut() {
             debug!("Dial direct peer at address {}", direct_node_address);
-            dial_known_peer(&mut self.swarm, &mut self.known_peers, direct_node_address);
+            dial_known_peer(
+                &mut self.swarm,
+                &mut self.known_peers,
+                direct_node_address,
+                self.network_config.transport,
+            );
         }
     }
 
@@ -344,12 +386,7 @@ impl EventLoop {
     async fn handle_identify_events(&mut self, event: &identify::Event) {
         match event {
             identify::Event::Received {
-                info:
-                    identify::Info {
-                        observed_addr,
-                        listen_addrs,
-                        ..
-                    },
+                info: identify::Info { observed_addr, .. },
                 peer_id,
             } => {
                 // We now learned at least one of our observed addr.
@@ -373,32 +410,22 @@ impl EventLoop {
                 // to avoid multiple connections being established to the same peer.
 
                 // Check if the identified peer is one of our configured relay addresses.
-                if let Some(addr) =
-                    is_known_peer_address(&mut self.network_config.relay_addresses, listen_addrs)
-                {
-                    if self.relays.contains_key(peer_id) {
+                if let Some(relay) = self.relays.get_mut(peer_id) {
+                    if !self.learned_observed_addr || !relay.told_addr {
                         return;
                     }
 
-                    // Add the relay to our known peers.
-                    debug!("Relay identified {peer_id} {addr}");
-                    self.known_peers.insert(addr.clone(), *peer_id);
-
-                    // Also add it to our map of identified relays.
-                    self.relays.insert(*peer_id, Relay::new(*peer_id, addr));
-                }
-
-                // Check if the identified peer is one of our direct node addresses.
-                if let Some(addr) = is_known_peer_address(
-                    &mut self.network_config.direct_node_addresses,
-                    listen_addrs,
-                ) {
-                    // Add the direct node to our known peers.
-                    debug!("Direct node identified {peer_id} {addr}");
-                    self.known_peers.insert(addr, *peer_id);
+                    // Attempt to register with the relay.
+                    match relay.register(&mut self.swarm) {
+                        Ok(registered) => {
+                            if registered {
+                                debug!("Registration request sent to relay {}", relay.peer_id)
+                            }
+                        }
+                        Err(e) => debug!("Error registering on relay: {}", e),
+                    };
                 }
             }
-
             identify::Event::Sent { peer_id } => {
                 if let Some(relay) = self.relays.get_mut(peer_id) {
                     if !relay.told_addr {
@@ -406,7 +433,12 @@ impl EventLoop {
                         relay.told_addr = true;
                     }
 
+                    if !self.learned_observed_addr || !relay.told_addr {
+                        return;
+                    }
+
                     // Attempt to register with the relay.
+                    debug!("Register on relay {}", relay.peer_id);
                     match relay.register(&mut self.swarm) {
                         Ok(registered) => {
                             if registered {
@@ -479,6 +511,7 @@ impl EventLoop {
             SwarmEvent::ConnectionEstablished {
                 endpoint,
                 num_established,
+                peer_id,
                 ..
             } => {
                 debug!(
@@ -486,6 +519,33 @@ impl EventLoop {
                     endpoint.get_remote_address(),
                     num_established
                 );
+
+                // Check if the connected peer is one of our relay addresses.
+                if let Some(addr) = is_known_peer_address(
+                    &mut self.network_config.relay_addresses,
+                    &[endpoint.get_remote_address().to_owned()],
+                    self.network_config.transport,
+                ) {
+                    if self.relays.contains_key(&peer_id) {
+                        return;
+                    }
+
+                    // Add the relay to our known peers.
+                    debug!("Relay identified {peer_id} {addr}");
+                    self.known_peers.insert(addr.clone(), peer_id);
+                    self.relays.insert(peer_id, Relay::new(peer_id, addr));
+                }
+
+                // Check if the connected peer is one of our direct node addresses.
+                if let Some(addr) = is_known_peer_address(
+                    &mut self.network_config.direct_node_addresses,
+                    &[endpoint.get_remote_address().to_owned()],
+                    self.network_config.transport,
+                ) {
+                    // Add the direct node to our known peers.
+                    debug!("Direct node identified {peer_id} {addr}");
+                    self.known_peers.insert(addr, peer_id);
+                }
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,

@@ -33,6 +33,7 @@ deadqueue = { version = "0.2.3", default-features = false, features = [
     "unlimited",
 ] }
 dynamic-graphql = "0.7.3"
+either = "1.12.0"
 futures = "0.3.23"
 hex = "0.4.3"
 http = "0.2.9"
@@ -42,12 +43,14 @@ libp2p = { version = "0.53.2", features = [
     "macros",
     "mdns",
     "noise",
+    "pnet",
+    "quic",
     "relay",
     "rendezvous",
     "serde",
+    "tcp",
     "tokio",
     "yamux",
-    "quic",
 ] }
 lipmaa-link = "0.2.2"
 log = "0.4.19"

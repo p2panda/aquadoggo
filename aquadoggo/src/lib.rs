@@ -36,7 +36,7 @@ use log::{info, log_enabled, Level};
 
 pub use crate::api::{ConfigFile, LockFile};
 pub use crate::config::{AllowList, Configuration};
-pub use crate::network::NetworkConfiguration;
+pub use crate::network::{NetworkConfiguration, Transport};
 pub use node::Node;
 
 /// Init env_logger before the test suite runs to handle logging outputs.

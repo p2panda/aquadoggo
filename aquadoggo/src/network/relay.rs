@@ -61,14 +61,12 @@ impl Relay {
             return Ok(false);
         }
 
-        self.registering = true;
-
         // Start listening on the circuit relay address.
         let circuit_address = self.circuit_addr();
         swarm.listen_on(circuit_address.clone())?;
 
         // Register in the `NODE_NAMESPACE` using the rendezvous network behaviour.
-        swarm
+        let result = swarm
             .behaviour_mut()
             .rendezvous_client
             .as_mut()
@@ -77,7 +75,11 @@ impl Relay {
                 rendezvous::Namespace::from_static(NODE_NAMESPACE),
                 self.peer_id,
                 None, // Default ttl is 7200s
-            )?;
+            );
+
+        // If register attempt failed switch registering flag back to false.
+        self.registering = result.is_ok();
+        result?;
 
         Ok(true)
     }

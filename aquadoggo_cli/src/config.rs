@@ -112,10 +112,25 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     http_port: Option<u16>,
 
-    /// QUIC port for node-node communication and data replication. Defaults to 2022.
-    #[arg(short = 'q', long, value_name = "PORT")]
+    /// Protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC.
+    #[arg(short = 'q', long, value_name = "TRANSPORT")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    quic_port: Option<u16>,
+    pub transport: Option<String>,
+
+    /// QUIC port for node-node communication and data replication. Defaults to 2022.
+    #[arg(short = 't', long, value_name = "PORT")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    node_port: Option<u16>,
+
+    /// Pre-shared key formatted as a 64 digit hexadecimal string.
+    ///
+    /// When provided a private network will be made with only peers knowing the psk being able
+    /// to form connections.
+    ///
+    /// WARNING: Private networks are only supported when using TCP for the transport layer.
+    #[arg(short = 'y', long, value_name = "PSK")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub psk: Option<String>,
 
     /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
     /// directory.
@@ -376,12 +391,19 @@ pub fn print_config(
         "disabled"
     };
 
+    let pnet = if config.network.psk.is_some() {
+        "enabled"
+    } else {
+        "disabled"
+    };
+
     format!(
         r"Allow schema IDs: {}
 Database URL: {}
 mDNS: {}
 Private key: {}
 Relay mode: {}
+Private Net: {}
 
 Node is ready!
 ",
@@ -390,5 +412,6 @@ Node is ready!
         mdns.blue(),
         private_key.blue(),
         relay_mode.blue(),
+        pnet.blue()
     )
 }
