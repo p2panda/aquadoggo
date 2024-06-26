@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use tokio::fs::remove_file;
+use tokio::fs::{remove_file, try_exists};
 
 use log::debug;
 use p2panda_rs::document::DocumentViewId;
@@ -138,12 +138,14 @@ pub async fn garbage_collection_task(context: Context, input: TaskInput) -> Task
             // We now remove all deleted blob views from the filesystem.
             if is_blob {
                 for view_id in deleted_views {
-                    // Delete this blob view from the filesystem also.
+                    // Delete this blob view from the filesystem also
                     let blob_view_path = context.config.blobs_base_path.join(view_id.to_string());
-                    remove_file(blob_view_path.clone())
-                        .await
-                        .map_err(|err| TaskError::Critical(err.to_string()))?;
-                    debug!("Deleted blob view from filesystem: {}", view_id);
+                    if let Ok(true) = try_exists(&blob_view_path).await {
+                        remove_file(blob_view_path)
+                            .await
+                            .map_err(|err| TaskError::Critical(err.to_string()))?;
+                        debug!("Deleted blob view from filesystem: {}", view_id);
+                    }
                 }
             }
 
