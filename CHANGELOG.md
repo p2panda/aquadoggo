@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Node API to subscribe to peer connection events [#625](https://github.com/p2panda/aquadoggo/pull/625)
 - Support private network secured by pre-shared key [#635](https://github.com/p2panda/aquadoggo/pull/635)
 
 ### Changed
