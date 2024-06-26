@@ -175,8 +175,8 @@ blobs_base_path = "$HOME/.local/share/aquadoggo/blobs"
 > "I want only peers who know a pre-shared key to be able to join my network." 
 
 ```sh
-# Generate a 64 digit hexadecimal string, for example on the command line like this
-hexdump -vn64 -e'"%x"' /dev/urandom
+# Generate a 32 digit hexadecimal string, for example on the command line like this
+hexdump -vn32 -e'"%x"' /dev/urandom
 # => <PRE_SHARED_KEY>
 
 # Pass the pre-shared key to your node via environment variables or config file
