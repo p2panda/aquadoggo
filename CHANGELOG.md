@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Handle connection ids greater than 9 in `Peer` impl of `Human` trait [#634](https://github.com/p2panda/aquadoggo/pull/634)
 - Check if blob file exists before deleting it from fs [#636](https://github.com/p2panda/aquadoggo/pull/636)
+- Inconsistent blob storage warning was wrongly shown [#638](https://github.com/p2panda/aquadoggo/pull/638)
 
 ## [0.7.4]
 

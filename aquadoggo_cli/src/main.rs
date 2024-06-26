@@ -75,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
 fn show_warnings(config: &Configuration, is_temporary_blobs_path: bool) {
     if config.network.psk.is_some() && config.network.transport == Transport::QUIC {
         warn!(
-            "Your node is configured with a pre-shared key and uses QUIC transport. Private 
+            "Your node is configured with a pre-shared key and uses QUIC transport. Private
             nets are not supported when using QUIC therefore TCP will be enforced. "
         );
     }
@@ -103,7 +103,10 @@ fn show_warnings(config: &Configuration, is_temporary_blobs_path: bool) {
         warn!("Will not connect to given relay addresses when relay mode is enabled.");
     }
 
-    if config.database_url != "sqlite::memory:" && is_temporary_blobs_path {
+    let is_temporary_database =
+        config.database_url == "sqlite::memory:" || config.database_url.contains("mode=memory");
+
+    if !is_temporary_database && is_temporary_blobs_path {
         warn!(
             "Your database is persisted but blobs _are not_ which might result in unrecoverable
         data inconsistency (blob operations are stored but the files themselves are _not_). It is
