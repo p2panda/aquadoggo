@@ -34,7 +34,7 @@ mod tests;
 
 use log::{info, log_enabled, Level};
 
-pub use crate::api::{ConfigFile, LockFile};
+pub use crate::api::{ConfigFile, LockFile, NodeEvent};
 pub use crate::config::{AllowList, Configuration};
 pub use crate::network::{NetworkConfiguration, Transport};
 pub use node::Node;
