@@ -147,11 +147,8 @@ struct EventLoop {
     /// Shutdown handler.
     shutdown_handler: ShutdownHandler,
 
-    /// Did we learn our own QUIC port yet.
-    learned_quic_port: bool,
-
-    /// Did we learn our own TCP port yet.
-    learned_tcp_port: bool,
+    /// Did we learn our own port yet.
+    learned_port: bool,
 
     /// Did we learn our observed address yet.
     learned_observed_addr: bool,
@@ -175,8 +172,7 @@ impl EventLoop {
             known_peers: HashMap::new(),
             relays: HashMap::new(),
             shutdown_handler,
-            learned_quic_port: false,
-            learned_tcp_port: false,
+            learned_port: false,
             learned_observed_addr: false,
         }
     }
@@ -208,21 +204,21 @@ impl EventLoop {
                     let event = event.expect("Swarm stream to be infinite");
                     match event {
                         SwarmEvent::NewListenAddr { address, .. } => {
-                            if !self.learned_quic_port {
+                            if !self.learned_port {
                                 // Show only one QUIC address during the runtime of the node, otherwise
                                 // it might get too spammy
                                 if let Some(address) = utils::to_quic_address(&address) {
                                     info_or_print(&format!("Node is listening on 0.0.0.0:{} (QUIC)", address.port()));
-                                    self.learned_quic_port = true;
+                                    self.learned_port = true;
                                 }
                             }
 
-                            if !self.learned_tcp_port {
+                            if !self.learned_port {
                                 // Show only one TCP address during the runtime of the node, otherwise
                                 // it might get too spammy
                                 if let Some(address) = utils::to_tcp_address(&address) {
                                     info_or_print(&format!("Node is listening on 0.0.0.0:{} (TCP)", address.port()));
-                                    self.learned_tcp_port = true;
+                                    self.learned_port = true;
                                 }
                             }
                         }
