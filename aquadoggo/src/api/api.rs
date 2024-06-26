@@ -7,9 +7,13 @@ use crate::api::{migrate, LockFile};
 use crate::bus::{ServiceMessage, ServiceSender};
 use crate::context::Context;
 
+/// Node events which can be interesting for clients, for example when peers connect or disconnect.
 #[derive(Debug, Clone)]
 pub enum NodeEvent {
+    /// A peer connected to our node. This can be a direct or relayed connection.
     PeerConnected,
+
+    /// A peer disconnected from our node.
     PeerDisconnected,
 }
 
