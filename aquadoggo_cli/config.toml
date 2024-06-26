@@ -92,11 +92,11 @@ database_max_connections = 32
 #
 http_port = 2020
 
-# QUIC port for node-node communication and data replication. Defaults to 2022.
+# Port for node-node communication and data replication. Defaults to 2022.
 #
 # When port is taken the node will automatically pick a random, free port.
 #
-quic_port = 2022
+node_port = 2022
 
 # ﾟ･｡+☆
 # BLOBS
