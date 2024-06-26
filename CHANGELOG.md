@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Support private network secured by pre-shared key [#635](https://github.com/p2panda/aquadoggo/pull/635) 
+- Support private network secured by pre-shared key [#635](https://github.com/p2panda/aquadoggo/pull/635)
 
 ### Changed
 
@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Handle connection ids greater than 9 in `Peer` impl of `Human` trait [#634](https://github.com/p2panda/aquadoggo/pull/634)
+- Check if blob file exists before deleting it from fs [#636](https://github.com/p2panda/aquadoggo/pull/636)
 
 ## [0.7.4]
 
