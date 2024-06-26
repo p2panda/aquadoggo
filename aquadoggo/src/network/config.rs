@@ -18,7 +18,7 @@ pub const NODE_NAMESPACE: &str = "aquadoggo";
 /// Network config for the node.
 #[derive(Debug, Clone)]
 pub struct NetworkConfiguration {
-    /// protocol (TCP/QUIC) used for node-node communication and data replication.
+    /// Protocol (TCP/QUIC) used for node-node communication and data replication.
     pub transport: Transport,
 
     /// Pre-shared key formatted as a 64 digit hexadecimal string.

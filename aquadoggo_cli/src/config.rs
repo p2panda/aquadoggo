@@ -112,7 +112,7 @@ struct Cli {
     #[serde(skip_serializing_if = "Option::is_none")]
     http_port: Option<u16>,
 
-    /// protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC.
+    /// Protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC.
     #[arg(short = 'q', long, value_name = "TRANSPORT")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<String>,

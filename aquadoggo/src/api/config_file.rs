@@ -116,7 +116,7 @@ pub struct ConfigFile {
     #[serde(default = "default_http_port")]
     pub http_port: u16,
 
-    /// protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC.
+    /// Protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC.
     #[serde(default)]
     pub transport: Transport,
 
