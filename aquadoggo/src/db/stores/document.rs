@@ -170,8 +170,12 @@ impl DocumentStore for SqlStore {
         .await
         .map_err(|e| DocumentStorageError::FatalStorageError(e.to_string()))?;
 
-        // Unwrap as we can assume a document for the found document id exists.
-        let document_row = document_row.unwrap();
+        // If no row matched we return None here, otherwise unwrap safely
+        let document_row = match document_row {
+            Some(document_row) => document_row,
+            // Document might have already been deleted
+            None => return Ok(None),
+        };
 
         // We now want to retrieve the view (current key-value map) for this document, as we
         // already filtered out deleted documents in the query above we can expect all documents
@@ -220,7 +224,7 @@ impl DocumentStore for SqlStore {
                 ON
                     operations_v1.operation_id = documents.document_id
             WHERE
-                documents.schema_id = $1  AND documents.is_deleted = false
+                documents.schema_id = $1 AND documents.is_deleted = false
             ",
         )
         .bind(schema_id.to_string())
@@ -420,9 +424,9 @@ impl SqlStore {
                 document_view_fields.name = operation_fields_v1.name
             WHERE
                 operation_fields_v1.field_type IN (
-                    'pinned_relation', 
-                    'pinned_relation_list', 
-                    'relation', 
+                    'pinned_relation',
+                    'pinned_relation_list',
+                    'relation',
                     'relation_list'
                 )
             AND
@@ -539,11 +543,11 @@ impl SqlStore {
     ) -> Result<bool, DocumentStorageError> {
         let document_view_id: Option<String> = query_scalar(
             "
-            SELECT 
-                documents.document_view_id 
-            FROM 
+            SELECT
+                documents.document_view_id
+            FROM
                 documents
-            WHERE 
+            WHERE
                 documents.document_view_id = $1
             ",
         )
