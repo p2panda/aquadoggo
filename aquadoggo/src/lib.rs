@@ -32,9 +32,11 @@ mod test_utils;
 #[cfg(test)]
 mod tests;
 
+use log::{info, log_enabled, Level};
+
 pub use crate::api::{ConfigFile, LockFile};
 pub use crate::config::{AllowList, Configuration};
-pub use crate::network::NetworkConfiguration;
+pub use crate::network::{NetworkConfiguration, Transport};
 pub use node::Node;
 
 /// Init env_logger before the test suite runs to handle logging outputs.
@@ -57,5 +59,16 @@ fn init() {
     // to see any logs.
     if std::env::var("RUST_LOG").is_ok() {
         let _ = env_logger::builder().is_test(true).try_init();
+    }
+}
+
+/// Helper method for logging a message directly to standard out or via the `log` crate when any
+/// logging level is enabled. We need this as some messages should be always printed, but when any
+/// logging level is selected, we want the message to be printed with consistent formatting.
+fn info_or_print(message: &str) {
+    if log_enabled!(Level::Info) || log_enabled!(Level::Debug) || log_enabled!(Level::Trace) {
+        info!("{message}");
+    } else {
+        println!("{message}");
     }
 }

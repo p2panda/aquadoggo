@@ -3,12 +3,12 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use libp2p::allow_block_list;
+use libp2p::allow_block_list::{AllowedPeers, BlockedPeers};
 use libp2p::identity::Keypair;
 use libp2p::swarm::behaviour::toggle::Toggle;
 use libp2p::swarm::NetworkBehaviour;
 use libp2p::{connection_limits, dcutr, identify, mdns, relay, rendezvous};
-use libp2p_allow_block_list as allow_block_list;
-use libp2p_allow_block_list::{AllowedPeers, BlockedPeers};
 use log::debug;
 
 use crate::network::config::NODE_NAMESPACE;
@@ -89,7 +89,7 @@ impl P2pandaBehaviour {
     /// configuration.
     pub fn new(
         network_config: &NetworkConfiguration,
-        key_pair: Keypair,
+        key_pair: &Keypair,
         relay_client: Option<relay::client::Behaviour>,
     ) -> Result<Self> {
         let peer_id = key_pair.public().to_peer_id();
@@ -127,7 +127,7 @@ impl P2pandaBehaviour {
         // address has been provided
         let rendezvous_client = if !network_config.relay_addresses.is_empty() {
             debug!("Rendezvous client network behaviour enabled");
-            Some(rendezvous::client::Behaviour::new(key_pair))
+            Some(rendezvous::client::Behaviour::new(key_pair.clone()))
         } else {
             None
         };
@@ -223,7 +223,6 @@ pub enum Event {
     RendezvousClient(rendezvous::client::Event),
     #[allow(dead_code)]
     RendezvousServer(rendezvous::server::Event),
-    #[allow(dead_code)]
     Dcutr(dcutr::Event),
     Peers(peers::Event),
     Void,

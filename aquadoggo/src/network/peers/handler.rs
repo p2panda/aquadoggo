@@ -3,23 +3,18 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use asynchronous_codec::Framed;
 use futures::{Sink, StreamExt};
 use libp2p::swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p::swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream as NegotiatedStream,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, Stream as NegotiatedStream, SubstreamProtocol,
 };
 use log::warn;
 use thiserror::Error;
 
 use crate::network::peers::{Codec, CodecError, PeerMessage, Protocol};
-
-/// The time a connection is maintained to a peer without being in live mode and without
-/// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Handler for an incoming or outgoing connection to a remote peer dealing with the p2panda
 /// protocol.
@@ -192,7 +187,6 @@ enum OutboundSubstreamState {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerFromBehaviour;
     type ToBehaviour = HandlerToBehaviour;
-    type Error = HandlerError;
     type InboundProtocol = Protocol;
     type OutboundProtocol = Protocol;
     type InboundOpenInfo = ();
@@ -218,11 +212,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound);
             }
-            ConnectionEvent::DialUpgradeError(_)
-            | ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => (),
+            _ => (),
         }
     }
 
@@ -237,33 +227,11 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        if self.critical_error {
-            return KeepAlive::No;
-        }
-
-        if let Some(
-            OutboundSubstreamState::PendingSend(_, _) | OutboundSubstreamState::PendingFlush(_),
-        ) = self.outbound_substream
-        {
-            return KeepAlive::Yes;
-        }
-
-        #[allow(deprecated)]
-        KeepAlive::Until(self.last_io_activity + IDLE_TIMEOUT)
-    }
-
-    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::ToBehaviour,
-            Self::Error,
-        >,
+        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>,
     > {
         // Determine if we need to create the outbound stream
         if !self.send_queue.is_empty()
@@ -322,7 +290,7 @@ impl ConnectionHandler for Handler {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                warn!("Error during closing inbound connection: {err}")
+                                warn!("Error during closing inbound connection: {err}");
                             }
                             self.inbound_substream = None;
                             break;

@@ -6,13 +6,12 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use anyhow::{anyhow, Result};
-use libp2p::{Multiaddr, PeerId};
+use libp2p::{pnet::PreSharedKey, PeerId};
 use p2panda_rs::schema::SchemaId;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::TempDir;
 
-use crate::network::utils::to_multiaddress;
-use crate::{AllowList, Configuration, NetworkConfiguration};
+use crate::{AllowList, Configuration, NetworkConfiguration, Transport};
 
 const WILDCARD: &str = "*";
 
@@ -22,7 +21,7 @@ const DEFAULT_MAX_DATABASE_CONNECTIONS: u32 = 32;
 
 const DEFAULT_HTTP_PORT: u16 = 2020;
 
-const DEFAULT_QUIC_PORT: u16 = 2022;
+const DEFAULT_NODE_PORT: u16 = 2022;
 
 const DEFAULT_WORKER_POOL_SIZE: u32 = 16;
 
@@ -42,8 +41,8 @@ fn default_http_port() -> u16 {
     DEFAULT_HTTP_PORT
 }
 
-fn default_quic_port() -> u16 {
-    DEFAULT_QUIC_PORT
+fn default_node_port() -> u16 {
+    DEFAULT_NODE_PORT
 }
 
 fn default_database_url() -> String {
@@ -117,9 +116,22 @@ pub struct ConfigFile {
     #[serde(default = "default_http_port")]
     pub http_port: u16,
 
-    /// QUIC port for node-node communication and data replication. Defaults to 2022.
-    #[serde(default = "default_quic_port")]
-    pub quic_port: u16,
+    /// Protocol (TCP/QUIC) used for node-node communication and data replication. Defaults to QUIC.
+    #[serde(default)]
+    pub transport: Transport,
+
+    /// TCP / QUIC port for node-node communication and data replication. Defaults to 2022.
+    #[serde(default = "default_node_port")]
+    pub node_port: u16,
+
+    /// Pre-shared key formatted as a 64 digit hexadecimal string.
+    ///
+    /// When provided a private network will be made with only peers knowing the psk being able
+    /// to form connections.
+    ///
+    /// WARNING: Private networks are only supported when using TCP for the transport layer.
+    #[serde(default)]
+    pub psk: Option<String>,
 
     /// Path to folder where blobs (large binary files) are persisted. Defaults to a temporary
     /// directory.
@@ -215,12 +227,14 @@ pub struct ConfigFile {
 impl Default for ConfigFile {
     fn default() -> Self {
         Self {
+            transport: Transport::default(),
+            psk: None,
             log_level: default_log_level(),
             allow_schema_ids: UncheckedAllowList::default(),
             database_url: default_database_url(),
             database_max_connections: default_max_database_connections(),
             http_port: default_http_port(),
-            quic_port: default_quic_port(),
+            node_port: default_node_port(),
             blobs_base_path: None,
             mdns: default_mdns(),
             private_key: None,
@@ -287,17 +301,20 @@ impl TryFrom<ConfigFile> for Configuration {
                 .to_path_buf(),
         };
 
+        let relay_addresses = value.relay_addresses.into_iter().map(From::from).collect();
         let direct_node_addresses = value
             .direct_node_addresses
-            .iter()
-            .map(to_multiaddress)
-            .collect::<Result<Vec<Multiaddr>, _>>()?;
+            .into_iter()
+            .map(From::from)
+            .collect();
 
-        let relay_addresses = value
-            .relay_addresses
-            .iter()
-            .map(to_multiaddress)
-            .collect::<Result<Vec<Multiaddr>, _>>()?;
+        // `PreSharedKey` expects to parse key string from a multi-line string in the following format.
+        let psk = if let Some(psk) = value.psk {
+            let formatted_psk = format!("/key/swarm/psk/1.0.0/\n/base16/\n{}", psk);
+            Some(PreSharedKey::from_str(&formatted_psk)?)
+        } else {
+            None
+        };
 
         Ok(Configuration {
             allow_schema_ids,
@@ -307,7 +324,9 @@ impl TryFrom<ConfigFile> for Configuration {
             blobs_base_path,
             worker_pool_size: value.worker_pool_size,
             network: NetworkConfiguration {
-                quic_port: value.quic_port,
+                transport: value.transport,
+                psk,
+                port: value.node_port,
                 mdns: value.mdns,
                 direct_node_addresses,
                 allow_peer_ids,

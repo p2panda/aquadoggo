@@ -170,6 +170,21 @@ database_url = "sqlite:$HOME/.local/share/aquadoggo/db.sqlite3"
 blobs_base_path = "$HOME/.local/share/aquadoggo/blobs"
 ```
 
+#### Private Network
+
+> "I want only peers who know a pre-shared key to be able to join my network." 
+
+```sh
+# Generate a 64 digit hexadecimal string, for example on the command line like this
+hexdump -vn64 -e'"%x"' /dev/urandom
+# => <PRE_SHARED_KEY>
+
+# Pass the pre-shared key to your node via environment variables or config file
+PSK=<PRE_SHARED_KEY> aquadoggo
+```
+
+
+
 ### Configuration
 
 Check out the [`config.toml`] file for all configurations and documentation or
@@ -218,9 +233,23 @@ Options:
           HTTP port for client-node communication, serving the GraphQL API.
           Defaults to 2020
 
-  -q, --quic-port <PORT>
+  -q, --transport <TRANSPORT>
+          Protocol (TCP/QUIC) used for node-node communication and data 
+          replication. Defaults to QUIC
+
+  -t, --node-port <PORT>
           QUIC port for node-node communication and data replication. Defaults
           to 2022
+
+  -y, --psk <PSK>
+          Pre-shared key formatted as a 64 digit hexadecimal string.
+          
+          When provided a private network will be made with only peers knowing 
+          the psk being able to form connections.
+          
+          WARNING: Private networks are only supported when using TCP for the 
+          transport layer.
+
 
   -f, --blobs-base-path <PATH>
           Path to folder where blobs (large binary files) are persisted.

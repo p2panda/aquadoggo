@@ -18,6 +18,7 @@ use crate::http::api::{
     handle_blob_document, handle_blob_view, handle_graphql_playground, handle_graphql_query,
 };
 use crate::http::context::HttpServiceContext;
+use crate::info_or_print;
 use crate::manager::{ServiceReadySender, Shutdown};
 
 /// Route to the GraphQL playground
@@ -74,17 +75,19 @@ pub async fn http_service(
     let builder = if let Ok(builder) = axum::Server::try_bind(&http_address) {
         builder
     } else {
-        println!("HTTP port {http_port} was already taken, try random port instead ..");
+        info_or_print(&format!(
+            "HTTP port {http_port} was already taken, try random port instead .."
+        ));
         axum::Server::try_bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0))?
     };
 
     let builder = builder.serve(build_server(http_context).into_make_service());
 
     let local_address = builder.local_addr();
-    println!(
+    info_or_print(&format!(
         "Go to http://{}/graphql to use GraphQL playground",
         local_address
-    );
+    ));
 
     builder
         .with_graceful_shutdown(async {

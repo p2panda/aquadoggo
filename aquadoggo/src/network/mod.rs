@@ -4,13 +4,13 @@ mod behaviour;
 mod config;
 pub mod identity;
 mod peers;
+mod relay;
 mod service;
 mod shutdown;
 mod swarm;
-mod transport;
 pub mod utils;
 
-pub use config::NetworkConfiguration;
+pub use config::{NetworkConfiguration, Transport};
 pub use peers::{Peer, PeerMessage};
 pub use service::network_service;
 pub use shutdown::ShutdownHandler;
