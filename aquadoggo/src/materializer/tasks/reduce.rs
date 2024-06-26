@@ -226,16 +226,13 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
             let mut tasks = vec![];
 
-            // If the document was deleted, then we return nothing
             if document.is_deleted() {
                 info!(
                     "Deleted {} final view {}",
                     document.display(),
                     document.view_id().display()
                 );
-            }
-
-            if document.is_edited() {
+            } else if document.is_edited() {
                 info!(
                     "Updated {} latest view {}",
                     document.display(),
