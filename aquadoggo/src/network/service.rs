@@ -258,7 +258,6 @@ impl EventLoop {
     async fn attempt_dial_known_addresses(&mut self) {
         // Attempt to dial all relay addresses.
         for relay_address in self.network_config.relay_addresses.iter_mut() {
-            debug!("Dial relay at address {}", relay_address);
             dial_known_peer(
                 &mut self.swarm,
                 &mut self.known_peers,
@@ -269,7 +268,6 @@ impl EventLoop {
 
         // Attempt to dial all direct peer addresses.
         for direct_node_address in self.network_config.direct_node_addresses.iter_mut() {
-            debug!("Dial direct peer at address {}", direct_node_address);
             dial_known_peer(
                 &mut self.swarm,
                 &mut self.known_peers,
