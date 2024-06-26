@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 use anyhow::Result;
-use log::{debug, info, trace, warn};
+use log::{debug, trace, warn};
 use p2panda_rs::entry::EncodedEntry;
 use p2panda_rs::operation::EncodedOperation;
 use p2panda_rs::Human;
@@ -179,7 +179,7 @@ where
 
         let sessions = self.get_sessions(remote_peer);
 
-        info!(
+        debug!(
             "Initiate outbound replication session with peer {}",
             remote_peer.display()
         );
@@ -393,7 +393,7 @@ where
                 .await;
         };
 
-        info!(
+        debug!(
             "Accept inbound replication session with peer {}",
             remote_peer.display()
         );
