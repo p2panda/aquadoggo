@@ -285,7 +285,7 @@ impl ConnectionManager {
 
     /// Handle successful replication sessions.
     async fn on_replication_finished(&mut self, peer: Peer, _session_id: SessionId) {
-        info!("Finished replication with peer {}", peer.display());
+        debug!("Finished replication with peer {}", peer.display());
 
         match self.peers.get_mut(&peer) {
             Some(status) => {

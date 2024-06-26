@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use log::{debug, trace};
+use log::{debug, info, trace};
 use p2panda_rs::document::traits::AsDocument;
 use p2panda_rs::document::{DocumentBuilder, DocumentId, DocumentViewId};
 use p2panda_rs::operation::traits::{AsOperation, WithPublicKey};
@@ -226,23 +226,20 @@ async fn reduce_document<O: AsOperation + WithId<OperationId> + WithPublicKey>(
 
             let mut tasks = vec![];
 
-            // If the document was deleted, then we return nothing
             if document.is_deleted() {
-                debug!(
+                info!(
                     "Deleted {} final view {}",
                     document.display(),
                     document.view_id().display()
                 );
-            }
-
-            if document.is_edited() {
-                debug!(
+            } else if document.is_edited() {
+                info!(
                     "Updated {} latest view {}",
                     document.display(),
                     document.view_id().display()
                 );
             } else {
-                debug!("Created {}", document.display());
+                info!("Created {}", document.display());
             };
 
             if document.is_deleted() || document.is_edited() {

@@ -214,7 +214,7 @@ impl GraphQLSchemaManager {
         async fn rebuild(shared: GraphQLSharedData, schemas: GraphQLSchemas) {
             match build_root_schema(shared.store, shared.tx, shared.schema_provider).await {
                 Ok(schema) => schemas.lock().await.push(schema),
-                Err(err) => warn!("Error building GraphQL schema: {}", err),
+                Err(err) => warn!("Can't re-build GraphQL schema: {}", err),
             }
         }
 
