@@ -32,11 +32,11 @@
       Releases
     </a>
     <span> | </span>
-    <a href="https://p2panda.org/about/contribute">
+    <a href="https://aquadoggo.p2panda.org/about/contribute/">
       Contribute
     </a>
     <span> | </span>
-    <a href="https://p2panda.org">
+    <a href="https://aquadoggo.p2panda.org">
       Website
     </a>
   </h3>
@@ -44,7 +44,7 @@
 
 <br/>
 
-`aquadoggo` is a reference node implementation for [p2panda](https://p2panda.org). It is a intended as a tool for making the design and build of local-first, collaborative p2p applications as simple as possible, and hopefully even a little fun!
+`aquadoggo` is a reference node implementation for [p2panda](https://aquadoggo.p2panda.org). It is a intended as a tool for making the design and build of local-first, collaborative p2p applications as simple as possible, and hopefully even a little fun!
 
 `aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
@@ -313,19 +313,19 @@ Fetch all "events" with ordering and filtering as well as selecting some meta fi
 
 ## Resources
 
-- 🐬 Deploy your own `aquadoggo` following the [tutorial](https://p2panda.org/tutorials/aquadoggo)
+- 🐬 Deploy your own `aquadoggo` following the [tutorial](https://aquadoggo.p2panda.org/tutorials/aquadoggo/)
 - 🛠️ Create your own schemas using [`fishy`](https://github.com/p2panda/fishy)
 - 🛼 Open the GraphQL playground in your browser, served under `http://localhost:2020/graphql`
-- 📖 Try the [mushroom app tutorial](https://p2panda.org/tutorials/mushroom-app)
+- 📖 Try the [mushroom app tutorial](https://aquadoggo.p2panda.org/tutorials/mushroom-app/)
 - 🔬 Manually publish data to a node [`send-to-node`](https://github.com/p2panda/send-to-node)
-- 🐼 [Learn more](https://p2panda.org) about how p2panda works
+- 🐼 [Learn more](https://aquadoggo.p2panda.org) about how p2panda works
 
 ## What shouldn't I do with `aquadoggo`?
 
-`aquadoggo` is built using the [p2panda](https://p2panda.org) protocol which is in development and some planned features are still missing, the main ones being:
+`aquadoggo` is built using the [p2panda](https://aquadoggo.p2panda.org) protocol which is in development and some planned features are still missing, the main ones being:
 
 - **Capabilities:** Currently all data can be edited by any author who has access to the network. In many cases, permissions can be handled where needed on the client side (planned mid-2024).
-- **Privacy:** While node communication is encrypted with TLS the data stored on nodes itself is not. Integration of [MLS](https://p2panda.org/specifications/aquadoggo/encryption/) is underway but not complete yet.
+- **Privacy:** While node communication is encrypted with TLS the data stored on nodes itself is not. Integration of [MLS](https://aquadoggo.p2panda.org/specifications/aquadoggo/encryption/) is underway but not complete yet.
 - **Deletion:** Network-wide purging of data is dependent on having a capabilities system already in place, so these two features will arrive together.
 - **Anonymity:** Networking exposes sensitive data, we're waiting for [Arti](https://tpo.pages.torproject.net/core/arti/) supporting Onion Services to make this a configurable option.
 

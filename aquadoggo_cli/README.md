@@ -12,11 +12,11 @@
       Releases
     </a>
     <span> | </span>
-    <a href="https://p2panda.org/about/contribute">
+    <a href="https://aquadoggo.p2panda.org/about/contribute">
       Contribute
     </a>
     <span> | </span>
-    <a href="https://p2panda.org">
+    <a href="https://aquadoggo.p2panda.org/">
       Website
     </a>
   </h3>
@@ -384,4 +384,4 @@ research and innovation programme within the framework of the NGI-POINTER
 Project funded under grant agreement No 871528 and NGI-ASSURE No 957073*
 
 [`config.toml`]: config.toml
-[`p2panda`]: https://p2panda.org
+[`p2panda`]: https://aquadoggo.p2panda.org/
