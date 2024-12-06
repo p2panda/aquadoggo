@@ -31,11 +31,11 @@
       Releases
     </a>
     <span> | </span>
-    <a href="https://github.com/p2panda/handbook#how-to-contribute">
+    <a href="https://aquadoggo.p2panda.org/about/contribute/">
       Contributing
     </a>
     <span> | </span>
-    <a href="https://p2panda.org">
+    <a href="https://aquadoggo.p2panda.org/">
       Website
     </a>
   </h3>
@@ -43,11 +43,11 @@
 
 <br/>
 
-`aquadoggo` is a reference node implementation for [p2panda](https://p2panda.org). It is a intended as a tool for making the design and build of local-first, collaborative p2p applications as simple as possible, and hopefully even a little fun!
+`aquadoggo` is a reference node implementation for [p2panda](https://aquadoggo.p2panda.org/). It is a intended as a tool for making the design and build of local-first, collaborative p2p applications as simple as possible, and hopefully even a little fun!
 
 `aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
-> 📖 Read more about nodes in our [learn](https://p2panda.org/learn/networks) section<br>
+> 📖 Read more about nodes in our [learn](https://aquadoggo.p2panda.org/learn/networks) section<br>
 > 🐬 Visit the main repo [README](https://github.com/p2panda/aquadoggo) for more general info 
 
 ## Features
