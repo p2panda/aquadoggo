@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Expose NodeEvent to public API [#643](https://github.com/p2panda/aquadoggo/pull/643)
+- Updated time to 0.3.37 [#646](https://github.com/p2panda/aquadoggo/pull/646)
 
 ## [0.8.0]
 
