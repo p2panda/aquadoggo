@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #![doc = include_str!("../README.md")]
+#![deprecated(note = "This crate has been deprecated, please use the new p2panda stack")]
 #![warn(
     missing_debug_implementations,
     missing_docs,
@@ -11,6 +12,7 @@
     unused_import_braces,
     unused_qualifications
 )]
+#![allow(deprecated)]
 #![allow(clippy::uninlined_format_args)]
 mod api;
 mod bus;

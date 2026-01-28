@@ -1,3 +1,7 @@
+<div class="warning">
+The `aquadoggo` crate has been deprecated, please use the new p2panda stack instead.
+</div>
+
 <h1 align="center">aquadoggo</h1>
 
 <div align="center">
@@ -48,7 +52,7 @@
 `aquadoggo` can run both on your own device for local-first applications, or on a public server when acting as shared community infrastructure. Nodes like `aquadoggo` perform a number of tasks ranging from core p2panda data replication and validation, aiding the discovery and establishment of connections between edge peers, and exposing a developer friendly API used for building applications.
 
 > 📖 Read more about nodes in our [learn](https://aquadoggo.p2panda.org/learn/networks) section<br>
-> 🐬 Visit the main repo [README](https://github.com/p2panda/aquadoggo) for more general info 
+> 🐬 Visit the main repo [README](https://github.com/p2panda/aquadoggo) for more general info
 
 ## Features
 

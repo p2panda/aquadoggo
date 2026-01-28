@@ -1,3 +1,7 @@
+<div class="warning">
+The `aquadoggo` crate has been deprecated, please use the new p2panda stack instead.
+</div>
+
 <h1 align="center">aquadoggo</h1>
 
 <div align="center">

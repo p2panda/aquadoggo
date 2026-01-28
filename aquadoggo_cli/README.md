@@ -1,3 +1,7 @@
+<div class="warning">
+The `aquadoggo` crate has been deprecated, please use the new p2panda stack instead.
+</div>
+
 <h1 align="center">aquadoggo CLI</h1>
 
 <div align="center">
@@ -172,7 +176,7 @@ blobs_base_path = "$HOME/.local/share/aquadoggo/blobs"
 
 #### Private Network
 
-> "I want only peers who know a pre-shared key to be able to join my network." 
+> "I want only peers who know a pre-shared key to be able to join my network."
 
 ```sh
 # Generate a 32 digit hexadecimal string, for example on the command line like this
@@ -234,7 +238,7 @@ Options:
           Defaults to 2020
 
   -q, --transport <TRANSPORT>
-          Protocol (TCP/QUIC) used for node-node communication and data 
+          Protocol (TCP/QUIC) used for node-node communication and data
           replication. Defaults to QUIC
 
   -t, --node-port <PORT>
@@ -243,11 +247,11 @@ Options:
 
   -y, --psk <PSK>
           Pre-shared key formatted as a 64 digit hexadecimal string.
-          
-          When provided a private network will be made with only peers knowing 
+
+          When provided a private network will be made with only peers knowing
           the psk being able to form connections.
-          
-          WARNING: Private networks are only supported when using TCP for the 
+
+          WARNING: Private networks are only supported when using TCP for the
           transport layer.
 
 
