@@ -26,7 +26,9 @@ The `aquadoggo` crate has been deprecated, please use the new p2panda stack inst
   </h3>
 </div>
 
-<br/>
+![Maintained: no](https://img.shields.io/maintenance/no/2024?style=flat-square)
+> [!important]
+> aquadoggo is deprecated and unmaintained; visit our [`website`](https://p2panda.org) to learn about the current libraries and latest developments.
 
 Configurable node for the [`p2panda`] network, which runs as a command line
 application on any computer, single-board or server.
