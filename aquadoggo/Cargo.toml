@@ -1,6 +1,6 @@
 [package]
 name = "aquadoggo"
-version = "0.8.1"
+version = "0.9.0"
 authors = [
     "adz <x1d@adz.garden>",
     "cafca <cafca@001.land>",
