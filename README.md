@@ -1,5 +1,4 @@
 <div class="warning">
-The `aquadoggo` crate has been deprecated, please use the new p2panda stack instead.
 </div>
 
 <h1 align="center">aquadoggo</h1>
@@ -47,6 +46,10 @@ The `aquadoggo` crate has been deprecated, please use the new p2panda stack inst
 </div>
 
 <br/>
+
+![Maintained: no](https://img.shields.io/maintenance/no/2024?style=flat-square)
+> [!important]
+> aquadoggo is deprecated and unmaintained; visit our [`website`](https://p2panda.org) to learn about the current libraries and latest developments.
 
 `aquadoggo` is a reference node implementation for [p2panda](https://aquadoggo.p2panda.org). It is a intended as a tool for making the design and build of local-first, collaborative p2p applications as simple as possible, and hopefully even a little fun!
 
